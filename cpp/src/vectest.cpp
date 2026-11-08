@@ -119,7 +119,18 @@ StatusOr<std::vector<Vector>> load_vectors(
 }
 
 StatusOr<std::vector<Vector>> load_cross_vectors(const std::filesystem::path& repo_root) {
-    return load_vectors_from_dir(repo_root / "vectors" / "cross");
+    OXA_ASSIGN_OR_RETURN(std::vector<Vector> vectors,
+                         load_vectors_from_dir(repo_root / "vectors" / "cross"));
+    // vectors/cross/stream/ belongs to the cross-stream lane (Go vectest
+    // RunCrossStream); the nonstream cross runner must not consume it.
+    std::vector<Vector> out;
+    out.reserve(vectors.size());
+    for (auto& v : vectors) {
+        if (v.mode == "nonstream") {
+            out.push_back(std::move(v));
+        }
+    }
+    return out;
 }
 
 namespace {
