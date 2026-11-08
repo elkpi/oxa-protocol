@@ -5,7 +5,7 @@ implementations. The spec follows [Semantic Versioning](https://semver.org/);
 precedence between spec, vectors, and schemas is defined in
 [README.md](README.md#source-of-truth-precedence).
 
-## 3.2.0 - Unreleased
+## 3.2.0 - 2026-11-08
 
 - Add the control-plane fidelity matrix ([21](21-capability-matrix.md)): a
   vendor-neutral inventory of ten control-plane semantics graded across the
