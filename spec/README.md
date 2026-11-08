@@ -9,11 +9,11 @@ is the contract every implementation (Go first, then TypeScript, Rust, Python,
 and C++) MUST satisfy.
 
 The specification versions itself independently of the implementations.
-Current spec version: **3.1.0**. The IR contract is **0.3.0**.
-Custom Tools 扩展见 [13](13-custom-tools.md)，专用 Apply Patch 见 [14](14-apply-patch.md)，原生请求配置保真见 [15](15-native-request-options.md)，原生工具声明保真见 [16](16-native-tool-declarations.md)，SystemOne Jev face 映射见 [17](17-systemone-jev.md)。
+Current spec version: **3.2.0**（unreleased）. The IR contract is **0.3.0**.
+Custom Tools 扩展见 [13](13-custom-tools.md)，专用 Apply Patch 见 [14](14-apply-patch.md)，原生请求配置保真见 [15](15-native-request-options.md)，原生工具声明保真见 [16](16-native-tool-declarations.md)，SystemOne Jev face 映射见 [17](17-systemone-jev.md)，控制面保真度矩阵见 [21](21-capability-matrix.md)。
 
 Go, TypeScript, Rust, Python, and C++ share
-one golden suite of **589 vectors**, covering reasoning, usage granularity,
+one golden suite of **609 vectors**, covering reasoning, usage granularity,
 structured-output format mapping, Responses developer instructions, Custom Tools, Apply Patch, Native Request Options, Native Tool Declarations, and the SystemOne Jev face.
 The 22 Jev vectors are covered by all five implementations (Go, TypeScript,
 Rust, Python, and C++; spec/17). The
@@ -78,7 +78,8 @@ Read the documents in this order:
 4. [03 — Model Handling](03-model-handling.md)
 5. 10–12 and 17 — per-face mapping documents (one per face)
 6. [20 — streaming semantics](20-streaming-semantics.md)
-7. [90 — glossary](90-glossary.md)
+7. [21 — control-plane fidelity matrix](21-capability-matrix.md)
+8. [90 — glossary](90-glossary.md)
 
 | Document | Scope | Status |
 |----------|-------|--------|
@@ -95,6 +96,7 @@ Read the documents in this order:
 | [16](16-native-tool-declarations.md) | 原生命名工具声明保真与跨面损失；不扩展 Advisor 内容块 | ready |
 | [17](17-systemone-jev.md) | SystemOne Jev face：评估协议到对话 IR 的投影、schema 合成与 answers 解析 | ready |
 | [20](20-streaming-semantics.md) | streaming semantics | ready |
+| [21](21-capability-matrix.md) | 控制面保真度矩阵：3×3 定级、流生命周期摘要、loss 稳定性承诺 | ready |
 | [90](90-glossary.md) | glossary | ready |
 
 Documents marked planned are intentionally not created yet; each arrives with
