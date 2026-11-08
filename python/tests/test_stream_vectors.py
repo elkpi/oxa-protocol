@@ -23,6 +23,7 @@ from oxa.openai.responses import (
 from oxa.vectest import (
     find_repo_root,
     load_vectors,
+    run_cross_stream_vector,
     run_stream_vector,
 )
 
@@ -64,6 +65,39 @@ class StreamVectorsTest(unittest.TestCase):
                     )
 
         self.assertEqual(total_vectors, 50, "expected 50 total stream vectors across all faces")
+
+    def test_all_cross_stream_vectors(self) -> None:
+        root = find_repo_root()
+        if root is None:
+            self.skipTest("repository root not found (running as standalone package)")
+            return
+
+        vectors = load_vectors(root, "cross", "stream")
+        self.assertEqual(len(vectors), 10, "expected 10 cross stream vectors")
+
+        seen_pairs: set[tuple[str, str]] = set()
+        for vector in vectors:
+            with self.subTest(vector=vector.name):
+                self.assertEqual(
+                    vector.conversion,
+                    "protocol-to-protocol",
+                    f"unexpected conversion for {vector.name}",
+                )
+                self.assertIn(vector.source.protocol, FACES, vector.name)
+                self.assertIn(vector.target.protocol, FACES, vector.name)
+                run_cross_stream_vector(
+                    vector,
+                    source_decoder_factory=FACES[vector.source.protocol][0],
+                    target_encoder_factory=FACES[vector.target.protocol][1],
+                )
+                seen_pairs.add((vector.source.protocol, vector.target.protocol))
+
+        expected_pairs = {(s, t) for s in FACES for t in FACES}
+        self.assertEqual(
+            seen_pairs,
+            expected_pairs,
+            "cross stream vectors must cover all nine ordered face pairs",
+        )
 
 
 if __name__ == "__main__":

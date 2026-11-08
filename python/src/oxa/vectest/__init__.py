@@ -9,6 +9,7 @@ from oxa.vectest.load import (
     load_vectors,
 )
 from oxa.vectest.runner import (
+    run_cross_stream_vector,
     run_cross_vector,
     run_nonstream_vector,
     run_stream_vector,
@@ -24,5 +25,6 @@ __all__ = [
     "load_cross_vectors",
     "run_nonstream_vector",
     "run_cross_vector",
+    "run_cross_stream_vector",
     "run_stream_vector",
 ]
