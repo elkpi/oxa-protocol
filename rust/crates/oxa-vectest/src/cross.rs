@@ -7,6 +7,7 @@ use std::path::Path;
 use crate::compare::compare_json;
 use crate::load::{Vector, find_repo_root, load_vectors};
 use crate::run::{Converter, Outcome, Report, compare_reported_losses};
+use crate::stream::{StreamConverter, native_events, stream_from_ir, stream_to_ir_text};
 
 /// Executes every nonstream cross-protocol vector whose source and target
 /// endpoints match the two converters' `face()` protocol names, locating the
@@ -109,4 +110,87 @@ fn run_cross_vector(
             format!("cross conversion failed: {err}"),
         )),
     }
+}
+
+/// Executes every cross-stream vector whose source and target endpoints
+/// match the two stream converters' `face()` protocol names, locating the
+/// repo root from the current working directory. A matched pair with no
+/// vectors fails the run.
+pub fn run_cross_stream(
+    source: &mut dyn StreamConverter,
+    target: &mut dyn StreamConverter,
+) -> Result<Outcome, String> {
+    run_cross_stream_in(Path::new("."), source, target)
+}
+
+/// [`run_cross_stream`] with an explicit starting directory for the
+/// repo-root walk.
+pub fn run_cross_stream_in(
+    dir: &Path,
+    source: &mut dyn StreamConverter,
+    target: &mut dyn StreamConverter,
+) -> Result<Outcome, String> {
+    let Some(root) = find_repo_root(dir) else {
+        return Ok(Outcome::Skipped);
+    };
+    let vectors = load_vectors(&root, "cross", "stream")?;
+    let matched: Vec<&Vector> = vectors
+        .iter()
+        .filter(|v| {
+            v.conversion == "protocol-to-protocol"
+                && v.source.protocol == source.face()
+                && v.target.protocol == target.face()
+        })
+        .collect();
+    if matched.is_empty() {
+        return Err(format!(
+            "no cross stream vectors found for pair {} -> {}",
+            source.face(),
+            target.face()
+        ));
+    }
+    let mut report = Report::default();
+    for vector in &matched {
+        source.reset_stream_vector();
+        target.reset_stream_vector();
+        let Some(expected) = vector.expected_output.as_ref() else {
+            report.failures.push((
+                vector.name.clone(),
+                "cross stream vector is missing expected_output".to_string(),
+            ));
+            continue;
+        };
+        if let Err(err) = native_events(expected) {
+            report.failures.push((
+                vector.name.clone(),
+                format!("expected_output events envelope: {err}"),
+            ));
+            continue;
+        }
+        let outcome = (|| -> Result<(serde_json::Value, Vec<oxa_ir::Loss>), String> {
+            let (ir_doc, decode_losses) = stream_to_ir_text(source, &vector.input_text())?;
+            let (native, encode_losses) = stream_from_ir(target, &ir_doc)?;
+            Ok((
+                native,
+                decode_losses.into_iter().chain(encode_losses).collect(),
+            ))
+        })();
+        match outcome {
+            Ok((out, losses)) => {
+                if let Err(err) = compare_json(expected, &out) {
+                    report.failures.push((
+                        vector.name.clone(),
+                        format!("expected_output mismatch: {err}"),
+                    ));
+                }
+                compare_reported_losses(vector, &losses, &mut report);
+            }
+            Err(err) => report.failures.push((
+                vector.name.clone(),
+                format!("cross stream conversion failed: {err}"),
+            )),
+        }
+    }
+    report.executed = matched.len();
+    Ok(Outcome::Ran(report))
 }

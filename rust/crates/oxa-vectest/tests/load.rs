@@ -108,13 +108,14 @@ fn repository_loader_includes_all_spec_2_vectors() {
         ("chatcompletions", "nonstream"),
         ("chatcompletions", "stream"),
         ("cross", "nonstream"),
+        ("cross", "stream"),
         ("jev", "nonstream"),
         ("responses", "nonstream"),
         ("responses", "stream"),
     ] {
         vectors.extend(load_vectors(&root, face, mode).expect("load vectors"));
     }
-    assert_eq!(vectors.len(), 599);
+    assert_eq!(vectors.len(), 609);
     assert_eq!(
         vectors
             .iter()

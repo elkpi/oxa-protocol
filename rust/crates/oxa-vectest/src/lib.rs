@@ -16,7 +16,9 @@ mod run;
 mod stream;
 
 pub use compare::{compare_json, compare_losses};
-pub use cross::{cross_vectors_for, run_cross, run_cross_in};
+pub use cross::{
+    cross_vectors_for, run_cross, run_cross_in, run_cross_stream, run_cross_stream_in,
+};
 pub use load::{Endpoint, LossRecord, Vector, find_repo_root, load_vectors};
 pub use run::{Converter, Outcome, Report, run, run_in};
 pub use stream::{StreamConverter, run_stream, run_stream_in, stream_from_ir, stream_to_ir};
