@@ -169,6 +169,14 @@ pub fn run_cross_stream_in(
         }
         let outcome = (|| -> Result<(serde_json::Value, Vec<oxa_ir::Loss>), String> {
             let (ir_doc, decode_losses) = stream_to_ir_text(source, &vector.input_text())?;
+            // Decoder output must satisfy the strict INV-5/INV-6 grammar on
+            // its own: the target encoder may legally synthesize fragments,
+            // so a successful encode must never mask an illegal decoder
+            // stream (vectors/README stream self-consistency assertions).
+            let stream: oxa_ir::EventStream = oxa_ir::from_json(&crate::run::json_text(&ir_doc))
+                .map_err(|err| format!("re-parse IR event stream: {err}"))?;
+            oxa_ir::validate_event_stream(&stream)
+                .map_err(|v| format!("decoder output violates stream invariants: {v:?}"))?;
             let (native, encode_losses) = stream_from_ir(target, &ir_doc)?;
             Ok((
                 native,

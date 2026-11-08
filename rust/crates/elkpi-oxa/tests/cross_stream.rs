@@ -146,3 +146,103 @@ fn cross_stream_vectors() {
     let mut target = Responses::new();
     assert_cross_stream(manifest_dir, &mut source, &mut target, 1);
 }
+
+/// Regression: the target encoder must not mask an illegal decoder stream.
+/// A decoder that emits a tool_use block whose input text never appears as
+/// `input_json_delta` fragments violates the strict stream grammar even
+/// though an encoder could synthesize the missing fragment; the runner must
+/// report a stream-invariant failure instead of comparing outputs.
+#[test]
+fn cross_stream_rejects_illegal_decoder_output() {
+    struct IllegalDecoder {
+        encoder: oxa_anthropic::StreamEncoder,
+        config: oxa_anthropic::Config,
+        events: Vec<oxa_ir::Event>,
+    }
+
+    impl IllegalDecoder {
+        fn new(events: Vec<oxa_ir::Event>) -> Self {
+            let config = oxa_anthropic::Config::default();
+            let encoder = oxa_anthropic::StreamEncoder::new(&config);
+            IllegalDecoder {
+                encoder,
+                config,
+                events,
+            }
+        }
+    }
+
+    impl oxa_vectest::StreamConverter for IllegalDecoder {
+        fn face(&self) -> &'static str {
+            "anthropic"
+        }
+
+        fn decode_native_event(&mut self, _event: &str) -> Result<Vec<oxa_ir::Event>, String> {
+            Ok(self.events.clone())
+        }
+
+        fn flush_decoder(&mut self) -> Result<Vec<oxa_ir::Event>, String> {
+            Ok(Vec::new())
+        }
+
+        fn decoder_losses(&self) -> Vec<oxa_ir::Loss> {
+            Vec::new()
+        }
+
+        fn apply_ir_event(
+            &mut self,
+            event: &oxa_ir::Event,
+        ) -> Result<(Vec<serde_json::Value>, Vec<oxa_ir::Loss>), String> {
+            let (events, losses) = self.encoder.apply(event).map_err(|err| err.to_string())?;
+            let values = events
+                .into_iter()
+                .map(|e| serde_json::to_value(e).map_err(|err| err.to_string()))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok((values, losses))
+        }
+
+        fn reset_stream_vector(&mut self) {
+            self.encoder = oxa_anthropic::StreamEncoder::new(&self.config);
+        }
+    }
+
+    let events = vec![
+        oxa_ir::Event::MessageStart {
+            id: "m".into(),
+            model: "m".into(),
+        },
+        oxa_ir::Event::ContentBlockStart {
+            index: 0,
+            block: oxa_ir::Block::ToolUse {
+                id: "t1".into(),
+                name: "f".into(),
+                input: "{}".into(),
+                native: vec![],
+            },
+        },
+        oxa_ir::Event::ContentBlockStop { index: 0 },
+        oxa_ir::Event::MessageDelta {
+            stop_reason: oxa_ir::StopReason::ToolUse,
+            stop_sequence: None,
+            usage: oxa_ir::Usage::default(),
+        },
+        oxa_ir::Event::MessageDone {},
+    ];
+
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut source = IllegalDecoder::new(events);
+    let mut target = Anthropic::new();
+    match oxa_vectest::run_cross_stream_in(manifest_dir, &mut source, &mut target) {
+        Ok(oxa_vectest::Outcome::Ran(report)) => {
+            assert!(
+                report
+                    .failures
+                    .iter()
+                    .any(|(_, message)| message.contains("stream invariants")),
+                "expected a stream-invariant failure, got: {:?}",
+                report.failures
+            );
+        }
+        other => panic!("expected a Ran outcome with failures, got: {other:?}"),
+    }
+}
