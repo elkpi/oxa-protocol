@@ -125,7 +125,41 @@ int main() {
         std::printf("test_stream (responses): all %zu vectors passed\n", r->executed);
     }
 
-    // 4. Unit tests for stream decoder/encoder edge cases & grammar checks
+    // 4. Cross stream lane: source native events -> IR -> target native events
+    {
+        auto run_pair = [&](oxa::vectest::StreamConverter& s,
+                            oxa::vectest::StreamConverter& t,
+                            std::size_t expected) {
+            auto r = oxa::vectest::run_cross_stream(s, t);
+            CHECK_MSG(r.ok(), r.status().to_string());
+            if (!r->failures.empty()) {
+                for (const auto& f : r->failures) {
+                    std::fprintf(stderr, "CROSS STREAM FAIL: %s: %s\n", f.vector_name.c_str(), f.message.c_str());
+                }
+            }
+            CHECK(r->failures.empty());
+            CHECK(r->executed == expected);
+        };
+
+        // Pair counts across the ten vectors: one multi-delta-text vector per
+        // ordered pair, plus two focused Chat Completions -> Anthropic vectors
+        // (interleaved tool-argument fragments, usage-only terminal).
+        ChatCompletionsStreamConverter cc;
+        AnthropicStreamConverter ant;
+        ResponsesStreamConverter resp;
+        run_pair(cc, ant, 2);
+        run_pair(cc, cc, 1);
+        run_pair(cc, resp, 1);
+        run_pair(ant, cc, 1);
+        run_pair(ant, ant, 1);
+        run_pair(ant, resp, 1);
+        run_pair(resp, cc, 1);
+        run_pair(resp, ant, 1);
+        run_pair(resp, resp, 1);
+        std::printf("test_stream (cross): all 10 cross stream vectors passed\n");
+    }
+
+    // 5. Unit tests for stream decoder/encoder edge cases & grammar checks
     {
         // Anthropic StreamDecoder maps the M9 thinking/signature lifecycle.
         {
@@ -377,6 +411,6 @@ int main() {
         }
     }
 
-    std::puts("test_stream: all 40 stream vectors passed");
+    std::puts("test_stream: all 50 stream vectors and 10 cross stream vectors passed");
     return 0;
 }

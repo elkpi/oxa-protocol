@@ -162,3 +162,46 @@ def run_stream_vector(
 
     else:
         raise ValueError(f"unknown stream conversion: {vector.conversion}")
+
+
+def run_cross_stream_vector(
+    vector: Vector,
+    source_decoder_factory: Callable[[Table | None], Any],
+    target_encoder_factory: Callable[[Table | None], Any],
+    table: Table | None = None,
+) -> None:
+    """Executes a cross-stream vector: source native events -> IR event
+    stream -> target native events (spec/21 §9, vectors/README
+    "Cross stream vectors")."""
+    if vector.conversion != "protocol-to-protocol":
+        raise ValueError(f"unknown cross-stream conversion: {vector.conversion}")
+
+    source = source_decoder_factory(table)
+    input_events = vector.input.get("events", []) if isinstance(vector.input, dict) else []
+    raw_events = _extract_events_raw(vector.input_raw)
+    ir_events: list[Event] = []
+    for i, ev in enumerate(input_events):
+        raw_str = raw_events[i] if i < len(raw_events) else ""
+        ir_events.extend(source.feed(ev, raw_str))
+    ir_events.extend(source.flush())
+
+    # Decoder output must satisfy the strict INV-5/INV-6 grammar on its own:
+    # the target encoder may legally synthesize fragments, so passing the
+    # encoder must never mask an illegal decoder stream (vectors/README
+    # stream self-consistency assertions).
+    validate_event_stream(EventStream(events=ir_events))
+
+    target = target_encoder_factory(table)
+    wire_events: list[dict[str, Any]] = []
+    all_losses: list[Loss] = list(source.losses())
+    for ev in ir_events:
+        produced, losses = target.apply(ev)
+        wire_events.extend(produced)
+        all_losses.extend(losses)
+
+    actual_wire = {"events": wire_events}
+    assert vector.expected_output is not None, (
+        f"vector {vector.name}: expected_output is missing"
+    )
+    compare_json(vector.expected_output, actual_wire)
+    compare_losses(vector.expected_losses, all_losses)

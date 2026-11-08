@@ -198,7 +198,7 @@ fn bounded_str(text: &str) -> String {
     bounded
 }
 
-fn native_events(input: &Value) -> Result<Vec<Value>, String> {
+pub(crate) fn native_events(input: &Value) -> Result<Vec<Value>, String> {
     let Some(envelope) = input.as_object() else {
         return Err("input is not an object".to_string());
     };

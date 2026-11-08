@@ -18,3 +18,7 @@ oxa-anthropic = { workspace = true }
 oxa-jev = { workspace = true }
 oxa-responses = { workspace = true }
 oxa-sse = { workspace = true }
+
+[dev-dependencies]
+oxa-vectest = { path = "../oxa-vectest" }
+serde_json = { workspace = true }

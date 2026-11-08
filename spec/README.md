@@ -15,11 +15,9 @@ Custom Tools 扩展见 [13](13-custom-tools.md)，专用 Apply Patch 见 [14](14
 Go, TypeScript, Rust, Python, and C++ share
 one golden suite of **609 vectors**, covering reasoning, usage granularity,
 structured-output format mapping, Responses developer instructions, Custom Tools, Apply Patch, Native Request Options, Native Tool Declarations, and the SystemOne Jev face.
-All five implementations execute the nonstream lanes; the ten
-`cross/stream` vectors are executed by Go's `RunCrossStream` in 3.2.0,
-and the equivalent cross-stream lanes in the other four languages are
-follow-up waves (spec/21 §9). No language may claim cross-stream coverage
-without executing that lane.
+All five implementations execute the full suite, including the ten
+`cross/stream` vectors through their cross-stream composition runners
+(spec/21 §9).
 The 22 Jev vectors are covered by all five implementations (Go, TypeScript,
 Rust, Python, and C++; spec/17). The
 SystemOne Jev face

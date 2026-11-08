@@ -119,12 +119,10 @@ unordered set. Target-side envelope fields (chunk/item ids, indexes) are
 encoder-regenerated; a same-face round-trip vector is the only place
 where such a field can be asserted to survive, and only for faces whose
 spec mapping pins it. Jev has no streaming face (spec/17) and takes no
-part in cross stream vectors. The Go reference implementation runs this
-lane through `vectest.RunCrossStream`; adding an equivalent composition
-runner in TypeScript, Rust, Python, and C++ is a follow-up wave. Until a
-language's runner exists, its harness MUST exclude `cross/stream` from
-both nonstream cross and face-local stream lanes rather than skipping
-individual vectors silently.
+part in cross stream vectors. All five language harnesses run this lane
+through equivalent composition runners; a harness MUST NOT hand this
+directory to nonstream cross or face-local stream lanes, and MUST NOT
+skip individual vectors silently.
 
 ## manifest.json
 

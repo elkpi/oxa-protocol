@@ -39,12 +39,13 @@ class VectestHarnessTest(unittest.TestCase):
             ("chatcompletions", "nonstream"),
             ("chatcompletions", "stream"),
             ("cross", "nonstream"),
+            ("cross", "stream"),
             ("jev", "nonstream"),
             ("responses", "nonstream"),
             ("responses", "stream"),
         ):
             vectors.extend(load_vectors(root, face, mode))
-        self.assertEqual(len(vectors), 599)
+        self.assertEqual(len(vectors), 609)
         self.assertEqual(sum(v.spec_version == "0.2.0" for v in vectors), 395)
 
     def test_compare_json_treats_supported_spec_versions_as_transitional_equivalents(self) -> None:

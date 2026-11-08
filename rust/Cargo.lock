@@ -25,6 +25,8 @@ dependencies = [
  "oxa-modelmap",
  "oxa-responses",
  "oxa-sse",
+ "oxa-vectest",
+ "serde_json",
 ]
 
 [[package]]

@@ -172,25 +172,86 @@ test("hydrates nested native indexes without rewriting opaque tool input", () =>
 test("runs every stream golden vector through the public converters", () => {
   const root = findRepoRoot(process.cwd());
   assert.ok(root !== undefined);
-  // The cross-stream lane (vectors/cross/stream/) needs the composition
-  // runner, which has not joined the TypeScript wave yet; exclude the
-  // directory from the face-local stream harness rather than skipping
-  // individual vectors inside the loop.
   const vectors = loadVectors(root).filter(
-    ({ name, document }) =>
-      document.mode === "stream" && !name.startsWith("cross.stream."),
+    ({ document }) => document.mode === "stream",
   );
   assert.ok(vectors.length > 0);
+  // Guard against silently dropping the cross-stream lane: every ordered
+  // face pair must be covered at least once (spec/21 §9), so deleting a
+  // direction cannot hide behind a new one.
+  const crossPairs = new Set(
+    vectors
+      .filter(({ name }) => name.startsWith("cross.stream."))
+      .map(({ document }) => {
+        const source = ((document.source as JsonObject).protocol ??
+          "") as string;
+        const target = ((document.target as JsonObject).protocol ??
+          "") as string;
+        return `${source}->${target}`;
+      }),
+  );
+  for (const source of Object.keys(harnesses)) {
+    for (const target of Object.keys(harnesses)) {
+      assert.ok(
+        crossPairs.has(`${source}->${target}`),
+        `cross-stream pair not covered: ${source}->${target}`,
+      );
+    }
+  }
 
   for (const vector of vectors) {
     withVectorName(vector.name, () => {
-      const harness = harnesses[faceOf(vector.name)]!();
       const input = vector.document.input as JsonObject;
       const expectedLosses = vector.document
         .expected_losses as unknown as Loss[];
       const conversion = vector.document.conversion as string;
 
-      if (conversion === "to-ir") {
+      if (conversion === "protocol-to-protocol") {
+        // Cross-stream lane: source native events -> IR event stream ->
+        // target native events, reusing the two face-local harnesses
+        // (spec/21 §9, vectors/README "Cross stream vectors").
+        const sourceFace = (vector.document.source as JsonObject)
+          .protocol as string;
+        const targetFace = (vector.document.target as JsonObject)
+          .protocol as string;
+        assert.ok(sourceFace in harnesses, vector.name);
+        assert.ok(targetFace in harnesses, vector.name);
+        const source = harnesses[sourceFace]!();
+        const target = harnesses[targetFace]!();
+
+        const nativeEvents = (input.events as readonly unknown[]).map(
+          hydratePositions,
+        );
+        const irEvents: Event[] = [];
+        for (const event of nativeEvents)
+          irEvents.push(...source.decodeFeed(event));
+        irEvents.push(...source.decodeFlush());
+        const losses: Loss[] = [...source.decodeLosses()];
+
+        const actual: unknown[] = [];
+        for (const event of irEvents) {
+          const result = target.encodeApply(event);
+          actual.push(...result.value);
+          losses.push(...result.losses);
+        }
+        const actualOutput = {
+          events: fromValue(actual as never),
+        } as unknown as JsonObject;
+        assert.deepEqual(
+          compareJson(
+            vector.document.expected_output as JsonObject,
+            actualOutput,
+          ),
+          undefined,
+          vector.name,
+        );
+        assert.deepEqual(
+          compareLosses(expectedLosses, losses),
+          undefined,
+          vector.name,
+        );
+      } else if (conversion === "to-ir") {
+        const harness = harnesses[faceOf(vector.name)]!();
         const nativeEvents = (input.events as readonly unknown[]).map(
           hydratePositions,
         );
@@ -209,6 +270,7 @@ test("runs every stream golden vector through the public converters", () => {
           vector.name,
         );
       } else if (conversion === "from-ir") {
+        const harness = harnesses[faceOf(vector.name)]!();
         const events = decodeEventStream(input).events;
         const actual: unknown[] = [];
         const losses: Loss[] = [];
