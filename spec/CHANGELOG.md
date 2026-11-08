@@ -21,8 +21,7 @@ precedence between spec, vectors, and schemas is defined in
 - The matrix requires vector locking for every degraded/unsupported cell
   and introduces `cross/stream` vectors (source native events → IR →
   target native events). All five implementations execute them through
-  equivalent vectest cross-stream composition runners. Spec 3.2.0 is
-  unreleased until the release process assigns its date.
+  equivalent vectest cross-stream composition runners.
 
 ## 3.1.0 - 2026-11-07
 
