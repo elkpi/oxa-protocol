@@ -95,4 +95,8 @@ StatusOr<Report> run_cross(const std::vector<const Converter*>& converters,
 StatusOr<Report> run_stream(StreamConverter& conv,
                             const std::filesystem::path& start = std::filesystem::current_path());
 
+StatusOr<Report> run_cross_stream(StreamConverter& source,
+                                  StreamConverter& target,
+                                  const std::filesystem::path& start = std::filesystem::current_path());
+
 }  // namespace oxa::vectest

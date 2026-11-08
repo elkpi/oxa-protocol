@@ -594,4 +594,105 @@ StatusOr<Report> run_stream(StreamConverter& conv, const std::filesystem::path& 
     return report;
 }
 
+StatusOr<Report> run_cross_stream(StreamConverter& source,
+                                  StreamConverter& target,
+                                  const std::filesystem::path& start) {
+    auto root = find_repo_root(start);
+    if (!root) {
+        return invalid_argument("failed to find repo root from: " + start.string());
+    }
+    OXA_ASSIGN_OR_RETURN(std::vector<Vector> vectors, load_vectors(*root, "cross", "stream"));
+
+    std::vector<const Vector*> matched;
+    for (const auto& vec : vectors) {
+        if (vec.conversion == "protocol-to-protocol" &&
+            vec.source_protocol == source.face() &&
+            vec.target_protocol == target.face()) {
+            matched.push_back(&vec);
+        }
+    }
+    if (matched.empty()) {
+        return invalid_argument("no cross stream vectors found for pair " +
+                                std::string(source.face()) + " -> " +
+                                std::string(target.face()));
+    }
+
+    Report report;
+    for (const auto* vec : matched) {
+        source.reset_stream_vector();
+        target.reset_stream_vector();
+        if (!vec->expected_output.has_value()) {
+            report.failures.push_back({vec->name, "cross stream vector missing expected_output"});
+            continue;
+        }
+        const auto* evs = vec->input.find("events");
+        if (!evs || !evs->is_array()) {
+            report.failures.push_back({vec->name, "cross stream input missing events array"});
+            continue;
+        }
+
+        std::vector<ir::Event> stream;
+        bool ok = true;
+        for (const auto& chunk : evs->as_array()) {
+            auto chunk_evs = source.decode_native_event(chunk);
+            if (!chunk_evs.ok()) {
+                report.failures.push_back({vec->name, "decode_native_event error: " + std::string(chunk_evs.status().message())});
+                ok = false;
+                break;
+            }
+            stream.insert(stream.end(), chunk_evs->begin(), chunk_evs->end());
+        }
+        if (!ok) continue;
+
+        auto flush_evs = source.flush_decoder();
+        if (!flush_evs.ok()) {
+            report.failures.push_back({vec->name, "flush_decoder error: " + std::string(flush_evs.status().message())});
+            continue;
+        }
+        stream.insert(stream.end(), flush_evs->begin(), flush_evs->end());
+
+        auto val_s = ir::validate_event_stream(stream);
+        if (!val_s.ok()) {
+            report.failures.push_back({vec->name, "stream validation error: " + std::string(val_s.message())});
+            continue;
+        }
+
+        std::vector<json::Value> actual_events;
+        std::vector<ir::Loss> combined_losses = source.decoder_losses();
+        for (const auto& ev : stream) {
+            auto apply_res = target.apply_ir_event(ev);
+            if (!apply_res.ok()) {
+                report.failures.push_back({vec->name, "apply_ir_event error: " + std::string(apply_res.status().message())});
+                ok = false;
+                break;
+            }
+            actual_events.insert(actual_events.end(), apply_res->value.begin(), apply_res->value.end());
+            combined_losses.insert(combined_losses.end(), apply_res->losses.begin(), apply_res->losses.end());
+        }
+        if (!ok) continue;
+
+        json::Value act_events_json = json::Value::array();
+        for (const auto& e : actual_events) act_events_json.push_back(e);
+
+        const auto* expected_chunks = vec->expected_output->find("events");
+        if (!expected_chunks) {
+            report.failures.push_back({vec->name, "cross stream expected_output missing events array"});
+            continue;
+        }
+        auto cmp_s = compare_json(*expected_chunks, act_events_json);
+        if (!cmp_s.ok()) {
+            report.failures.push_back({vec->name, "cross stream output mismatch: " + std::string(cmp_s.message())});
+            continue;
+        }
+        auto loss_s = compare_losses(vec->expected_losses, combined_losses);
+        if (!loss_s.ok()) {
+            report.failures.push_back({vec->name, "cross stream loss mismatch: " + std::string(loss_s.message())});
+            continue;
+        }
+    }
+
+    report.executed = matched.size();
+    return report;
+}
+
 }  // namespace oxa::vectest
