@@ -185,6 +185,12 @@ def run_cross_stream_vector(
         ir_events.extend(source.feed(ev, raw_str))
     ir_events.extend(source.flush())
 
+    # Decoder output must satisfy the strict INV-5/INV-6 grammar on its own:
+    # the target encoder may legally synthesize fragments, so passing the
+    # encoder must never mask an illegal decoder stream (vectors/README
+    # stream self-consistency assertions).
+    validate_event_stream(EventStream(events=ir_events))
+
     target = target_encoder_factory(table)
     wire_events: list[dict[str, Any]] = []
     all_losses: list[Loss] = list(source.losses())

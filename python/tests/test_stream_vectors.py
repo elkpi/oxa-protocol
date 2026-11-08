@@ -2,6 +2,8 @@
 
 import unittest
 
+from dataclasses import replace
+
 from oxa.anthropic.messages import (
     StreamDecoder as AnthropicStreamDecoder,
 )
@@ -20,6 +22,7 @@ from oxa.openai.responses import (
 from oxa.openai.responses import (
     StreamEncoder as ResponsesStreamEncoder,
 )
+from oxa.ir import Violation, load_event_stream
 from oxa.vectest import (
     find_repo_root,
     load_vectors,
@@ -98,6 +101,56 @@ class StreamVectorsTest(unittest.TestCase):
             expected_pairs,
             "cross stream vectors must cover all nine ordered face pairs",
         )
+
+    def test_cross_stream_rejects_illegal_decoder_output(self) -> None:
+        """The target encoder must not mask an illegal decoder stream: a
+        decoder that emits a tool_use block whose input text never appears
+        as InputJSONDelta fragments violates the strict stream grammar even
+        though an encoder could synthesize the missing fragment."""
+        root = find_repo_root()
+        if root is None:
+            self.skipTest("repository root not found (running as standalone package)")
+            return
+
+        source_vector = next(
+            v for v in load_vectors(root, "anthropic", "stream") if v.name.endswith("m7-tool-use-from-ir")
+        )
+        events = [
+            e
+            for e in load_event_stream(source_vector.input).events
+            if type(e).__name__ != "ContentBlockDelta"
+        ]
+
+        encoder = AnthropicStreamEncoder()
+        wire_events: list[dict] = []
+        for ev in events:
+            produced, _ = encoder.apply(ev)
+            wire_events.extend(produced)
+
+        class IllegalDecoder:
+            def feed(self, ev, raw_str):
+                return events
+
+            def flush(self):
+                return []
+
+            def losses(self):
+                return []
+
+        probe = replace(
+            source_vector,
+            conversion="protocol-to-protocol",
+            input={"events": [{}]},
+            input_raw='{"events":[{}]}',
+            expected_output={"events": wire_events},
+            expected_losses=[],
+        )
+        with self.assertRaises(Violation):
+            run_cross_stream_vector(
+                probe,
+                source_decoder_factory=lambda table: IllegalDecoder(),
+                target_encoder_factory=lambda table: AnthropicStreamEncoder(),
+            )
 
 
 if __name__ == "__main__":
