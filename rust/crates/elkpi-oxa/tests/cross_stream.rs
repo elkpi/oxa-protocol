@@ -3,10 +3,6 @@
 
 use std::path::Path;
 
-use oxa_anthropic::Config as AnthropicConfig;
-use oxa_chatcompletions::Config as ChatCompletionsConfig;
-use oxa_responses::Config as ResponsesConfig;
-
 /// Face-generic stream adapter over one face's decoder/encoder pair; mirrors
 /// the per-crate `StreamVectorConverter` adapters in the face test suites.
 macro_rules! stream_converter {
@@ -115,38 +111,38 @@ fn cross_stream_vectors() {
     {
         let mut source = ChatCompletions::new();
         let mut target = Anthropic::new();
-        assert_cross_stream(&manifest_dir, &mut source, &mut target, 2);
+        assert_cross_stream(manifest_dir, &mut source, &mut target, 2);
     }
 
     let mut source = ChatCompletions::new();
     let mut target = ChatCompletions::new();
-    assert_cross_stream(&manifest_dir, &mut source, &mut target, 1);
+    assert_cross_stream(manifest_dir, &mut source, &mut target, 1);
 
     let mut source = ChatCompletions::new();
     let mut target = Responses::new();
-    assert_cross_stream(&manifest_dir, &mut source, &mut target, 1);
+    assert_cross_stream(manifest_dir, &mut source, &mut target, 1);
 
     let mut source = Anthropic::new();
     let mut target = ChatCompletions::new();
-    assert_cross_stream(&manifest_dir, &mut source, &mut target, 1);
+    assert_cross_stream(manifest_dir, &mut source, &mut target, 1);
 
     let mut source = Anthropic::new();
     let mut target = Anthropic::new();
-    assert_cross_stream(&manifest_dir, &mut source, &mut target, 1);
+    assert_cross_stream(manifest_dir, &mut source, &mut target, 1);
 
     let mut source = Anthropic::new();
     let mut target = Responses::new();
-    assert_cross_stream(&manifest_dir, &mut source, &mut target, 1);
+    assert_cross_stream(manifest_dir, &mut source, &mut target, 1);
 
     let mut source = Responses::new();
     let mut target = ChatCompletions::new();
-    assert_cross_stream(&manifest_dir, &mut source, &mut target, 1);
+    assert_cross_stream(manifest_dir, &mut source, &mut target, 1);
 
     let mut source = Responses::new();
     let mut target = Anthropic::new();
-    assert_cross_stream(&manifest_dir, &mut source, &mut target, 1);
+    assert_cross_stream(manifest_dir, &mut source, &mut target, 1);
 
     let mut source = Responses::new();
     let mut target = Responses::new();
-    assert_cross_stream(&manifest_dir, &mut source, &mut target, 1);
+    assert_cross_stream(manifest_dir, &mut source, &mut target, 1);
 }
