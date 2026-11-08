@@ -1,0 +1,161 @@
+{
+ "name": "cross.stream.chatcompletions-to-chatcompletions-multi-delta-text",
+ "description": "Same-face Chat Completions text stream round trip: role, content deltas, finish reason, and usage-only terminal survive with the chunk id preserved.",
+ "spec_version": "0.3.0",
+ "mode": "stream",
+ "conversion": "protocol-to-protocol",
+ "source": {
+  "protocol": "chatcompletions"
+ },
+ "target": {
+  "protocol": "chatcompletions"
+ },
+ "input": {
+  "events": [
+   {
+    "id": "chatcmpl-u1",
+    "object": "chat.completion.chunk",
+    "created": 0,
+    "model": "gpt-4o-mini",
+    "choices": [
+     {
+      "index": 0,
+      "delta": {
+       "role": "assistant"
+      },
+      "finish_reason": null
+     }
+    ]
+   },
+   {
+    "id": "chatcmpl-u1",
+    "object": "chat.completion.chunk",
+    "created": 0,
+    "model": "gpt-4o-mini",
+    "choices": [
+     {
+      "index": 0,
+      "delta": {
+       "content": "Verdict: "
+      },
+      "finish_reason": null
+     }
+    ]
+   },
+   {
+    "id": "chatcmpl-u1",
+    "object": "chat.completion.chunk",
+    "created": 0,
+    "model": "gpt-4o-mini",
+    "choices": [
+     {
+      "index": 0,
+      "delta": {
+       "content": "allow"
+      },
+      "finish_reason": null
+     }
+    ]
+   },
+   {
+    "id": "chatcmpl-u1",
+    "object": "chat.completion.chunk",
+    "created": 0,
+    "model": "gpt-4o-mini",
+    "choices": [
+     {
+      "index": 0,
+      "delta": {},
+      "finish_reason": "stop"
+     }
+    ]
+   },
+   {
+    "id": "chatcmpl-u1",
+    "object": "chat.completion.chunk",
+    "created": 0,
+    "model": "gpt-4o-mini",
+    "choices": [],
+    "usage": {
+     "prompt_tokens": 9,
+     "completion_tokens": 1,
+     "total_tokens": 10
+    }
+   }
+  ]
+ },
+ "expected_output": {
+  "events": [
+   {
+    "id": "chatcmpl-u1",
+    "object": "chat.completion.chunk",
+    "created": 0,
+    "model": "gpt-4o-mini",
+    "choices": [
+     {
+      "index": 0,
+      "delta": {
+       "role": "assistant"
+      },
+      "finish_reason": null
+     }
+    ]
+   },
+   {
+    "id": "chatcmpl-u1",
+    "object": "chat.completion.chunk",
+    "created": 0,
+    "model": "gpt-4o-mini",
+    "choices": [
+     {
+      "index": 0,
+      "delta": {
+       "content": "Verdict: "
+      },
+      "finish_reason": null
+     }
+    ]
+   },
+   {
+    "id": "chatcmpl-u1",
+    "object": "chat.completion.chunk",
+    "created": 0,
+    "model": "gpt-4o-mini",
+    "choices": [
+     {
+      "index": 0,
+      "delta": {
+       "content": "allow"
+      },
+      "finish_reason": null
+     }
+    ]
+   },
+   {
+    "id": "chatcmpl-u1",
+    "object": "chat.completion.chunk",
+    "created": 0,
+    "model": "gpt-4o-mini",
+    "choices": [
+     {
+      "index": 0,
+      "delta": {},
+      "finish_reason": "stop"
+     }
+    ],
+    "usage": {
+     "prompt_tokens": 9,
+     "completion_tokens": 1,
+     "total_tokens": 10
+    }
+   }
+  ]
+ },
+ "expected_losses": [],
+ "tags": [
+  "response",
+  "stream",
+  "cross-face",
+  "control-plane"
+ ]
+}

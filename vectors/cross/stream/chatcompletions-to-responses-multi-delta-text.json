@@ -1,0 +1,207 @@
+{
+ "name": "cross.stream.chatcompletions-to-responses-multi-delta-text",
+ "description": "A Chat Completions text stream with a usage-only terminal chunk re-encodes as a Responses message item with two output_text deltas and a completed terminal; the synthesized message item id is encoder-generated and not round-trippable.",
+ "spec_version": "0.3.0",
+ "mode": "stream",
+ "conversion": "protocol-to-protocol",
+ "source": {
+  "protocol": "chatcompletions"
+ },
+ "target": {
+  "protocol": "responses"
+ },
+ "input": {
+  "events": [
+   {
+    "id": "chatcmpl-u1",
+    "object": "chat.completion.chunk",
+    "created": 0,
+    "model": "gpt-4o-mini",
+    "choices": [
+     {
+      "index": 0,
+      "delta": {
+       "role": "assistant"
+      },
+      "finish_reason": null
+     }
+    ]
+   },
+   {
+    "id": "chatcmpl-u1",
+    "object": "chat.completion.chunk",
+    "created": 0,
+    "model": "gpt-4o-mini",
+    "choices": [
+     {
+      "index": 0,
+      "delta": {
+       "content": "Verdict: "
+      },
+      "finish_reason": null
+     }
+    ]
+   },
+   {
+    "id": "chatcmpl-u1",
+    "object": "chat.completion.chunk",
+    "created": 0,
+    "model": "gpt-4o-mini",
+    "choices": [
+     {
+      "index": 0,
+      "delta": {
+       "content": "allow"
+      },
+      "finish_reason": null
+     }
+    ]
+   },
+   {
+    "id": "chatcmpl-u1",
+    "object": "chat.completion.chunk",
+    "created": 0,
+    "model": "gpt-4o-mini",
+    "choices": [
+     {
+      "index": 0,
+      "delta": {},
+      "finish_reason": "stop"
+     }
+    ]
+   },
+   {
+    "id": "chatcmpl-u1",
+    "object": "chat.completion.chunk",
+    "created": 0,
+    "model": "gpt-4o-mini",
+    "choices": [],
+    "usage": {
+     "prompt_tokens": 9,
+     "completion_tokens": 1,
+     "total_tokens": 10
+    }
+   }
+  ]
+ },
+ "expected_output": {
+  "events": [
+   {
+    "type": "response.created",
+    "response": {
+     "id": "chatcmpl-u1",
+     "object": "response",
+     "status": "in_progress",
+     "model": "gpt-4o-mini",
+     "output": []
+    }
+   },
+   {
+    "type": "response.output_item.added",
+    "output_index": 0,
+    "item": {
+     "type": "message",
+     "id": "msg_abc123",
+     "status": "in_progress",
+     "role": "assistant"
+    }
+   },
+   {
+    "type": "response.content_part.added",
+    "item_id": "msg_abc123",
+    "output_index": 0,
+    "content_index": 0,
+    "part": {
+     "type": "output_text",
+     "text": "",
+     "annotations": []
+    }
+   },
+   {
+    "type": "response.output_text.delta",
+    "item_id": "msg_abc123",
+    "output_index": 0,
+    "content_index": 0,
+    "delta": "Verdict: "
+   },
+   {
+    "type": "response.output_text.delta",
+    "item_id": "msg_abc123",
+    "output_index": 0,
+    "content_index": 0,
+    "delta": "allow"
+   },
+   {
+    "type": "response.output_text.done",
+    "item_id": "msg_abc123",
+    "output_index": 0,
+    "content_index": 0,
+    "text": "Verdict: allow"
+   },
+   {
+    "type": "response.content_part.done",
+    "item_id": "msg_abc123",
+    "output_index": 0,
+    "content_index": 0,
+    "part": {
+     "type": "output_text",
+     "text": "Verdict: allow",
+     "annotations": []
+    }
+   },
+   {
+    "type": "response.output_item.done",
+    "output_index": 0,
+    "item": {
+     "type": "message",
+     "id": "msg_abc123",
+     "status": "completed",
+     "role": "assistant",
+     "content": [
+      {
+       "type": "output_text",
+       "text": "Verdict: allow",
+       "annotations": []
+      }
+     ]
+    }
+   },
+   {
+    "type": "response.completed",
+    "response": {
+     "id": "chatcmpl-u1",
+     "object": "response",
+     "status": "completed",
+     "model": "gpt-4o-mini",
+     "output": [
+      {
+       "type": "message",
+       "id": "msg_abc123",
+       "status": "completed",
+       "role": "assistant",
+       "content": [
+        {
+         "type": "output_text",
+         "text": "Verdict: allow",
+         "annotations": []
+        }
+       ]
+      }
+     ],
+     "usage": {
+      "input_tokens": 9,
+      "output_tokens": 1,
+      "total_tokens": 10
+     }
+    }
+   }
+  ]
+ },
+ "expected_losses": [],
+ "tags": [
+  "response",
+  "stream",
+  "cross-face",
+  "control-plane"
+ ]
+}

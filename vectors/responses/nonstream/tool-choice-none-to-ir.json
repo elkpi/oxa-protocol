@@ -1,0 +1,90 @@
+{
+ "name": "responses.nonstream.tool-choice-none-to-ir",
+ "description": "Responses tool_choice none and a declared function tool decode into the IR tool-choice mode none.",
+ "spec_version": "0.3.0",
+ "mode": "nonstream",
+ "conversion": "to-ir",
+ "source": {
+  "protocol": "responses"
+ },
+ "target": {
+  "protocol": "responses"
+ },
+ "input": {
+  "model": "gpt-5-mini",
+  "input": [
+   {
+    "type": "message",
+    "role": "user",
+    "content": [
+     {
+      "type": "input_text",
+      "text": "Check request 42."
+     }
+    ]
+   }
+  ],
+  "tools": [
+   {
+    "type": "function",
+    "name": "run_check",
+    "description": "Run a check.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    }
+   }
+  ],
+  "tool_choice": "none"
+ },
+ "expected_ir": {
+  "specVersion": "0.3.0",
+  "model": "gpt-5-mini",
+  "messages": [
+   {
+    "role": "user",
+    "content": [
+     {
+      "type": "text",
+      "text": "Check request 42."
+     }
+    ]
+   }
+  ],
+  "tools": [
+   {
+    "name": "run_check",
+    "description": "Run a check.",
+    "input_schema": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    }
+   }
+  ],
+  "tool_choice": {
+   "mode": "none"
+  }
+ },
+ "expected_losses": [],
+ "tags": [
+  "tools",
+  "request",
+  "tool-choice",
+  "n-r-9",
+  "control-plane"
+ ]
+}

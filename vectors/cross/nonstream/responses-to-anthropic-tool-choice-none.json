@@ -1,0 +1,86 @@
+{
+ "name": "cross.nonstream.responses-to-anthropic-tool-choice-none",
+ "description": "tool_choice none and a declared function tool survive a Responses to Anthropic conversion unchanged in semantics (N-R-9, N-AN-6).",
+ "spec_version": "0.3.0",
+ "mode": "nonstream",
+ "conversion": "protocol-to-protocol",
+ "source": {
+  "protocol": "responses"
+ },
+ "target": {
+  "protocol": "anthropic"
+ },
+ "input": {
+  "model": "gpt-5-mini",
+  "input": [
+   {
+    "type": "message",
+    "role": "user",
+    "content": [
+     {
+      "type": "input_text",
+      "text": "Check request 42."
+     }
+    ]
+   }
+  ],
+  "tools": [
+   {
+    "type": "function",
+    "name": "run_check",
+    "description": "Run a check.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    }
+   }
+  ],
+  "tool_choice": "none",
+  "max_output_tokens": 256
+ },
+ "expected_output": {
+  "model": "gpt-5-mini",
+  "max_tokens": 256,
+  "messages": [
+   {
+    "role": "user",
+    "content": "Check request 42."
+   }
+  ],
+  "tools": [
+   {
+    "name": "run_check",
+    "description": "Run a check.",
+    "input_schema": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    }
+   }
+  ],
+  "tool_choice": {
+   "type": "none"
+  }
+ },
+ "expected_losses": [],
+ "tags": [
+  "tool-choice",
+  "n-r-9",
+  "n-an-6",
+  "request",
+  "control-plane"
+ ]
+}

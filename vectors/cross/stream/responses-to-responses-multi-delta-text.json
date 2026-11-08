@@ -1,0 +1,240 @@
+{
+ "name": "cross.stream.responses-to-responses-multi-delta-text",
+ "description": "Same-face Responses text stream round trip through IR: the response id survives while item ids are regenerated (msg_abc123), demonstrating that item ids are envelope-local.",
+ "spec_version": "0.3.0",
+ "mode": "stream",
+ "conversion": "protocol-to-protocol",
+ "source": {
+  "protocol": "responses"
+ },
+ "target": {
+  "protocol": "responses"
+ },
+ "input": {
+  "events": [
+   {
+    "type": "response.created",
+    "response": {
+     "id": "resp_stream_text",
+     "object": "response",
+     "status": "in_progress",
+     "model": "gpt-5-mini",
+     "output": []
+    }
+   },
+   {
+    "type": "response.output_item.added",
+    "output_index": 0,
+    "item": {
+     "type": "message",
+     "role": "assistant",
+     "id": "msg_0",
+     "content": []
+    }
+   },
+   {
+    "type": "response.content_part.added",
+    "item_id": "msg_0",
+    "output_index": 0,
+    "content_index": 0,
+    "part": {
+     "type": "output_text",
+     "text": ""
+    }
+   },
+   {
+    "type": "response.output_text.delta",
+    "item_id": "msg_0",
+    "output_index": 0,
+    "content_index": 0,
+    "delta": "Verdict: "
+   },
+   {
+    "type": "response.output_text.delta",
+    "item_id": "msg_0",
+    "output_index": 0,
+    "content_index": 0,
+    "delta": "allow"
+   },
+   {
+    "type": "response.output_text.done",
+    "item_id": "msg_0",
+    "output_index": 0,
+    "content_index": 0,
+    "text": "Verdict: allow"
+   },
+   {
+    "type": "response.content_part.done",
+    "item_id": "msg_0",
+    "output_index": 0,
+    "content_index": 0,
+    "part": {
+     "type": "output_text",
+     "text": "Verdict: allow"
+    }
+   },
+   {
+    "type": "response.output_item.done",
+    "output_index": 0,
+    "item": {
+     "type": "message",
+     "role": "assistant",
+     "id": "msg_0",
+     "content": [
+      {
+       "type": "output_text",
+       "text": "Verdict: allow"
+      }
+     ]
+    }
+   },
+   {
+    "type": "response.completed",
+    "response": {
+     "id": "resp_stream_text",
+     "object": "response",
+     "status": "completed",
+     "model": "gpt-5-mini",
+     "output": [
+      {
+       "type": "message",
+       "role": "assistant",
+       "id": "msg_0",
+       "content": [
+        {
+         "type": "output_text",
+         "text": "Verdict: allow"
+        }
+       ]
+      }
+     ],
+     "usage": {
+      "input_tokens": 4,
+      "output_tokens": 2,
+      "total_tokens": 6
+     }
+    }
+   }
+  ]
+ },
+ "expected_output": {
+  "events": [
+   {
+    "type": "response.created",
+    "response": {
+     "id": "resp_stream_text",
+     "object": "response",
+     "status": "in_progress",
+     "model": "gpt-5-mini",
+     "output": []
+    }
+   },
+   {
+    "type": "response.output_item.added",
+    "output_index": 0,
+    "item": {
+     "type": "message",
+     "id": "msg_abc123",
+     "status": "in_progress",
+     "role": "assistant"
+    }
+   },
+   {
+    "type": "response.content_part.added",
+    "item_id": "msg_abc123",
+    "output_index": 0,
+    "content_index": 0,
+    "part": {
+     "type": "output_text",
+     "text": "",
+     "annotations": []
+    }
+   },
+   {
+    "type": "response.output_text.delta",
+    "item_id": "msg_abc123",
+    "output_index": 0,
+    "content_index": 0,
+    "delta": "Verdict: "
+   },
+   {
+    "type": "response.output_text.delta",
+    "item_id": "msg_abc123",
+    "output_index": 0,
+    "content_index": 0,
+    "delta": "allow"
+   },
+   {
+    "type": "response.output_text.done",
+    "item_id": "msg_abc123",
+    "output_index": 0,
+    "content_index": 0,
+    "text": "Verdict: allow"
+   },
+   {
+    "type": "response.content_part.done",
+    "item_id": "msg_abc123",
+    "output_index": 0,
+    "content_index": 0,
+    "part": {
+     "type": "output_text",
+     "text": "Verdict: allow",
+     "annotations": []
+    }
+   },
+   {
+    "type": "response.output_item.done",
+    "output_index": 0,
+    "item": {
+     "type": "message",
+     "id": "msg_abc123",
+     "status": "completed",
+     "role": "assistant",
+     "content": [
+      {
+       "type": "output_text",
+       "text": "Verdict: allow",
+       "annotations": []
+      }
+     ]
+    }
+   },
+   {
+    "type": "response.completed",
+    "response": {
+     "id": "resp_stream_text",
+     "object": "response",
+     "status": "completed",
+     "model": "gpt-5-mini",
+     "output": [
+      {
+       "type": "message",
+       "id": "msg_abc123",
+       "status": "completed",
+       "role": "assistant",
+       "content": [
+        {
+         "type": "output_text",
+         "text": "Verdict: allow",
+         "annotations": []
+        }
+       ]
+      }
+     ],
+     "usage": {
+      "input_tokens": 4,
+      "output_tokens": 2,
+      "total_tokens": 6
+     }
+    }
+   }
+  ]
+ },
+ "expected_losses": [],
+ "tags": [
+  "response",
+  "stream",
+  "cross-face",
+  "control-plane"
+ ]
+}

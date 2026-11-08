@@ -1,0 +1,82 @@
+{
+ "name": "cross.nonstream.chatcompletions-to-anthropic-tool-choice-none",
+ "description": "Chat Completions tool_choice none converts to Anthropic tool_choice type none with the tool declaration preserved (N-CC-7, N-AN-6).",
+ "spec_version": "0.3.0",
+ "mode": "nonstream",
+ "conversion": "protocol-to-protocol",
+ "source": {
+  "protocol": "chatcompletions"
+ },
+ "target": {
+  "protocol": "anthropic"
+ },
+ "input": {
+  "model": "gpt-5-mini",
+  "messages": [
+   {
+    "role": "user",
+    "content": "Check request 42."
+   }
+  ],
+  "tools": [
+   {
+    "type": "function",
+    "function": {
+     "name": "run_check",
+     "description": "Run a check.",
+     "parameters": {
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "id"
+      ]
+     }
+    }
+   }
+  ],
+  "tool_choice": "none",
+  "max_completion_tokens": 256
+ },
+ "expected_output": {
+  "model": "gpt-5-mini",
+  "max_tokens": 256,
+  "messages": [
+   {
+    "role": "user",
+    "content": "Check request 42."
+   }
+  ],
+  "tools": [
+   {
+    "name": "run_check",
+    "description": "Run a check.",
+    "input_schema": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    }
+   }
+  ],
+  "tool_choice": {
+   "type": "none"
+  }
+ },
+ "expected_losses": [],
+ "tags": [
+  "tool-choice",
+  "n-cc-7",
+  "n-an-6",
+  "request",
+  "control-plane"
+ ]
+}

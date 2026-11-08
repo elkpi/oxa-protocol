@@ -1,0 +1,79 @@
+{
+ "name": "responses.nonstream.tool-choice-none-from-ir",
+ "description": "IR tool-choice mode none renders as Responses tool_choice none with the tool declaration preserved.",
+ "spec_version": "0.3.0",
+ "mode": "nonstream",
+ "conversion": "from-ir",
+ "source": {
+  "protocol": "responses"
+ },
+ "target": {
+  "protocol": "responses"
+ },
+ "input": {
+  "specVersion": "0.3.0",
+  "model": "gpt-5-mini",
+  "messages": [
+   {
+    "role": "user",
+    "content": [
+     {
+      "type": "text",
+      "text": "Check request 42."
+     }
+    ]
+   }
+  ],
+  "tools": [
+   {
+    "name": "run_check",
+    "description": "Run a check.",
+    "input_schema": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    }
+   }
+  ],
+  "tool_choice": {
+   "mode": "none"
+  }
+ },
+ "expected_output": {
+  "model": "gpt-5-mini",
+  "input": "Check request 42.",
+  "tools": [
+   {
+    "type": "function",
+    "name": "run_check",
+    "description": "Run a check.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    }
+   }
+  ],
+  "tool_choice": "none"
+ },
+ "expected_losses": [],
+ "tags": [
+  "tools",
+  "request",
+  "tool-choice",
+  "n-r-9",
+  "control-plane"
+ ]
+}

@@ -2831,6 +2831,18 @@
       "sha256": "00ebac4b69b6dc5329234e2ddd42ce5354d0a9ed027d94eb31ab66e9c2da131b"
     },
     {
+      "name": "cross.nonstream.anthropic-to-chatcompletions-tool-choice-none",
+      "file": "cross/nonstream/anthropic-to-chatcompletions-tool-choice-none.json",
+      "tags": [
+        "tool-choice",
+        "n-an-6",
+        "n-cc-7",
+        "request",
+        "control-plane"
+      ],
+      "sha256": "14b26e6cf51418a8c75d9c1d32bab6733deac2c1ba4bae14bb139b7f173fe8ec"
+    },
+    {
       "name": "cross.nonstream.anthropic-to-chatcompletions-tool-defer-loading",
       "file": "cross/nonstream/anthropic-to-chatcompletions-tool-defer-loading.json",
       "tags": [
@@ -3074,6 +3086,18 @@
       "sha256": "232b869923eb28c9ffa5bb96f54e0c03a1c6ee4d3b96e69db9f8f45cc23136ab"
     },
     {
+      "name": "cross.nonstream.anthropic-to-responses-tool-choice-none",
+      "file": "cross/nonstream/anthropic-to-responses-tool-choice-none.json",
+      "tags": [
+        "tool-choice",
+        "n-an-6",
+        "n-r-9",
+        "request",
+        "control-plane"
+      ],
+      "sha256": "89acce7a9c0880cd5ebac29ae88fa0015e80163a851d3a79f96b29564357ed79"
+    },
+    {
       "name": "cross.nonstream.anthropic-to-responses-tool-defer-loading",
       "file": "cross/nonstream/anthropic-to-responses-tool-defer-loading.json",
       "tags": [
@@ -3120,6 +3144,15 @@
         "loss"
       ],
       "sha256": "305ffab8f29e51f9dd250b0280fb872d597338ba634b766dcadb3e11e6ce5216"
+    },
+    {
+      "name": "cross.nonstream.chatcompletions-to-anthropic-developer-json-schema-request",
+      "file": "cross/nonstream/chatcompletions-to-anthropic-developer-json-schema-request.json",
+      "tags": [
+        "request",
+        "control-plane"
+      ],
+      "sha256": "c9a3246c4f746c95b904115e87eac81284a5db90d5f43efa08cb5472572a7028"
     },
     {
       "name": "cross.nonstream.chatcompletions-to-anthropic-document-request",
@@ -3264,6 +3297,18 @@
       "sha256": "3a78060effd0a7caca1dd57ca049ac1c103900e46dd3916aabee137a871bf24b"
     },
     {
+      "name": "cross.nonstream.chatcompletions-to-anthropic-tool-choice-none",
+      "file": "cross/nonstream/chatcompletions-to-anthropic-tool-choice-none.json",
+      "tags": [
+        "tool-choice",
+        "n-cc-7",
+        "n-an-6",
+        "request",
+        "control-plane"
+      ],
+      "sha256": "cf25a1a7865b8bcccb0001701993c1a79ff968e1867bd924ccb092f8441c043d"
+    },
+    {
       "name": "cross.nonstream.chatcompletions-to-jev-response",
       "file": "cross/nonstream/chatcompletions-to-jev-response.json",
       "tags": [
@@ -3389,6 +3434,18 @@
         "response_format"
       ],
       "sha256": "2facda14e44afdf4f15fdd2048391b948dde83d33047a17d7d408a10ab157477"
+    },
+    {
+      "name": "cross.nonstream.chatcompletions-to-responses-tool-choice-none",
+      "file": "cross/nonstream/chatcompletions-to-responses-tool-choice-none.json",
+      "tags": [
+        "tool-choice",
+        "n-cc-7",
+        "n-r-9",
+        "request",
+        "control-plane"
+      ],
+      "sha256": "cc401c2bac8310e3af791491805dacfe4dd2fee5375ce20070e41b1a334fae09"
     },
     {
       "name": "cross.nonstream.chatcompletions-to-responses-verbosity",
@@ -3538,6 +3595,15 @@
         "strict"
       ],
       "sha256": "2e5ce8fdbef643e363bc27aa3aec3bd00d839c63a201761f0959158426bb7704"
+    },
+    {
+      "name": "cross.nonstream.responses-to-anthropic-json-schema-request",
+      "file": "cross/nonstream/responses-to-anthropic-json-schema-request.json",
+      "tags": [
+        "request",
+        "control-plane"
+      ],
+      "sha256": "867c757f3e4ff46b45b7b3e955ad600d93894702309e4c978a6ff22d6d763caa"
     },
     {
       "name": "cross.nonstream.responses-to-anthropic-native-tool",
@@ -3697,6 +3763,18 @@
         "n-an-11"
       ],
       "sha256": "368ad32e22f2ee85f37fa451c240326bd0f9c6eff191542d641b7bb21946cc4e"
+    },
+    {
+      "name": "cross.nonstream.responses-to-anthropic-tool-choice-none",
+      "file": "cross/nonstream/responses-to-anthropic-tool-choice-none.json",
+      "tags": [
+        "tool-choice",
+        "n-r-9",
+        "n-an-6",
+        "request",
+        "control-plane"
+      ],
+      "sha256": "c28eadb078f7df87d883ae008990ea6e43974b01901a1e97f3519865f3738e30"
     },
     {
       "name": "cross.nonstream.responses-to-anthropic-tool-container",
@@ -3901,6 +3979,18 @@
       "sha256": "7567aa9ae1af8559ab10e5f45e22d00f056d89d7f73d7d842b01c715b43f29d5"
     },
     {
+      "name": "cross.nonstream.responses-to-chatcompletions-tool-choice-none",
+      "file": "cross/nonstream/responses-to-chatcompletions-tool-choice-none.json",
+      "tags": [
+        "tool-choice",
+        "n-r-9",
+        "n-cc-7",
+        "request",
+        "control-plane"
+      ],
+      "sha256": "d14476bbf8751e34a711e617d573090b2fed3d4733f4bdb462082a7468e9458e"
+    },
+    {
       "name": "cross.nonstream.responses-to-chatcompletions-tool-container",
       "file": "cross/nonstream/responses-to-chatcompletions-tool-container.json",
       "tags": [
@@ -3947,6 +4037,118 @@
         "n-r-16"
       ],
       "sha256": "b8a873fa9b18ee05df2834727c7e17b86ff2f0ec3f8858a398dc6ca070987af0"
+    },
+    {
+      "name": "cross.stream.anthropic-to-anthropic-multi-delta-text",
+      "file": "cross/stream/anthropic-to-anthropic-multi-delta-text.json",
+      "tags": [
+        "response",
+        "stream",
+        "cross-face",
+        "control-plane"
+      ],
+      "sha256": "f5d5843a88bf548ced952ca34a65aadb20652ea6da8f9abe63d7a9b95f5a1c03"
+    },
+    {
+      "name": "cross.stream.anthropic-to-chatcompletions-multi-delta-text",
+      "file": "cross/stream/anthropic-to-chatcompletions-multi-delta-text.json",
+      "tags": [
+        "response",
+        "stream",
+        "cross-face",
+        "control-plane"
+      ],
+      "sha256": "350a9a73d44b45222c11173e6bb691fc6a9c2fac698d2d285f888ace3e83dc17"
+    },
+    {
+      "name": "cross.stream.anthropic-to-responses-multi-delta-text",
+      "file": "cross/stream/anthropic-to-responses-multi-delta-text.json",
+      "tags": [
+        "response",
+        "stream",
+        "cross-face",
+        "control-plane"
+      ],
+      "sha256": "67cc198bd2426df942f32d9066d10b26c2c3feb5b83a31c3b4a883cfdb826fe3"
+    },
+    {
+      "name": "cross.stream.chatcompletions-to-anthropic-tool-arguments",
+      "file": "cross/stream/chatcompletions-to-anthropic-tool-arguments.json",
+      "tags": [
+        "response",
+        "stream",
+        "cross-face",
+        "control-plane",
+        "tool-arguments"
+      ],
+      "sha256": "ef4c0e5d2fec7c977194b1ddafac58dd4f169db0f16eb8dd58aa7f898d87e068"
+    },
+    {
+      "name": "cross.stream.chatcompletions-to-anthropic-usage-only-terminal",
+      "file": "cross/stream/chatcompletions-to-anthropic-usage-only-terminal.json",
+      "tags": [
+        "response",
+        "stream",
+        "cross-face",
+        "control-plane",
+        "usage-only-terminal"
+      ],
+      "sha256": "2b3554d107709802e4566c7b346639a363e1333138b96f673c5b0f056bb0aad5"
+    },
+    {
+      "name": "cross.stream.chatcompletions-to-chatcompletions-multi-delta-text",
+      "file": "cross/stream/chatcompletions-to-chatcompletions-multi-delta-text.json",
+      "tags": [
+        "response",
+        "stream",
+        "cross-face",
+        "control-plane"
+      ],
+      "sha256": "9e4e2db26968e841cbfe8f144c86134b26a7b7ab34f586c7e97f39e123a6181f"
+    },
+    {
+      "name": "cross.stream.chatcompletions-to-responses-multi-delta-text",
+      "file": "cross/stream/chatcompletions-to-responses-multi-delta-text.json",
+      "tags": [
+        "response",
+        "stream",
+        "cross-face",
+        "control-plane"
+      ],
+      "sha256": "aaf248150e7c7f6d484033b771f35cd4259720a7185438dfdf55cfd9ea222ece"
+    },
+    {
+      "name": "cross.stream.responses-to-anthropic-multi-delta-text",
+      "file": "cross/stream/responses-to-anthropic-multi-delta-text.json",
+      "tags": [
+        "response",
+        "stream",
+        "cross-face",
+        "control-plane"
+      ],
+      "sha256": "40f3f611ffcdf369b9d1d8a045e30f2c7a3165a64573ad085f79aae620777580"
+    },
+    {
+      "name": "cross.stream.responses-to-chatcompletions-multi-delta-text",
+      "file": "cross/stream/responses-to-chatcompletions-multi-delta-text.json",
+      "tags": [
+        "response",
+        "stream",
+        "cross-face",
+        "control-plane"
+      ],
+      "sha256": "6f952f3914f3b8078e1a9d12df9e199cc8e0811c45e8b71f12c9c15ab205e23a"
+    },
+    {
+      "name": "cross.stream.responses-to-responses-multi-delta-text",
+      "file": "cross/stream/responses-to-responses-multi-delta-text.json",
+      "tags": [
+        "response",
+        "stream",
+        "cross-face",
+        "control-plane"
+      ],
+      "sha256": "0224b623042c1144026643be6a2133b4c657075aaaf7e8a899f5f8eb3c1ae455"
     },
     {
       "name": "jev.nonstream.box-answer-loss-response-to-ir",
@@ -5919,6 +6121,30 @@
         "N-R-9"
       ],
       "sha256": "ca870d5080fadcb4d2f168c9906555076152e13913eed8b15d8d0e99f8ab8167"
+    },
+    {
+      "name": "responses.nonstream.tool-choice-none-from-ir",
+      "file": "responses/nonstream/tool-choice-none-from-ir.json",
+      "tags": [
+        "tools",
+        "request",
+        "tool-choice",
+        "n-r-9",
+        "control-plane"
+      ],
+      "sha256": "0abe5e90f789a82cc0d6559787511d4cf6b0530ab71b653d5817174e4c3d947e"
+    },
+    {
+      "name": "responses.nonstream.tool-choice-none-to-ir",
+      "file": "responses/nonstream/tool-choice-none-to-ir.json",
+      "tags": [
+        "tools",
+        "request",
+        "tool-choice",
+        "n-r-9",
+        "control-plane"
+      ],
+      "sha256": "ede969be06011f96b34b20219f01044ff6e5902d06a082cd7c80501dca28e9c6"
     },
     {
       "name": "responses.nonstream.tool-choice-required-from-ir",
