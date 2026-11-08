@@ -30,6 +30,7 @@
 package oxa
 
 // Version is the current release version of the oxa Go reference implementation.
-// v3.1.0 targets the SystemOne Jev face and publishes once every language
-// wave passes the shared 589-vector suite (spec/README).
-const Version = "3.1.0"
+// v3.2.0 adds the control-plane fidelity matrix (spec/21), locks it with
+// ten cross-stream vectors, and publishes once every language wave passes
+// the shared 609-vector suite (spec/README).
+const Version = "3.2.0"
