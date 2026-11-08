@@ -477,6 +477,43 @@ StatusOr<Report> run_cross(const std::vector<const Converter*>& converters,
     return report;
 }
 
+// Decodes a stream vector's `events` array through the converter, appends
+// the decoder flush output, and validates the INV-5/INV-6 grammar. Returns
+// false after recording the failure in the report; shared by the face-local
+// and cross-stream runners.
+bool decode_and_validate_stream(StreamConverter& conv,
+                                const json::Value& input,
+                                const std::string& vector_name,
+                                Report& report,
+                                std::vector<ir::Event>& stream) {
+    const auto* evs = input.find("events");
+    if (!evs || !evs->is_array()) {
+        report.failures.push_back({vector_name, "stream input missing events array"});
+        return false;
+    }
+    for (const auto& chunk : evs->as_array()) {
+        auto chunk_evs = conv.decode_native_event(chunk);
+        if (!chunk_evs.ok()) {
+            report.failures.push_back({vector_name, "decode_native_event error: " + std::string(chunk_evs.status().message())});
+            return false;
+        }
+        stream.insert(stream.end(), chunk_evs->begin(), chunk_evs->end());
+    }
+    auto flush_evs = conv.flush_decoder();
+    if (!flush_evs.ok()) {
+        report.failures.push_back({vector_name, "flush_decoder error: " + std::string(flush_evs.status().message())});
+        return false;
+    }
+    stream.insert(stream.end(), flush_evs->begin(), flush_evs->end());
+
+    auto val_s = ir::validate_event_stream(stream);
+    if (!val_s.ok()) {
+        report.failures.push_back({vector_name, "stream validation error: " + std::string(val_s.message())});
+        return false;
+    }
+    return true;
+}
+
 StatusOr<Report> run_stream(StreamConverter& conv, const std::filesystem::path& start) {
     auto root = find_repo_root(start);
     if (!root) {
@@ -497,34 +534,8 @@ StatusOr<Report> run_stream(StreamConverter& conv, const std::filesystem::path& 
                 report.failures.push_back({vec.name, "stream to-ir missing expected_ir"});
                 continue;
             }
-            const auto* evs = vec.input.find("events");
-            if (!evs || !evs->is_array()) {
-                report.failures.push_back({vec.name, "stream input missing events array"});
-                continue;
-            }
             std::vector<ir::Event> stream;
-            bool ok = true;
-            for (const auto& chunk : evs->as_array()) {
-                auto chunk_evs = conv.decode_native_event(chunk);
-                if (!chunk_evs.ok()) {
-                    report.failures.push_back({vec.name, "decode_native_event error: " + std::string(chunk_evs.status().message())});
-                    ok = false;
-                    break;
-                }
-                stream.insert(stream.end(), chunk_evs->begin(), chunk_evs->end());
-            }
-            if (!ok) continue;
-
-            auto flush_evs = conv.flush_decoder();
-            if (!flush_evs.ok()) {
-                report.failures.push_back({vec.name, "flush_decoder error: " + std::string(flush_evs.status().message())});
-                continue;
-            }
-            stream.insert(stream.end(), flush_evs->begin(), flush_evs->end());
-
-            auto val_s = ir::validate_event_stream(stream);
-            if (!val_s.ok()) {
-                report.failures.push_back({vec.name, "stream validation error: " + std::string(val_s.message())});
+            if (!decode_and_validate_stream(conv, vec.input, vec.name, report, stream)) {
                 continue;
             }
 
@@ -625,51 +636,25 @@ StatusOr<Report> run_cross_stream(StreamConverter& source,
             report.failures.push_back({vec->name, "cross stream vector missing expected_output"});
             continue;
         }
-        const auto* evs = vec->input.find("events");
-        if (!evs || !evs->is_array()) {
-            report.failures.push_back({vec->name, "cross stream input missing events array"});
-            continue;
-        }
-
         std::vector<ir::Event> stream;
-        bool ok = true;
-        for (const auto& chunk : evs->as_array()) {
-            auto chunk_evs = source.decode_native_event(chunk);
-            if (!chunk_evs.ok()) {
-                report.failures.push_back({vec->name, "decode_native_event error: " + std::string(chunk_evs.status().message())});
-                ok = false;
-                break;
-            }
-            stream.insert(stream.end(), chunk_evs->begin(), chunk_evs->end());
-        }
-        if (!ok) continue;
-
-        auto flush_evs = source.flush_decoder();
-        if (!flush_evs.ok()) {
-            report.failures.push_back({vec->name, "flush_decoder error: " + std::string(flush_evs.status().message())});
-            continue;
-        }
-        stream.insert(stream.end(), flush_evs->begin(), flush_evs->end());
-
-        auto val_s = ir::validate_event_stream(stream);
-        if (!val_s.ok()) {
-            report.failures.push_back({vec->name, "stream validation error: " + std::string(val_s.message())});
+        if (!decode_and_validate_stream(source, vec->input, vec->name, report, stream)) {
             continue;
         }
 
         std::vector<json::Value> actual_events;
         std::vector<ir::Loss> combined_losses = source.decoder_losses();
+        bool encoded = true;
         for (const auto& ev : stream) {
             auto apply_res = target.apply_ir_event(ev);
             if (!apply_res.ok()) {
                 report.failures.push_back({vec->name, "apply_ir_event error: " + std::string(apply_res.status().message())});
-                ok = false;
+                encoded = false;
                 break;
             }
             actual_events.insert(actual_events.end(), apply_res->value.begin(), apply_res->value.end());
             combined_losses.insert(combined_losses.end(), apply_res->losses.begin(), apply_res->losses.end());
         }
-        if (!ok) continue;
+        if (!encoded) continue;
 
         json::Value act_events_json = json::Value::array();
         for (const auto& e : actual_events) act_events_json.push_back(e);
