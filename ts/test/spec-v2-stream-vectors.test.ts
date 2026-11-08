@@ -176,12 +176,28 @@ test("runs every stream golden vector through the public converters", () => {
     ({ document }) => document.mode === "stream",
   );
   assert.ok(vectors.length > 0);
-  // Guard against silently dropping the cross-stream lane: all nine
-  // ordered face pairs must stay present (spec/21 §9).
-  assert.equal(
-    vectors.filter(({ name }) => name.startsWith("cross.stream.")).length,
-    10,
+  // Guard against silently dropping the cross-stream lane: every ordered
+  // face pair must be covered at least once (spec/21 §9), so deleting a
+  // direction cannot hide behind a new one.
+  const crossPairs = new Set(
+    vectors
+      .filter(({ name }) => name.startsWith("cross.stream."))
+      .map(({ document }) => {
+        const source = ((document.source as JsonObject).protocol ??
+          "") as string;
+        const target = ((document.target as JsonObject).protocol ??
+          "") as string;
+        return `${source}->${target}`;
+      }),
   );
+  for (const source of Object.keys(harnesses)) {
+    for (const target of Object.keys(harnesses)) {
+      assert.ok(
+        crossPairs.has(`${source}->${target}`),
+        `cross-stream pair not covered: ${source}->${target}`,
+      );
+    }
+  }
 
   for (const vector of vectors) {
     withVectorName(vector.name, () => {
