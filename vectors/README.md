@@ -99,8 +99,9 @@ contract — the per-face vectors already lock each stage separately.
 
 `expected_losses` is the concatenation of the source-decode losses
 followed by the target-encode losses (spec/02 §6); it still compares as
-an unordered set keyed on `(path, field, reason)`. Cross vectors are
-nonstream only.
+an unordered set keyed on `(path, field, reason)`. This section describes
+`vectors/cross/nonstream/`; `vectors/cross/stream/` has its own comparison
+rules below.
 
 ## Cross stream vectors
 
@@ -118,7 +119,12 @@ unordered set. Target-side envelope fields (chunk/item ids, indexes) are
 encoder-regenerated; a same-face round-trip vector is the only place
 where such a field can be asserted to survive, and only for faces whose
 spec mapping pins it. Jev has no streaming face (spec/17) and takes no
-part in cross stream vectors.
+part in cross stream vectors. The Go reference implementation runs this
+lane through `vectest.RunCrossStream`; adding an equivalent composition
+runner in TypeScript, Rust, Python, and C++ is a follow-up wave. Until a
+language's runner exists, its harness MUST exclude `cross/stream` from
+both nonstream cross and face-local stream lanes rather than skipping
+individual vectors silently.
 
 ## manifest.json
 

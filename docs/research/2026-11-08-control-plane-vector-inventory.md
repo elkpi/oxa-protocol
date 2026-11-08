@@ -76,16 +76,16 @@ type 值深度搜索）。唯一 loss：C→A 的 `degraded | system[0].role | r
 
 ## 4. Phase 2 工作清单（已完成，2026-11-08）
 
-按 spec/21 §9 的完成定义，全部落地于本分支（Go 参考实现全套测试通过，manifest 609 向量）：
+按 spec/21 §9 的完成定义，Go 参考实现已落地本分支（全套测试通过，manifest 609 向量）；TypeScript、Rust、Python 与 C++ 的跨面流 runner 仍待各自 wave 移植：
 
-1. **框架**：vectest `RunCrossStream`（TDD：先失败测试后实现；框架自带向量间 `ResetStreamVector` 隔离——首个 red 即暴露此真实缺陷）；`cross/stream/` 由 `TestCrossVectorsStream` 九对执行。
+1. **框架**：Go vectest `RunCrossStream`（TDD：先失败测试后实现；框架自带向量间 `ResetStreamVector` 隔离——首个 red 即暴露此真实缺陷）；`cross/stream/` 由 `TestCrossVectorsStream` 九对执行。四语言当前仅执行新增的 10 个 nonstream 向量，并明确排除 `cross/stream`。
 2. **请求缺口向量（10 个）**：`responses-to-anthropic-json-schema-request`（R→A name/description/strict degraded）、`chatcompletions-to-anthropic-developer-json-schema-request`（C→A `system[0].role` + schema 降级）、6 个 `tool-choice-none` 跨面向量、RE 面内部 `tool-choice-none-{to,from}-ir`。
 3. **跨面流向量（10 个）**：9 对 `*-to-*-multi-delta-text`（含同面 round-trip 的信封保真断言与跨面 item id 重建断言）、`chatcompletions-to-anthropic-tool-arguments`（交错分片）、`chatcompletions-to-anthropic-usage-only-terminal`。
 4. **实现侧结论**：补向量过程中无一处需要修改转换实现——所有差异均为期望值构造错误（RE/AN/CC 的 wire 渲染默认：单文本消息 content 字符串简写、model 恒等透传、AN 必填 max_tokens 缺省合成 4096 + degraded loss），与 spec/21 矩阵定级一致。补向量新锁定的规范细节已由向量本身承载，未新增 spec 规则。
 
 ### v3.1.0 → 3.2.0 向量增量
 
-- `vectors/cross/stream/`：0 → 10（新目录、新执行框架）。
+- `vectors/cross/stream/`：0 → 10（新目录；Go 执行框架已落地，四语言执行车道待移植）。
 - `vectors/cross/nonstream/`：+8。
 - `vectors/responses/nonstream/`：+2。
 - 合计 589 → 609。

@@ -116,7 +116,7 @@ golden vectors 是本矩阵的可执行形式。自 3.2.0 起：
 
 - 每一个 D 格与 U 格 MUST 有至少一个 golden vector 锁定其 loss 锚点（`(path, field, reason)` 集）；新增此类格 MUST 与锁定向量同 commit。
 - §4 的每行至少一个 P 格由跨面请求向量覆盖（现状已满足）。
-- §6 的流契约 MUST 由跨面流向量锁定：`vectors/cross/stream/` 向量（源面 native 事件 → 目标面 native 事件，经 IR 事件流组合）自 3.2.0 起进入向量 schema 的合法组合，vectest 类框架 MUST 支持其执行。
+- §6 的流契约 MUST 由跨面流向量锁定：`vectors/cross/stream/` 向量（源面 native 事件 → 目标面 native 事件，经 IR 事件流组合）自 3.2.0 起进入向量 schema 的合法组合。截至 3.2.0，Go 参考实现以 `RunCrossStream` 执行该车道；TypeScript、Rust、Python 与 C++ 的 vectest 等价车道属于后续 wave，未加入前 MUST NOT 将该目录误交给非流或单面流 runner。新增语言车道 MUST 复用同一输入、输出、loss 与事件顺序比较规则（[vectors/README.md](../vectors/README.md#cross-stream-vectors)），MUST NOT 修改向量期望迁就实现。
 
 3.2.0 落地的锁定集合（Go 参考实现已全数执行通过）：
 
