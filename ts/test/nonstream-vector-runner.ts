@@ -96,6 +96,7 @@ export function runCrossRequestVectors(
   assert.ok(root !== undefined);
   const vectors = loadVectors(root).filter(
     ({ document }) =>
+      document.mode === "nonstream" &&
       document.conversion === "protocol-to-protocol" &&
       object(document.source, "source").protocol === sourceFace &&
       !strings(document.tags, "tags").includes("response"),
@@ -139,6 +140,7 @@ export function runCrossResponseVectors(
   assert.ok(root !== undefined);
   const vectors = loadVectors(root).filter(
     ({ document }) =>
+      document.mode === "nonstream" &&
       document.conversion === "protocol-to-protocol" &&
       object(document.source, "source").protocol === sourceFace &&
       strings(document.tags, "tags").includes("response"),
