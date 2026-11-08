@@ -1,0 +1,109 @@
+{
+ "name": "cross.nonstream.chatcompletions-to-anthropic-developer-json-schema-request",
+ "description": "A Chat Completions developer message and json_schema response_format convert to Anthropic: the developer instruction degrades to system content (system[0].role) and the schema loses name, description, and strict.",
+ "spec_version": "0.3.0",
+ "mode": "nonstream",
+ "conversion": "protocol-to-protocol",
+ "source": {
+  "protocol": "chatcompletions"
+ },
+ "target": {
+  "protocol": "anthropic"
+ },
+ "input": {
+  "model": "gpt-5-mini",
+  "max_completion_tokens": 256,
+  "messages": [
+   {
+    "role": "developer",
+    "content": "POLICY-SYNTHETIC: reply with exactly one JSON object matching the schema."
+   },
+   {
+    "role": "user",
+    "content": "Review request 42."
+   }
+  ],
+  "response_format": {
+   "type": "json_schema",
+   "json_schema": {
+    "name": "verdict",
+    "description": "verdict schema",
+    "strict": true,
+    "schema": {
+     "type": "object",
+     "properties": {
+      "verdict": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "verdict"
+     ]
+    }
+   }
+  }
+ },
+ "expected_output": {
+  "model": "gpt-5-mini",
+  "max_tokens": 256,
+  "system": [
+   {
+    "type": "text",
+    "text": "POLICY-SYNTHETIC: reply with exactly one JSON object matching the schema."
+   }
+  ],
+  "messages": [
+   {
+    "role": "user",
+    "content": [
+     {
+      "type": "text",
+      "text": "Review request 42."
+     }
+    ]
+   }
+  ],
+  "output_config": {
+   "format": {
+    "type": "json_schema",
+    "schema": {
+     "type": "object",
+     "properties": {
+      "verdict": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "verdict"
+     ]
+    }
+   }
+  }
+ },
+ "expected_losses": [
+  {
+   "path": "system[0].role",
+   "field": "role",
+   "reason": "degraded"
+  },
+  {
+   "path": "params.response_format.name",
+   "field": "name",
+   "reason": "unmapped-field"
+  },
+  {
+   "path": "params.response_format.description",
+   "field": "description",
+   "reason": "unmapped-field"
+  },
+  {
+   "path": "params.response_format.strict",
+   "field": "strict",
+   "reason": "unmapped-field"
+  }
+ ],
+ "tags": [
+  "request",
+  "control-plane"
+ ]
+}

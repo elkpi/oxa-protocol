@@ -1,0 +1,131 @@
+{
+ "name": "cross.stream.chatcompletions-to-anthropic-usage-only-terminal",
+ "description": "A Chat Completions stream whose terminal usage arrives in a separate usage-only chunk (empty choices, finish_reason already delivered) still produces the final Anthropic message_delta usage; the usage-only chunk is consumed by the decoder and never invents a second terminal.",
+ "spec_version": "0.3.0",
+ "mode": "stream",
+ "conversion": "protocol-to-protocol",
+ "source": {
+  "protocol": "chatcompletions"
+ },
+ "target": {
+  "protocol": "anthropic"
+ },
+ "input": {
+  "events": [
+   {
+    "id": "chatcmpl-u1",
+    "object": "chat.completion.chunk",
+    "created": 0,
+    "model": "gpt-4o-mini",
+    "choices": [
+     {
+      "index": 0,
+      "delta": {
+       "role": "assistant"
+      },
+      "finish_reason": null
+     }
+    ]
+   },
+   {
+    "id": "chatcmpl-u1",
+    "object": "chat.completion.chunk",
+    "created": 0,
+    "model": "gpt-4o-mini",
+    "choices": [
+     {
+      "index": 0,
+      "delta": {
+       "content": "allow"
+      },
+      "finish_reason": null
+     }
+    ]
+   },
+   {
+    "id": "chatcmpl-u1",
+    "object": "chat.completion.chunk",
+    "created": 0,
+    "model": "gpt-4o-mini",
+    "choices": [
+     {
+      "index": 0,
+      "delta": {},
+      "finish_reason": "stop"
+     }
+    ]
+   },
+   {
+    "id": "chatcmpl-u1",
+    "object": "chat.completion.chunk",
+    "created": 0,
+    "model": "gpt-4o-mini",
+    "choices": [],
+    "usage": {
+     "prompt_tokens": 9,
+     "completion_tokens": 1,
+     "total_tokens": 10
+    }
+   }
+  ]
+ },
+ "expected_output": {
+  "events": [
+   {
+    "type": "message_start",
+    "message": {
+     "id": "chatcmpl-u1",
+     "type": "message",
+     "role": "assistant",
+     "model": "gpt-4o-mini",
+     "content": [],
+     "stop_reason": null,
+     "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0
+     }
+    }
+   },
+   {
+    "type": "content_block_start",
+    "index": 0,
+    "content_block": {
+     "type": "text"
+    }
+   },
+   {
+    "type": "content_block_delta",
+    "index": 0,
+    "delta": {
+     "type": "text_delta",
+     "text": "allow"
+    }
+   },
+   {
+    "type": "content_block_stop",
+    "index": 0
+   },
+   {
+    "type": "message_delta",
+    "delta": {
+     "stop_reason": "end_turn"
+    },
+    "usage": {
+     "input_tokens": 9,
+     "output_tokens": 1
+    }
+   },
+   {
+    "type": "message_stop"
+   }
+  ]
+ },
+ "expected_losses": [],
+ "tags": [
+  "response",
+  "stream",
+  "cross-face",
+  "control-plane",
+  "usage-only-terminal"
+ ]
+}

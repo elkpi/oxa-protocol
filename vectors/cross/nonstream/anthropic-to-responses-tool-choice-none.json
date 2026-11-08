@@ -1,0 +1,75 @@
+{
+ "name": "cross.nonstream.anthropic-to-responses-tool-choice-none",
+ "description": "Anthropic tool_choice type none converts to Responses tool_choice none with the tool declaration preserved (N-AN-6, N-R-9).",
+ "spec_version": "0.3.0",
+ "mode": "nonstream",
+ "conversion": "protocol-to-protocol",
+ "source": {
+  "protocol": "anthropic"
+ },
+ "target": {
+  "protocol": "responses"
+ },
+ "input": {
+  "model": "claude-sonnet-4-5",
+  "max_tokens": 256,
+  "messages": [
+   {
+    "role": "user",
+    "content": "Check request 42."
+   }
+  ],
+  "tools": [
+   {
+    "name": "run_check",
+    "description": "Run a check.",
+    "input_schema": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    }
+   }
+  ],
+  "tool_choice": {
+   "type": "none"
+  }
+ },
+ "expected_output": {
+  "model": "claude-sonnet-4-5",
+  "input": "Check request 42.",
+  "tools": [
+   {
+    "type": "function",
+    "name": "run_check",
+    "description": "Run a check.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    }
+   }
+  ],
+  "tool_choice": "none",
+  "max_output_tokens": 256
+ },
+ "expected_losses": [],
+ "tags": [
+  "tool-choice",
+  "n-an-6",
+  "n-r-9",
+  "request",
+  "control-plane"
+ ]
+}

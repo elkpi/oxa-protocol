@@ -39,7 +39,7 @@ int main() {
         }
     }
     CHECK(rep_res->failures.empty());
-    CHECK(rep_res->executed == 189);
+    CHECK(rep_res->executed == 191);
 
     {
         const char* existing = R"({"type":"function","name":"existing","parameters":{"type":"object"}})";

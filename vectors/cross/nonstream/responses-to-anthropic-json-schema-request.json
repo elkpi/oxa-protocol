@@ -1,0 +1,107 @@
+{
+ "name": "cross.nonstream.responses-to-anthropic-json-schema-request",
+ "description": "A Responses text.format json_schema with name, description, and strict converts to an Anthropic output_config.format carrying only the schema; name, description, and strict are dropped with separate unmapped-field losses (N-AN-12).",
+ "spec_version": "0.3.0",
+ "mode": "nonstream",
+ "conversion": "protocol-to-protocol",
+ "source": {
+  "protocol": "responses"
+ },
+ "target": {
+  "protocol": "anthropic"
+ },
+ "input": {
+  "model": "gpt-5-mini",
+  "instructions": "POLICY-SYNTHETIC: reply with exactly one JSON object matching the schema.",
+  "max_output_tokens": 256,
+  "text": {
+   "format": {
+    "type": "json_schema",
+    "name": "verdict",
+    "description": "verdict schema",
+    "strict": true,
+    "schema": {
+     "type": "object",
+     "properties": {
+      "verdict": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "verdict"
+     ]
+    }
+   }
+  },
+  "input": [
+   {
+    "type": "message",
+    "role": "user",
+    "content": [
+     {
+      "type": "input_text",
+      "text": "Review request 42."
+     }
+    ]
+   }
+  ]
+ },
+ "expected_output": {
+  "model": "gpt-5-mini",
+  "system": [
+   {
+    "type": "text",
+    "text": "POLICY-SYNTHETIC: reply with exactly one JSON object matching the schema."
+   }
+  ],
+  "max_tokens": 256,
+  "output_config": {
+   "format": {
+    "type": "json_schema",
+    "schema": {
+     "type": "object",
+     "properties": {
+      "verdict": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "verdict"
+     ]
+    }
+   }
+  },
+  "messages": [
+   {
+    "role": "user",
+    "content": [
+     {
+      "type": "text",
+      "text": "Review request 42."
+     }
+    ]
+   }
+  ]
+ },
+ "expected_losses": [
+  {
+   "path": "params.response_format.name",
+   "field": "name",
+   "reason": "unmapped-field"
+  },
+  {
+   "path": "params.response_format.description",
+   "field": "description",
+   "reason": "unmapped-field"
+  },
+  {
+   "path": "params.response_format.strict",
+   "field": "strict",
+   "reason": "unmapped-field"
+  }
+ ],
+ "tags": [
+  "request",
+  "control-plane"
+ ]
+}

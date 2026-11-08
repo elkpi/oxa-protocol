@@ -1,0 +1,74 @@
+{
+ "name": "cross.nonstream.chatcompletions-to-responses-tool-choice-none",
+ "description": "Chat Completions tool_choice none converts to Responses tool_choice none with the tool declaration preserved (N-CC-7, N-R-9).",
+ "spec_version": "0.3.0",
+ "mode": "nonstream",
+ "conversion": "protocol-to-protocol",
+ "source": {
+  "protocol": "chatcompletions"
+ },
+ "target": {
+  "protocol": "responses"
+ },
+ "input": {
+  "model": "gpt-5-mini",
+  "messages": [
+   {
+    "role": "user",
+    "content": "Check request 42."
+   }
+  ],
+  "tools": [
+   {
+    "type": "function",
+    "function": {
+     "name": "run_check",
+     "description": "Run a check.",
+     "parameters": {
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "id"
+      ]
+     }
+    }
+   }
+  ],
+  "tool_choice": "none"
+ },
+ "expected_output": {
+  "model": "gpt-5-mini",
+  "input": "Check request 42.",
+  "tools": [
+   {
+    "type": "function",
+    "name": "run_check",
+    "description": "Run a check.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    }
+   }
+  ],
+  "tool_choice": "none"
+ },
+ "expected_losses": [],
+ "tags": [
+  "tool-choice",
+  "n-cc-7",
+  "n-r-9",
+  "request",
+  "control-plane"
+ ]
+}

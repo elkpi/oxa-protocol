@@ -172,8 +172,13 @@ test("hydrates nested native indexes without rewriting opaque tool input", () =>
 test("runs every stream golden vector through the public converters", () => {
   const root = findRepoRoot(process.cwd());
   assert.ok(root !== undefined);
+  // The cross-stream lane (vectors/cross/stream/) needs the composition
+  // runner, which has not joined the TypeScript wave yet; exclude the
+  // directory from the face-local stream harness rather than skipping
+  // individual vectors inside the loop.
   const vectors = loadVectors(root).filter(
-    ({ document }) => document.mode === "stream",
+    ({ name, document }) =>
+      document.mode === "stream" && !name.startsWith("cross.stream."),
   );
   assert.ok(vectors.length > 0);
 

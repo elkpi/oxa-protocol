@@ -5,6 +5,27 @@ implementations. The spec follows [Semantic Versioning](https://semver.org/);
 precedence between spec, vectors, and schemas is defined in
 [README.md](README.md#source-of-truth-precedence).
 
+## 3.2.0 - Unreleased
+
+- Add the control-plane fidelity matrix ([21](21-capability-matrix.md)): a
+  vendor-neutral inventory of ten control-plane semantics graded across the
+  3×3 request and response directions (preserved / degraded / unsupported /
+  envelope-regenerated), a streaming lifecycle contract summary, the
+  `stream` request-flag transport declaration, and an upgraded loss
+  stability commitment (closed reason set, root-relative deterministic
+  paths, stable field names; new reasons are minor, meaning changes are
+  major with a migration note). No new IR structure, loss reason, or
+  conversion behavior: every grade anchors to existing rules in spec/02,
+  10, 11, 12, 15, and 20. Grading evidence from v3.1.0 probes lives in
+  `docs/research/2026-11-08-control-plane-vector-inventory.md`.
+- The matrix requires vector locking for every degraded/unsupported cell
+  and introduces `cross/stream` vectors (source native events → IR →
+  target native events). The Go reference implementation executes them
+  through `RunCrossStream`; the TypeScript, Rust, Python, and C++ vectest
+  equivalents remain follow-up waves and must not hand this directory to
+  nonstream or face-local stream runners. Spec 3.2.0 is unreleased until
+  the release process assigns its date.
+
 ## 3.1.0 - 2026-11-07
 
 - Add the SystemOne Jev face ([17](17-systemone-jev.md)): the TypeSafe AI

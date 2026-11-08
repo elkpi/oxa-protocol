@@ -1,0 +1,82 @@
+{
+ "name": "cross.nonstream.anthropic-to-chatcompletions-tool-choice-none",
+ "description": "Anthropic tool_choice type none converts to Chat Completions tool_choice none with the tool declaration preserved (N-AN-6, N-CC-7).",
+ "spec_version": "0.3.0",
+ "mode": "nonstream",
+ "conversion": "protocol-to-protocol",
+ "source": {
+  "protocol": "anthropic"
+ },
+ "target": {
+  "protocol": "chatcompletions"
+ },
+ "input": {
+  "model": "claude-sonnet-4-5",
+  "max_tokens": 256,
+  "messages": [
+   {
+    "role": "user",
+    "content": "Check request 42."
+   }
+  ],
+  "tools": [
+   {
+    "name": "run_check",
+    "description": "Run a check.",
+    "input_schema": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    }
+   }
+  ],
+  "tool_choice": {
+   "type": "none"
+  }
+ },
+ "expected_output": {
+  "model": "claude-sonnet-4-5",
+  "messages": [
+   {
+    "role": "user",
+    "content": "Check request 42."
+   }
+  ],
+  "tools": [
+   {
+    "type": "function",
+    "function": {
+     "name": "run_check",
+     "description": "Run a check.",
+     "parameters": {
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "id"
+      ]
+     }
+    }
+   }
+  ],
+  "tool_choice": "none",
+  "max_tokens": 256
+ },
+ "expected_losses": [],
+ "tags": [
+  "tool-choice",
+  "n-an-6",
+  "n-cc-7",
+  "request",
+  "control-plane"
+ ]
+}
