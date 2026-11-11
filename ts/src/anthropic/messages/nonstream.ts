@@ -42,7 +42,7 @@ import {
   DOCUMENT_CONTEXT_LOSS_DETAIL,
   DOCUMENT_CITATIONS_LOSS_DETAIL,
   NATIVE_KIND_PROMPT_CACHE_BREAKPOINT,
-  PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL,
+  breakpointTranslationLosses,
 } from "../../ir/native.js";
 import type {
   Block,
@@ -1119,21 +1119,23 @@ export function encodeRequest(
                 detail:
                   "developer instruction is carried as Anthropic system content; Anthropic has no developer role",
               });
+            let translated = false;
             block.native?.forEach((ann, sAnnIdx) => {
               if (
                 ann.source === "openai" &&
                 ann.kind === NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
               ) {
-                losses.push({
-                  path: `system[${index}].native[${sAnnIdx}]`,
-                  field: ann.omission?.field || "prompt_cache_breakpoint",
-                  reason: ann.omission?.reason || "unmapped-field",
-                  detail:
-                    ann.omission?.detail || PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL,
-                });
+                translated = true;
+                for (const item of breakpointTranslationLosses(
+                  ann.value,
+                  `system[${index}].native[${sAnnIdx}]`,
+                ))
+                  losses.push(item);
               }
             });
-            const cc = getBlockCacheControl(block);
+            const cc =
+              getBlockCacheControl(block) ??
+              (translated ? { type: "ephemeral" } : undefined);
             return {
               type: "text",
               text: block.text,
@@ -1726,16 +1728,24 @@ function encodeContent(
           ann.source === "openai" &&
           ann.kind === NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
         ) {
-          losses.push({
-            path: `${path}[${index}].native[${bAnnIdx}]`,
-            field: ann.omission?.field || "prompt_cache_breakpoint",
-            reason: ann.omission?.reason || "unmapped-field",
-            detail: ann.omission?.detail || PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL,
-          });
+          for (const item of breakpointTranslationLosses(
+            ann.value,
+            `${path}[${index}].native[${bAnnIdx}]`,
+          ))
+            losses.push(item);
         }
       });
     }
-    const cc = getBlockCacheControl(block);
+    const translated =
+      "native" in block &&
+      block.native?.some(
+        (ann) =>
+          ann.source === "openai" &&
+          ann.kind === NATIVE_KIND_PROMPT_CACHE_BREAKPOINT,
+      );
+    const cc =
+      getBlockCacheControl(block) ??
+      (translated ? { type: "ephemeral" } : undefined);
     if (block.type === "compaction" && isRequest) {
       if (`${path}[${index}]` !== "messages[0].content[0]")
         fail(`${path}[${index}]: compaction must be first conversation block`);

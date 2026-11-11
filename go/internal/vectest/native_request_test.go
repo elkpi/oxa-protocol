@@ -160,13 +160,25 @@ func TestNativeCacheControlOmissionLossDetails(t *testing.T) {
 	if len(ccLosses) != 3 {
 		t.Fatalf("expected 3 cc omission losses, got %+v", ccLosses)
 	}
-	for i, l := range ccLosses {
-		if l.Field != "cache_control" || l.Reason != ir.LossUnmappedField {
-			t.Errorf("ccLosses[%d] = (field=%q, reason=%q), want (cache_control, unmapped-field)", i, l.Field, l.Reason)
+	var toolLoss, typeLoss int
+	for _, l := range ccLosses {
+		switch l.Field {
+		case "cache_control":
+			toolLoss++
+			if l.Detail != ir.CacheControlLossDetail {
+				t.Errorf("tool detail %q", l.Detail)
+			}
+		case "type":
+			typeLoss++
+			if l.Detail != ir.CacheControlTypeLossDetail {
+				t.Errorf("type detail %q", l.Detail)
+			}
+		default:
+			t.Errorf("unexpected field %q", l.Field)
 		}
-		if l.Detail != ir.CacheControlLossDetail {
-			t.Errorf("ccLosses[%d].Detail = %q, want %q", i, l.Detail, ir.CacheControlLossDetail)
-		}
+	}
+	if toolLoss != 1 || typeLoss != 2 {
+		t.Fatalf("tool=%d type=%d losses=%+v", toolLoss, typeLoss, ccLosses)
 	}
 
 	_, respLosses, err := responses.EncodeRequest(req)
@@ -176,10 +188,17 @@ func TestNativeCacheControlOmissionLossDetails(t *testing.T) {
 	if len(respLosses) != 3 {
 		t.Fatalf("expected 3 responses omission losses, got %+v", respLosses)
 	}
-	for i, l := range respLosses {
-		if l.Detail != ir.CacheControlLossDetail {
-			t.Errorf("respLosses[%d].Detail = %q, want %q", i, l.Detail, ir.CacheControlLossDetail)
+	toolLoss, typeLoss = 0, 0
+	for _, l := range respLosses {
+		switch l.Field {
+		case "cache_control":
+			toolLoss++
+		case "type":
+			typeLoss++
 		}
+	}
+	if toolLoss != 1 || typeLoss != 2 {
+		t.Fatalf("responses tool=%d type=%d losses=%+v", toolLoss, typeLoss, respLosses)
 	}
 
 	reqNoOmission := &ir.Request{

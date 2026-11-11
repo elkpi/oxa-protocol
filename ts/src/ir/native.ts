@@ -821,6 +821,7 @@ export function omittedNativeRequestLosses(
         false,
         undefined,
         target,
+        true,
       );
     });
   });
@@ -874,6 +875,8 @@ function collectBlockOmissions(
     // whole-block drop; annotations not reported a second time
     return;
   }
+  const host =
+    blk.type === "text" || blk.type === "image" || blk.type === "document";
   blk.native?.forEach((ann, i) => {
     appendOmissionLoss(
       losses,
@@ -882,6 +885,7 @@ function collectBlockOmissions(
       false,
       undefined,
       target,
+      host,
     );
   });
   if (blk.type === "tool_result") {
@@ -911,6 +915,7 @@ function appendOmissionLoss(
   hasActiveBudgetProj: boolean,
   currentEffort: string | undefined,
   target: string,
+  breakpointHost = false,
 ): void {
   if (ann.source === NATIVE_SOURCE_OPENAI) {
     switch (ann.kind) {
@@ -1001,6 +1006,10 @@ function appendOmissionLoss(
         if (target === "chatcompletions" || target === "responses") {
           return;
         }
+        if (target === "anthropic" && breakpointHost) {
+          for (const loss of breakpointTranslationLosses(ann.value, path)) losses.push(loss);
+          return;
+        }
         const field = ann.omission?.field || "prompt_cache_breakpoint";
         const reason = ann.omission?.reason || "unmapped-field";
         const detail =
@@ -1087,6 +1096,13 @@ function appendOmissionLoss(
       }
       return;
     case NATIVE_KIND_CACHE_CONTROL: {
+      if (
+        breakpointHost &&
+        (target === "chatcompletions" || target === "responses")
+      ) {
+        for (const loss of cacheControlTranslationLosses(ann.value, path)) losses.push(loss);
+        return;
+      }
       const field = ann.omission?.field || "cache_control";
       const reason = ann.omission?.reason || "unmapped-field";
       const detail = ann.omission?.detail || CACHE_CONTROL_LOSS_DETAIL;
@@ -1179,4 +1195,62 @@ function appendOmissionLoss(
         detail: `unsupported native option kind "${ann.kind}"`,
       });
   }
+}
+
+export const CACHE_CONTROL_TYPE_LOSS_DETAIL =
+  "cache_control.type is not represented by prompt_cache_breakpoint";
+export const BREAKPOINT_MODE_LOSS_DETAIL =
+  "prompt_cache_breakpoint.mode is not represented by cache_control";
+
+export function cacheControlTranslationLosses(value: string, path: string): Loss[] {
+  const losses: Loss[] = [
+    {
+      path,
+      field: "type",
+      reason: "unmapped-field",
+      detail: CACHE_CONTROL_TYPE_LOSS_DETAIL,
+    },
+  ];
+  try {
+    const parsed = JSON.parse(value) as { ttl?: unknown };
+    if (parsed && typeof parsed === "object" && "ttl" in parsed) {
+      losses.push({
+        path,
+        field: "ttl",
+        reason: "unmapped-field",
+        detail: "cache_control.ttl has no equivalent prompt cache ttl",
+      });
+    }
+  } catch {
+    /* ignore */
+  }
+  return losses;
+}
+
+export function breakpointTranslationLosses(value: string, path: string): Loss[] {
+  const losses: Loss[] = [];
+  try {
+    const parsed = JSON.parse(value) as { mode?: unknown; ttl?: unknown };
+    if (parsed && typeof parsed === "object") {
+      if ("mode" in parsed) {
+        losses.push({
+          path,
+          field: "mode",
+          reason: "unmapped-field",
+          detail: BREAKPOINT_MODE_LOSS_DETAIL,
+        });
+      }
+      if ("ttl" in parsed) {
+        losses.push({
+          path,
+          field: "ttl",
+          reason: "unmapped-field",
+          detail: "prompt_cache_breakpoint.ttl has no equivalent cache_control ttl",
+        });
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return losses;
 }

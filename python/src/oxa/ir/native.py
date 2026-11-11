@@ -448,6 +448,7 @@ def omitted_native_request_losses(req: Any, target: str) -> list[Loss]:
                 False,
                 None,
                 target,
+                True,
             )
 
     for m_idx, msg in enumerate(getattr(req, "messages", ()) or ()):
@@ -493,7 +494,8 @@ def _collect_block_omissions(losses: list[Loss], blk: Any, path: str, target: st
         # reported a second time.
         return
     for i, ann in enumerate(getattr(blk, "native", ())):
-        _append_omission_loss(losses, ann, f"{path}.native[{i}]", False, None, target)
+        host = blk_type in ("text", "image", "document")
+        _append_omission_loss(losses, ann, f"{path}.native[{i}]", False, None, target, host)
 
     content = getattr(blk, "content", None)
     if isinstance(content, list):
@@ -517,6 +519,7 @@ def _append_omission_loss(
     has_active_budget_proj: bool,
     current_effort: ReasoningEffort | None,
     target: str,
+    breakpoint_host: bool = False,
 ) -> None:
     if ann.source == NATIVE_SOURCE_OPENAI:
         if ann.kind in (NATIVE_KIND_MAX_COMPLETION_TOKENS, NATIVE_KIND_STREAM):
@@ -569,6 +572,9 @@ def _append_omission_loss(
             return
         if ann.kind == NATIVE_KIND_PROMPT_CACHE_BREAKPOINT:
             if target in ("chatcompletions", "responses"):
+                return
+            if target == "anthropic" and breakpoint_host:
+                losses.extend(_breakpoint_translation_losses(ann.value, path))
                 return
             field = ann.omission.field if ann.omission and ann.omission.field else "prompt_cache_breakpoint"
             reason = ann.omission.reason if ann.omission and ann.omission.reason else "unmapped-field"
@@ -649,6 +655,9 @@ def _append_omission_loss(
         return
 
     if ann.kind == NATIVE_KIND_CACHE_CONTROL:
+        if breakpoint_host and target in ("chatcompletions", "responses"):
+            losses.extend(_cache_control_translation_losses(ann.value, path))
+            return
         field = "cache_control"
         reason = LOSS_UNMAPPED_FIELD
         detail = CACHE_CONTROL_LOSS_DETAIL
@@ -775,3 +784,41 @@ def _append_omission_loss(
             detail=f'unsupported native option kind "{ann.kind}"',
         )
     )
+
+
+def _cache_control_translation_losses(value: str, path: str) -> list[Loss]:
+    import json
+    losses = [Loss(path=path, field="type", reason="unmapped-field", detail="cache_control.type is not represented by prompt_cache_breakpoint")]
+    try:
+        parsed = json.loads(value)
+    except Exception:
+        parsed = None
+    if isinstance(parsed, dict) and "ttl" in parsed:
+        losses.append(Loss(path=path, field="ttl", reason="unmapped-field", detail="cache_control.ttl has no equivalent prompt cache ttl"))
+    return losses
+
+
+def _breakpoint_translation_losses(value: str, path: str) -> list[Loss]:
+    import json
+    losses: list[Loss] = []
+    try:
+        parsed = json.loads(value)
+    except Exception:
+        return losses
+    if isinstance(parsed, dict) and "mode" in parsed:
+        losses.append(Loss(path=path, field="mode", reason="unmapped-field", detail="prompt_cache_breakpoint.mode is not represented by cache_control"))
+    if isinstance(parsed, dict) and "ttl" in parsed:
+        losses.append(Loss(path=path, field="ttl", reason="unmapped-field", detail="prompt_cache_breakpoint.ttl has no equivalent cache_control ttl"))
+    return losses
+
+
+def openai_breakpoint(native) -> dict | None:
+    import json
+    items = list(native or ())
+    for ann in items:
+        if getattr(ann, "source", None) == "openai" and getattr(ann, "kind", None) == "prompt_cache_breakpoint":
+            return json.loads(ann.value)
+    for ann in items:
+        if getattr(ann, "source", None) == "anthropic" and getattr(ann, "kind", None) == "cache_control":
+            return {"mode": "explicit"}
+    return None

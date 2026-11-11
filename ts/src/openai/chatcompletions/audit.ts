@@ -197,6 +197,8 @@ export const CHAT_REQUEST: WireAuditSpec = {
     prompt_cache_key: undefined,
     prompt_cache_options: PROMPT_CACHE_OPTIONS,
     response_format: RESPONSE_FORMAT,
+    logprobs: undefined,
+    top_logprobs: undefined,
     metadata: undefined,
   },
 };

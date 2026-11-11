@@ -819,7 +819,10 @@ def encode_user_content(blocks: list[Block], path: str) -> tuple[Any, list[Loss]
             p_dict: dict[str, Any] = {"type": PART_TYPE_INPUT_TEXT, "text": block.text}
             for ann in getattr(block, "native", ()):
                 if ann.source == "openai" and ann.kind == NATIVE_KIND_PROMPT_CACHE_BREAKPOINT:
-                    p_dict["prompt_cache_breakpoint"] = json.loads(ann.value)
+                    from oxa.ir.native import openai_breakpoint
+                    parsed = openai_breakpoint(getattr(block, "native", ()))
+                    if parsed is not None:
+                        p_dict["prompt_cache_breakpoint"] = parsed
                     other_blocks += 1
                     break
             parts.append(p_dict)
@@ -887,7 +890,10 @@ def encode_user_content(blocks: list[Block], path: str) -> tuple[Any, list[Loss]
                 other_blocks += 1
                 for ann in getattr(block, "native", ()):
                     if ann.source == "openai" and ann.kind == NATIVE_KIND_PROMPT_CACHE_BREAKPOINT:
-                        part["prompt_cache_breakpoint"] = json.loads(ann.value)
+                        from oxa.ir.native import openai_breakpoint
+                        parsed = openai_breakpoint(getattr(block, "native", ()))
+                        if parsed is not None:
+                            part["prompt_cache_breakpoint"] = parsed
                         break
                 parts.append(part)
         elif isinstance(block, DocumentBlock):
@@ -913,7 +919,8 @@ def encode_user_content(blocks: list[Block], path: str) -> tuple[Any, list[Loss]
                     )
                 )
                 continue
-            pcb = next((json.loads(ann.value) for ann in getattr(block, "native", ()) if ann.source == "openai" and ann.kind == NATIVE_KIND_PROMPT_CACHE_BREAKPOINT), None)
+            from oxa.ir.native import openai_breakpoint
+            pcb = openai_breakpoint(getattr(block, "native", ()))
             f_dict: dict[str, Any]
             if block.file_id:
                 f_dict = {"type": "input_file", "file_id": block.file_id}

@@ -232,6 +232,18 @@ func DecodeRequest(wire *Request, opts ...Option) (*ir.Request, []ir.Loss, error
 			}
 			losses = append(losses, runLosses...)
 			i = next
+		case ItemTypeCompaction:
+			if item.EncryptedContent == "" {
+				return nil, nil, fmt.Errorf("responses: input[%d].encrypted_content is required", i)
+			}
+			after := len(req.Messages) - 1
+			req.CompactionItems = append(req.CompactionItems, ir.CompactionItem{
+				EncryptedContent: item.EncryptedContent,
+				ID:               item.ID,
+				CreatedBy:        item.CreatedBy,
+				AfterMessage:     after,
+			})
+			i++
 		case ItemTypeAdditionalTools:
 			group, groupLosses, err := decodeAdditionalTools(item, i, len(req.Messages), -1)
 			if err != nil {
@@ -272,6 +284,11 @@ func DecodeRequest(wire *Request, opts ...Option) (*ir.Request, []ir.Loss, error
 	if err := ir.ValidateCustomConversation(req); err != nil {
 		return nil, nil, err
 	}
+	extra, err := decodeRequestExtras(req, wire)
+	if err != nil {
+		return nil, nil, err
+	}
+	losses = append(losses, extra...)
 	return req, losses, nil
 }
 
@@ -811,6 +828,7 @@ func DecodeResponse(wire *Response, opts ...Option) (*ir.Response, []ir.Loss, er
 	}
 	var losses []ir.Loss
 	var thinkings []ir.Block
+	var compactions []ir.Block
 	var texts []ir.Block
 	var calls []ir.Block
 	hasToolUse := false
@@ -913,7 +931,11 @@ func DecodeResponse(wire *Response, opts ...Option) (*ir.Response, []ir.Loss, er
 				if err != nil {
 					return nil, nil, err
 				}
-				texts = append(texts, ir.TextBlock{Text: part.Text, Citations: cites})
+				block := ir.TextBlock{Text: part.Text, Citations: cites}
+				if len(part.Logprobs) > 0 && string(part.Logprobs) != "null" {
+					block.Logprobs = string(part.Logprobs)
+				}
+				texts = append(texts, block)
 			}
 		case ItemTypeWebSearchCall:
 			block, callLosses, err := decodeWebSearchCall(item.ID, item.Status, item.Action, item.Extra, fmt.Sprintf("output[%d]", i))
@@ -935,6 +957,13 @@ func DecodeResponse(wire *Response, opts ...Option) (*ir.Response, []ir.Loss, er
 			}
 			calls = append(calls, ir.ToolUseBlock{ID: item.CallID, Name: finalName, Input: input})
 			hasToolUse = true
+		case ItemTypeCompaction:
+			if item.EncryptedContent == "" {
+				return nil, nil, fmt.Errorf("responses: output[%d].encrypted_content is required", i)
+			}
+			compactions = append(compactions, ir.CompactionItemBlock{
+				EncryptedContent: item.EncryptedContent, ID: item.ID, CreatedBy: item.CreatedBy,
+			})
 		default:
 			losses = append(losses, loss(
 				fmt.Sprintf("output[%d]", i), "type", ir.LossUnsupportedSemantic,
@@ -950,7 +979,8 @@ func DecodeResponse(wire *Response, opts ...Option) (*ir.Response, []ir.Loss, er
 	o := newOptions(opts...)
 	// N-R-5: the IR content is ordered thinking blocks first, then text blocks,
 	// then tool uses, regardless of how the wire interleaved the output items.
-	content := make([]ir.Block, 0, len(thinkings)+len(texts)+len(calls))
+	content := make([]ir.Block, 0, len(compactions)+len(thinkings)+len(texts)+len(calls))
+	content = append(content, compactions...)
 	content = append(content, thinkings...)
 	content = append(content, texts...)
 	content = append(content, calls...)

@@ -571,12 +571,9 @@ func encodeUserContent(blocks []ir.Block, path string) (any, []ir.Loss) {
 			losses = append(losses, loss(fmt.Sprintf("%s[%d]", path, i), "type", ir.LossUnsupportedSemantic, "Anthropic compaction block cannot be represented on the target face"))
 		case ir.TextBlock:
 			part := ContentPart{Type: ContentPartTypeText, Text: value.Text}
-			for _, ann := range value.Native {
-				if ann.Source == ir.NativeSourceOpenAI && ann.Kind == ir.NativeKindPromptCacheBreakpoint {
-					part.PromptCacheBreakpoint = json.RawMessage(ann.Value)
-					hasImage = true
-					break
-				}
+			if pcb := ir.OpenAIBreakpointWire(value.Native); len(pcb) > 0 {
+				part.PromptCacheBreakpoint = pcb
+				hasImage = true
 			}
 			parts = append(parts, part)
 			text += value.Text
@@ -625,11 +622,8 @@ func encodeUserContent(blocks []ir.Block, path string) (any, []ir.Loss) {
 				continue
 			}
 			hasImage = true
-			for _, ann := range value.Native {
-				if ann.Source == ir.NativeSourceOpenAI && ann.Kind == ir.NativeKindPromptCacheBreakpoint {
-					part.PromptCacheBreakpoint = json.RawMessage(ann.Value)
-					break
-				}
+			if pcb := ir.OpenAIBreakpointWire(value.Native); len(pcb) > 0 {
+				part.PromptCacheBreakpoint = pcb
 			}
 			parts = append(parts, part)
 		case ir.DocumentBlock:
@@ -672,13 +666,7 @@ func encodeUserContent(blocks []ir.Block, path string) (any, []ir.Loss) {
 				continue
 			}
 			hasImage = true
-			var pcb json.RawMessage
-			for _, ann := range value.Native {
-				if ann.Source == ir.NativeSourceOpenAI && ann.Kind == ir.NativeKindPromptCacheBreakpoint {
-					pcb = json.RawMessage(ann.Value)
-					break
-				}
-			}
+			pcb := ir.OpenAIBreakpointWire(value.Native)
 			if value.FileID != "" {
 				parts = append(parts, ContentPart{
 					Type:                  ContentPartTypeFile,

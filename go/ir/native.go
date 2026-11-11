@@ -705,14 +705,14 @@ func OmittedNativeRequestLosses(req *Request, target string) ([]Loss, error) {
 	// 1. Request.Native
 	for i, ann := range req.Native {
 		path := fmt.Sprintf("native[%d]", i)
-		losses = appendAnnotationLoss(losses, ann, path, hasActiveBudgetProj, req.Params.ReasoningEffort, target)
+		losses = appendAnnotationLoss(losses, ann, path, hasActiveBudgetProj, req.Params.ReasoningEffort, target, false)
 	}
 
 	// 2. System blocks
 	for sIdx, sb := range req.System {
 		for i, ann := range sb.Native {
 			path := fmt.Sprintf("system[%d].native[%d]", sIdx, i)
-			losses = appendAnnotationLoss(losses, ann, path, false, "", target)
+			losses = appendAnnotationLoss(losses, ann, path, false, "", target, true)
 		}
 	}
 
@@ -731,7 +731,7 @@ func OmittedNativeRequestLosses(req *Request, target string) ([]Loss, error) {
 	for tIdx, tool := range req.Tools {
 		for i, ann := range tool.Native {
 			path := fmt.Sprintf("tools[%d].native[%d]", tIdx, i)
-			losses = appendAnnotationLoss(losses, ann, path, false, "", target)
+			losses = appendAnnotationLoss(losses, ann, path, false, "", target, false)
 		}
 	}
 
@@ -788,7 +788,12 @@ func collectBlockOmissionLosses(losses []Loss, b Block, path string, target stri
 
 	for i, ann := range nat {
 		p := fmt.Sprintf("%s.native[%d]", path, i)
-		losses = appendAnnotationLoss(losses, ann, p, false, "", target)
+		host := false
+		switch b.(type) {
+		case TextBlock, ImageBlock, DocumentBlock:
+			host = true
+		}
+		losses = appendAnnotationLoss(losses, ann, p, false, "", target, host)
 	}
 
 	for k, child := range children {
@@ -801,7 +806,7 @@ func collectBlockOmissionLosses(losses []Loss, b Block, path string, target stri
 	return losses
 }
 
-func appendAnnotationLoss(losses []Loss, ann NativeAnnotation, path string, hasActiveBudgetProj bool, currentEffort string, target string) []Loss {
+func appendAnnotationLoss(losses []Loss, ann NativeAnnotation, path string, hasActiveBudgetProj bool, currentEffort string, target string, breakpointHost bool) []Loss {
 	if ann.Source == NativeSourceOpenAI {
 		switch ann.Kind {
 		case NativeKindMaxCompletionTokens, NativeKindStream:
@@ -916,6 +921,9 @@ func appendAnnotationLoss(losses []Loss, ann NativeAnnotation, path string, hasA
 			if target == "chatcompletions" || target == "responses" {
 				return losses
 			}
+			if target == "anthropic" && breakpointHost {
+				return append(losses, BreakpointTranslationLosses(ann.Value, path)...)
+			}
 			field := "prompt_cache_breakpoint"
 			reason := LossUnmappedField
 			detail := PromptCacheBreakpointLossDetail
@@ -1012,6 +1020,9 @@ func appendAnnotationLoss(losses []Loss, ann NativeAnnotation, path string, hasA
 		}
 
 	case NativeKindCacheControl:
+		if breakpointHost && (target == "chatcompletions" || target == "responses") {
+			return append(losses, CacheControlTranslationLosses(ann.Value, path)...)
+		}
 		field := "cache_control"
 		reason := LossUnmappedField
 		detail := CacheControlLossDetail

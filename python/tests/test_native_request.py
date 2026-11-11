@@ -459,15 +459,13 @@ class NativeRequestTest(unittest.TestCase):
 
         _, cc_losses = cc_encode_request(req)
         self.assertEqual(len(cc_losses), 3)
-        for l in cc_losses:
-            self.assertEqual(l.field, "cache_control")
-            self.assertEqual(l.reason, LOSS_UNMAPPED_FIELD)
-            self.assertEqual(l.detail, CACHE_CONTROL_LOSS_DETAIL)
+        self.assertEqual(sum(l.field == "type" for l in cc_losses), 2)
+        self.assertEqual(sum(l.field == "cache_control" for l in cc_losses), 1)
 
         _, resp_losses = resp_encode_request(req)
         self.assertEqual(len(resp_losses), 3)
-        for l in resp_losses:
-            self.assertEqual(l.detail, CACHE_CONTROL_LOSS_DETAIL)
+        self.assertEqual(sum(l.field == "type" for l in resp_losses), 2)
+        self.assertEqual(sum(l.field == "cache_control" for l in resp_losses), 1)
 
         # Directly constructed IR without omission
         req_no_om = Request(

@@ -1264,6 +1264,10 @@ function encodeParams(params: Params): JsonObject {
       ? {}
       : { reasoning_effort: params.reasoning_effort }),
     ...(params.verbosity === undefined ? {} : { verbosity: params.verbosity }),
+    ...(params.logprobs === undefined ? {} : { logprobs: params.logprobs }),
+    ...(params.top_logprobs === undefined
+      ? {}
+      : { top_logprobs: integer(params.top_logprobs) }),
     ...(params.response_format === undefined
       ? {}
       : { response_format: encodeResponseFormat(params.response_format) }),
@@ -1381,6 +1385,14 @@ function decodeParams(value: JsonValue): Params {
     ...(params.verbosity === undefined
       ? {}
       : { verbosity: parseVerbosity(params.verbosity) }),
+    ...(params.logprobs === undefined
+      ? {}
+      : { logprobs: params.logprobs === true }),
+    ...(params.top_logprobs === undefined
+      ? {}
+      : {
+          top_logprobs: token(params.top_logprobs, "params.top_logprobs"),
+        }),
     ...(params.response_format === undefined
       ? {}
       : {
@@ -1402,6 +1414,8 @@ function paramsSet(params: Params): boolean {
     (params.stop_sequences !== undefined && params.stop_sequences.length > 0) ||
     params.reasoning_effort !== undefined ||
     params.verbosity !== undefined ||
+    params.logprobs !== undefined ||
+    params.top_logprobs !== undefined ||
     params.response_format !== undefined
   );
 }

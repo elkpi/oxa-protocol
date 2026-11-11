@@ -1238,12 +1238,17 @@ function getPromptCacheBreakpoint(item: {
     (n) =>
       n.source === "openai" && n.kind === NATIVE_KIND_PROMPT_CACHE_BREAKPOINT,
   );
-  if (!ann) return undefined;
-  try {
-    return JSON.parse(ann.value);
-  } catch {
-    return undefined;
+  if (ann) {
+    try {
+      return JSON.parse(ann.value);
+    } catch {
+      return undefined;
+    }
   }
+  const cache = item.native?.find(
+    (n) => n.source === "anthropic" && n.kind === "cache_control",
+  );
+  return cache ? { mode: "explicit" } : undefined;
 }
 
 export function encodeRequest(

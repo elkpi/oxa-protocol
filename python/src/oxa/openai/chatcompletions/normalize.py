@@ -12,6 +12,7 @@ from oxa.ir.native import (
     PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL,
     NativeAnnotation,
     NativeOmission,
+    openai_breakpoint,
 )
 from oxa.ir import (
     CompactionBlock,
@@ -474,11 +475,10 @@ def encode_user_content(blocks: list[Block], path: str) -> tuple[Any, list[Loss]
     for index, block in enumerate(blocks):
         if isinstance(block, TextBlock):
             p_dict: dict[str, Any] = {"type": CONTENT_PART_TYPE_TEXT, "text": block.text}
-            for ann in getattr(block, "native", ()):
-                if ann.source == "openai" and ann.kind == NATIVE_KIND_PROMPT_CACHE_BREAKPOINT:
-                    p_dict["prompt_cache_breakpoint"] = json.loads(ann.value)
-                    has_image = True
-                    break
+            pcb = openai_breakpoint(getattr(block, "native", ()))
+            if pcb is not None:
+                p_dict["prompt_cache_breakpoint"] = pcb
+                has_image = True
             parts.append(p_dict)
             text_chunks.append(block.text)
             if block.citations:
@@ -546,10 +546,9 @@ def encode_user_content(blocks: list[Block], path: str) -> tuple[Any, list[Loss]
                 losses.append(img_loss)
             elif part is not None:
                 has_image = True
-                for ann in getattr(block, "native", ()):
-                    if ann.source == "openai" and ann.kind == NATIVE_KIND_PROMPT_CACHE_BREAKPOINT:
-                        part["prompt_cache_breakpoint"] = json.loads(ann.value)
-                        break
+                pcb = openai_breakpoint(getattr(block, "native", ()))
+                if pcb is not None:
+                    part["prompt_cache_breakpoint"] = pcb
                 parts.append(part)
         elif isinstance(block, DocumentBlock):
             s_count = sum(1 for x in (block.file_id, block.url, block.data) if x)
@@ -594,7 +593,7 @@ def encode_user_content(blocks: list[Block], path: str) -> tuple[Any, list[Loss]
                 )
                 continue
             has_image = True
-            pcb = next((json.loads(ann.value) for ann in getattr(block, "native", ()) if ann.source == "openai" and ann.kind == NATIVE_KIND_PROMPT_CACHE_BREAKPOINT), None)
+            pcb = openai_breakpoint(getattr(block, "native", ()))
             f_dict = {"type": "file", "file": {"file_id": block.file_id}} if block.file_id else {"type": "file", "file": {"file_data": block.data}}
             if pcb is not None:
                 f_dict["prompt_cache_breakpoint"] = pcb

@@ -378,6 +378,8 @@ export interface Params {
   readonly reasoning_effort?: ReasoningEffort;
   readonly verbosity?: "low" | "medium" | "high";
   readonly response_format?: ResponseFormat;
+  readonly logprobs?: boolean;
+  readonly top_logprobs?: bigint;
 }
 export interface ToolChangeGroup {
   readonly message_index: number;

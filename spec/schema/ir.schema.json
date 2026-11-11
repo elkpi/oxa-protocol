@@ -83,6 +83,13 @@
             "$ref": "#/$defs/toolChangeGroup"
           },
           "description": "Ordered positional tool availability change groups (spec/01 s3.8, since 0.3.0)."
+        },
+        "compaction_items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/compactionItem"
+          },
+          "description": "Responses compaction checkpoints placed relative to messages (since 3.3.0)."
         }
       },
       "required": [
@@ -193,6 +200,15 @@
         },
         {
           "$ref": "#/$defs/requestCompactionBlock"
+        },
+        {
+          "$ref": "#/$defs/compactionItemBlock"
+        },
+        {
+          "$ref": "#/$defs/requestServerToolUseBlock"
+        },
+        {
+          "$ref": "#/$defs/requestWebSearchToolResultBlock"
         }
       ]
     },
@@ -210,6 +226,9 @@
           "items": {
             "$ref": "#/$defs/textCitation"
           }
+        },
+        "logprobs": {
+          "type": "string"
         },
         "native": {
           "type": "array",
@@ -725,6 +744,15 @@
         },
         {
           "$ref": "#/$defs/refusalBlock"
+        },
+        {
+          "$ref": "#/$defs/compactionItemBlock"
+        },
+        {
+          "$ref": "#/$defs/serverToolUseBlock"
+        },
+        {
+          "$ref": "#/$defs/webSearchToolResultBlock"
         }
       ]
     },
@@ -772,6 +800,83 @@
         "type",
         "refusal"
       ],
+      "additionalProperties": false
+    },
+
+    "compactionItem": {
+      "type": "object",
+      "description": "Responses compaction checkpoint in request history (since 3.3.0).",
+      "properties": {
+        "encrypted_content": {"type": "string", "minLength": 1},
+        "id": {"type": "string", "minLength": 1},
+        "created_by": {"type": "string", "minLength": 1},
+        "after_message": {"type": "integer", "minimum": -1}
+      },
+      "required": ["encrypted_content", "after_message"],
+      "additionalProperties": false
+    },
+    "compactionItemBlock": {
+      "type": "object",
+      "description": "Responses compaction checkpoint block (since 3.3.0). Not an Anthropic compaction block.",
+      "properties": {
+        "type": {"const": "compaction_item"},
+        "encrypted_content": {"type": "string", "minLength": 1},
+        "id": {"type": "string", "minLength": 1},
+        "created_by": {"type": "string", "minLength": 1}
+      },
+      "required": ["type", "encrypted_content"],
+      "additionalProperties": false
+    },
+    "serverToolUseBlock": {
+      "type": "object",
+      "description": "Anthropic web_search server_tool_use (since 3.3.0).",
+      "properties": {
+        "type": {"const": "server_tool_use"},
+        "id": {"type": "string", "minLength": 1},
+        "name": {"const": "web_search"},
+        "input": {"type": "string", "description": "Raw JSON object text."},
+        "caller": {"type": "string"}
+      },
+      "required": ["type", "id", "name", "input"],
+      "additionalProperties": false
+    },
+    "requestServerToolUseBlock": {
+      "type": "object",
+      "description": "Anthropic web_search server_tool_use in request history (since 3.3.0).",
+      "properties": {
+        "type": {"const": "server_tool_use"},
+        "id": {"type": "string", "minLength": 1},
+        "name": {"const": "web_search"},
+        "input": {"type": "string"},
+        "caller": {"type": "string"},
+        "native": {"type": "array", "items": {"$ref": "#/$defs/nativeAnnotation"}}
+      },
+      "required": ["type", "id", "name", "input"],
+      "additionalProperties": false
+    },
+    "webSearchToolResultBlock": {
+      "type": "object",
+      "description": "Anthropic web_search_tool_result (since 3.3.0). content is raw JSON.",
+      "properties": {
+        "type": {"const": "web_search_tool_result"},
+        "tool_use_id": {"type": "string", "minLength": 1},
+        "content": {"type": "string"},
+        "caller": {"type": "string"}
+      },
+      "required": ["type", "tool_use_id", "content"],
+      "additionalProperties": false
+    },
+    "requestWebSearchToolResultBlock": {
+      "type": "object",
+      "description": "Anthropic web_search_tool_result in request history (since 3.3.0).",
+      "properties": {
+        "type": {"const": "web_search_tool_result"},
+        "tool_use_id": {"type": "string", "minLength": 1},
+        "content": {"type": "string"},
+        "caller": {"type": "string"},
+        "native": {"type": "array", "items": {"$ref": "#/$defs/nativeAnnotation"}}
+      },
+      "required": ["type", "tool_use_id", "content"],
       "additionalProperties": false
     },
     "webSearchCallBlock": {
@@ -1174,6 +1279,10 @@
           "items": {
             "$ref": "#/$defs/textCitation"
           }
+        },
+        "logprobs": {
+          "type": "string",
+          "description": "Raw JSON array of token logprob objects (since 3.3.0)."
         }
       },
       "required": [
@@ -1681,6 +1790,13 @@
         },
         "response_format": {
           "$ref": "#/$defs/responseFormat"
+        },
+        "logprobs": {
+          "type": "boolean"
+        },
+        "top_logprobs": {
+          "type": "integer",
+          "minimum": 0
         }
       },
       "additionalProperties": false
@@ -1722,6 +1838,10 @@
         },
         "usage": {
           "$ref": "#/$defs/usage"
+        },
+        "logprobs": {
+          "type": "string",
+          "description": "Raw Chat Completions choice.logprobs object (since 3.3.0)."
         }
       },
       "required": [

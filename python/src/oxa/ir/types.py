@@ -500,6 +500,8 @@ class Params:
     reasoning_effort: ReasoningEffort | None = None
     verbosity: str | None = None
     response_format: ResponseFormat | None = None
+    logprobs: bool | None = None
+    top_logprobs: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

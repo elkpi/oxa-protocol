@@ -769,10 +769,8 @@ def encode_response(
 
 
 def _system_block_breakpoint(block):
-    for ann in getattr(block, "native", ()):
-        if ann.source == "openai" and ann.kind == "prompt_cache_breakpoint":
-            return json.loads(ann.value)
-    return None
+    from oxa.ir.native import openai_breakpoint
+    return openai_breakpoint(getattr(block, "native", ()))
 
 
 def _encode_system_instructions(blocks):

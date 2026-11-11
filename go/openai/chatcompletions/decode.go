@@ -24,8 +24,6 @@ func DecodeRequest(wire *Request, opts ...Option) (*ir.Request, []ir.Loss, error
 	}{
 		{"functions", wire.Functions != nil, "legacy Chat Completions functions have no IR equivalent in v1."},
 		{"function_call", wire.FunctionCall != nil, "legacy Chat Completions function_call has no IR equivalent in v1."},
-		{"logprobs", wire.Logprobs != nil, "Chat Completions log-probability sampling has no IR equivalent in v1."},
-		{"top_logprobs", wire.TopLogprobs != nil, "Chat Completions log-probability sampling has no IR equivalent in v1."},
 	} {
 		if field.present {
 			losses = append(losses, loss(field.name, field.name, ir.LossUnmappedField, field.detail))
@@ -186,6 +184,20 @@ func DecodeRequest(wire *Request, opts ...Option) (*ir.Request, []ir.Loss, error
 		TopP:          wire.TopP,
 		MaxTokens:     wire.MaxTokens,
 		StopSequences: wire.Stop,
+	}
+	if wire.Logprobs != nil {
+		b, ok := wire.Logprobs.(bool)
+		if !ok {
+			return nil, nil, fmt.Errorf("chatcompletions: logprobs must be a boolean")
+		}
+		req.Params.Logprobs = &b
+	}
+	if wire.TopLogprobs != nil {
+		n, ok := nonNegInt(wire.TopLogprobs)
+		if !ok {
+			return nil, nil, fmt.Errorf("chatcompletions: top_logprobs must be a non-negative integer")
+		}
+		req.Params.TopLogprobs = &n
 	}
 	if wire.MaxCompletionTokens != nil {
 		req.Params.MaxTokens = wire.MaxCompletionTokens

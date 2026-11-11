@@ -397,12 +397,15 @@ def decode_request_native(wire: dict[str, Any], req: Request) -> tuple[Request, 
 
 
 def get_block_cache_control(native: tuple[NativeAnnotation, ...]) -> dict[str, Any] | None:
-    for n in native:
+    for n in native or ():
         if n.source == NATIVE_SOURCE_ANTHROPIC and n.kind == NATIVE_KIND_CACHE_CONTROL:
             try:
                 return json.loads(n.value)
             except Exception:
                 return None
+    for n in native or ():
+        if n.source == "openai" and n.kind == "prompt_cache_breakpoint":
+            return {"type": "ephemeral"}
     return None
 
 

@@ -92,6 +92,9 @@ func EncodeRequest(req *ir.Request, opts ...Option) (*Request, []ir.Loss, error)
 	}
 
 	items := append([]InputItem{}, leadingSystemItems...)
+	if err := appendCompactionItems(&items, req.CompactionItems, -1); err != nil {
+		return nil, nil, err
+	}
 	for i, message := range req.Messages {
 		groupLosses, err := appendAdditionalGroups(&items, req, i, -1)
 		if err != nil {
@@ -145,6 +148,9 @@ func EncodeRequest(req *ir.Request, opts ...Option) (*Request, []ir.Loss, error)
 		default:
 			return nil, nil, fmt.Errorf("responses: messages[%d]: unknown role %q", i, message.Role)
 		}
+		if err := appendCompactionItems(&items, req.CompactionItems, i); err != nil {
+			return nil, nil, err
+		}
 	}
 	groupLosses, err := appendAdditionalGroups(&items, req, len(req.Messages), -1)
 	if err != nil {
@@ -171,6 +177,11 @@ func EncodeRequest(req *ir.Request, opts ...Option) (*Request, []ir.Loss, error)
 			"Responses requests have no stop-sequences parameter; the IR stop sequences are dropped.",
 		))
 	}
+	extraLosses, err := encodeRequestExtras(out, req)
+	if err != nil {
+		return nil, nil, err
+	}
+	losses = append(losses, extraLosses...)
 	out.Temperature = req.Params.Temperature
 	out.TopP = req.Params.TopP
 	out.MaxOutputTokens = req.Params.MaxTokens
@@ -357,12 +368,9 @@ func encodeUserContent(blocks []ir.Block, path string) (any, []ir.Loss) {
 			losses = append(losses, loss(fmt.Sprintf("%s[%d]", path, i), "type", ir.LossUnsupportedSemantic, "Anthropic compaction block cannot be represented on the target face"))
 		case ir.TextBlock:
 			part := ContentPart{Type: PartTypeInputText, Text: value.Text}
-			for _, ann := range value.Native {
-				if ann.Source == ir.NativeSourceOpenAI && ann.Kind == ir.NativeKindPromptCacheBreakpoint {
-					part.PromptCacheBreakpoint = json.RawMessage(ann.Value)
-					otherBlocks++
-					break
-				}
+			if pcb := ir.OpenAIBreakpointWire(value.Native); len(pcb) > 0 {
+				part.PromptCacheBreakpoint = pcb
+				otherBlocks++
 			}
 			parts = append(parts, part)
 			text += value.Text
@@ -415,11 +423,8 @@ func encodeUserContent(blocks []ir.Block, path string) (any, []ir.Loss) {
 				continue
 			}
 			otherBlocks++
-			for _, ann := range value.Native {
-				if ann.Source == ir.NativeSourceOpenAI && ann.Kind == ir.NativeKindPromptCacheBreakpoint {
-					part.PromptCacheBreakpoint = json.RawMessage(ann.Value)
-					break
-				}
+			if pcb := ir.OpenAIBreakpointWire(value.Native); len(pcb) > 0 {
+				part.PromptCacheBreakpoint = pcb
 			}
 			parts = append(parts, part)
 		case ir.DocumentBlock:
@@ -445,13 +450,7 @@ func encodeUserContent(blocks []ir.Block, path string) (any, []ir.Loss) {
 					"IR DocumentBlock carries conflicting file sources",
 				))
 			} else {
-				var pcb json.RawMessage
-				for _, ann := range value.Native {
-					if ann.Source == ir.NativeSourceOpenAI && ann.Kind == ir.NativeKindPromptCacheBreakpoint {
-						pcb = json.RawMessage(ann.Value)
-						break
-					}
-				}
+				pcb := ir.OpenAIBreakpointWire(value.Native)
 				if value.FileID != "" {
 					parts = append(parts, ContentPart{Type: PartTypeInputFile, FileID: &value.FileID, PromptCacheBreakpoint: pcb})
 				} else if value.URL != "" {
@@ -633,6 +632,7 @@ func EncodeResponse(resp *ir.Response, opts ...Option) (*Response, []ir.Loss, er
 	apcIndex := 0
 	apcoIndex := 0
 	var refusalMsg string
+	var compactionItems []OutputItem
 	for i, block := range resp.Content {
 		switch value := block.(type) {
 		case ir.RefusalBlock:
@@ -673,9 +673,11 @@ func EncodeResponse(resp *ir.Response, opts ...Option) (*Response, []ir.Loss, er
 			if partAnnotations == nil {
 				partAnnotations = []json.RawMessage{}
 			}
-			textParts = append(textParts, OutputContent{
-				Type: PartTypeOutputText, Text: value.Text, Annotations: partAnnotations,
-			})
+			part := OutputContent{Type: PartTypeOutputText, Text: value.Text, Annotations: partAnnotations}
+			if value.Logprobs != "" {
+				part.Logprobs = json.RawMessage(value.Logprobs)
+			}
+			textParts = append(textParts, part)
 		case ir.EncryptedContentBlock:
 			if value.Data == "" {
 				return nil, nil, fmt.Errorf("responses: content[%d].data: encrypted_content data is required", i)
@@ -751,6 +753,13 @@ func EncodeResponse(resp *ir.Response, opts ...Option) (*Response, []ir.Loss, er
 				Type: ItemTypeFunctionCall, ID: "fc_abc123", Status: StatusCompleted,
 				CallID: value.ID, Name: nm, Namespace: ns, Arguments: arguments,
 			})
+		case ir.CompactionItemBlock:
+			if value.EncryptedContent == "" {
+				return nil, nil, fmt.Errorf("responses: content[%d].encrypted_content is required", i)
+			}
+			compactionItems = append(compactionItems, OutputItem{
+				Type: ItemTypeCompaction, ID: value.ID, EncryptedContent: value.EncryptedContent, CreatedBy: value.CreatedBy,
+			})
 		case ir.WebSearchCallBlock:
 			item, err := encodeWebSearchCall(value, fmt.Sprintf("content[%d]", i))
 			if err != nil {
@@ -774,6 +783,9 @@ func EncodeResponse(resp *ir.Response, opts ...Option) (*Response, []ir.Loss, er
 			Type: ItemTypeMessage, ID: "msg_abc123", Status: StatusCompleted, Role: RoleAssistant,
 			Content: textParts,
 		}}, output...)
+	}
+	if len(compactionItems) > 0 {
+		output = append(compactionItems, output...)
 	}
 	for n := len(reasoning.items) - 1; n >= 0; n-- {
 		part := reasoning.items[n]
@@ -840,24 +852,20 @@ func EncodeResponse(resp *ir.Response, opts ...Option) (*Response, []ir.Loss, er
 // parts array when the block carries a prompt_cache_breakpoint, the plain
 // string otherwise.
 func systemItemContent(block ir.SystemBlock) any {
-	for _, ann := range block.Native {
-		if ann.Source == ir.NativeSourceOpenAI && ann.Kind == ir.NativeKindPromptCacheBreakpoint {
-			return []ContentPart{{
-				Type:                  PartTypeInputText,
-				Text:                  block.Text,
-				PromptCacheBreakpoint: json.RawMessage(ann.Value),
-			}}
-		}
+	if pcb := ir.OpenAIBreakpointWire(block.Native); len(pcb) > 0 {
+		return []ContentPart{{
+			Type:                  PartTypeInputText,
+			Text:                  block.Text,
+			PromptCacheBreakpoint: pcb,
+		}}
 	}
 	return block.Text
 }
 
 func hasSystemBreakpoint(blocks []ir.SystemBlock) bool {
 	for _, block := range blocks {
-		for _, ann := range block.Native {
-			if ann.Source == ir.NativeSourceOpenAI && ann.Kind == ir.NativeKindPromptCacheBreakpoint {
-				return true
-			}
+		if ir.HasOpenAIBreakpoint(block.Native) {
+			return true
 		}
 	}
 	return false
@@ -944,4 +952,22 @@ func (b *reasoningBuilder) addCipher(cipher string) {
 	}
 	b.cur.cipher = cipher
 	b.cur = nil
+}
+
+func appendCompactionItems(items *[]InputItem, all []ir.CompactionItem, after int) error {
+	for _, item := range all {
+		if item.AfterMessage != after {
+			continue
+		}
+		if item.EncryptedContent == "" {
+			return fmt.Errorf("responses: compaction item encrypted_content is required")
+		}
+		*items = append(*items, InputItem{
+			Type:             ItemTypeCompaction,
+			ID:               item.ID,
+			EncryptedContent: item.EncryptedContent,
+			CreatedBy:        item.CreatedBy,
+		})
+	}
+	return nil
 }

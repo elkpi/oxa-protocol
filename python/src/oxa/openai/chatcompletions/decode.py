@@ -93,8 +93,6 @@ def decode_request(
     unmapped_fields = [
         ("functions", "legacy Chat Completions functions have no IR equivalent in v1."),
         ("function_call", "legacy Chat Completions function_call has no IR equivalent in v1."),
-        ("logprobs", "Chat Completions log-probability sampling has no IR equivalent in v1."),
-        ("top_logprobs", "Chat Completions log-probability sampling has no IR equivalent in v1."),
     ]
     for name, detail in unmapped_fields:
         if wire.get(name) is not None:
@@ -416,6 +414,8 @@ def decode_request(
         or reasoning_effort is not None
         or verbosity is not None
         or response_format is not None
+        or wire.get("logprobs") is not None
+        or wire.get("top_logprobs") is not None
     ):
         params = Params(
             temperature=wire.get("temperature"),
@@ -425,6 +425,8 @@ def decode_request(
             reasoning_effort=reasoning_effort,
             verbosity=verbosity,
             response_format=response_format,
+            logprobs=wire.get("logprobs"),
+            top_logprobs=wire.get("top_logprobs"),
         )
 
     return (

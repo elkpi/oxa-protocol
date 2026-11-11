@@ -147,24 +147,22 @@ func TestDecodeRequestSystemAndParams(t *testing.T) {
 	}
 }
 
-func TestDecodeRequestLogprobsLosses(t *testing.T) {
+func TestDecodeRequestLogprobsPreserved(t *testing.T) {
 	wire := &Request{
 		Model:       "gpt-4o-mini",
 		Messages:    []Message{{Role: "user", Content: "Hello"}},
 		Logprobs:    true,
 		TopLogprobs: 5,
 	}
-	_, losses, err := DecodeRequest(wire)
+	req, losses, err := DecodeRequest(wire)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(losses) != 2 {
-		t.Fatalf("expected 2 losses, got %+v", losses)
+	if len(losses) != 0 {
+		t.Fatalf("losses: %+v", losses)
 	}
-	for _, l := range losses {
-		if l.Reason != ir.LossUnmappedField {
-			t.Fatalf("wrong reason: %+v", l)
-		}
+	if req.Params.Logprobs == nil || !*req.Params.Logprobs || req.Params.TopLogprobs == nil || *req.Params.TopLogprobs != 5 {
+		t.Fatalf("params: %+v", req.Params)
 	}
 }
 

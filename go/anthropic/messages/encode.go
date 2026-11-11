@@ -67,26 +67,11 @@ func EncodeRequest(req *ir.Request, opts ...Option) (*Request, []ir.Loss, error)
 			blocks = append(blocks, sbw)
 			for sAnnIdx, ann := range s.Native {
 				if ann.Source == ir.NativeSourceOpenAI && ann.Kind == ir.NativeKindPromptCacheBreakpoint {
-					field := "prompt_cache_breakpoint"
-					reason := ir.LossUnmappedField
-					detail := ir.PromptCacheBreakpointLossDetail
-					if ann.Omission != nil {
-						if ann.Omission.Field != "" {
-							field = ann.Omission.Field
-						}
-						if ann.Omission.Reason != "" {
-							reason = ann.Omission.Reason
-						}
-						if ann.Omission.Detail != "" {
-							detail = ann.Omission.Detail
-						}
+					if len(sbw.CacheControl) == 0 {
+						sbw.CacheControl = json.RawMessage(ir.EphemeralCacheControlWire)
+						blocks[len(blocks)-1] = sbw
 					}
-					losses = append(losses, ir.Loss{
-						Path:   fmt.Sprintf("system[%d].native[%d]", i, sAnnIdx),
-						Field:  field,
-						Reason: reason,
-						Detail: detail,
-					})
+					losses = append(losses, ir.BreakpointTranslationLosses(ann.Value, fmt.Sprintf("system[%d].native[%d]", i, sAnnIdx))...)
 				}
 			}
 		}
@@ -388,26 +373,12 @@ func encodeRequestBlocks(blocks []ir.Block, path string) ([]BlockWire, []ir.Loss
 		losses = append(losses, blockLosses...)
 		for bAnnIdx, ann := range getBlockNative(block) {
 			if ann.Source == ir.NativeSourceOpenAI && ann.Kind == ir.NativeKindPromptCacheBreakpoint {
-				field := "prompt_cache_breakpoint"
-				reason := ir.LossUnmappedField
-				detail := ir.PromptCacheBreakpointLossDetail
-				if ann.Omission != nil {
-					if ann.Omission.Field != "" {
-						field = ann.Omission.Field
-					}
-					if ann.Omission.Reason != "" {
-						reason = ann.Omission.Reason
-					}
-					if ann.Omission.Detail != "" {
-						detail = ann.Omission.Detail
-					}
+				if mapped && len(out) > 0 && len(out[len(out)-1].CacheControl) == 0 {
+					last := out[len(out)-1]
+					last.CacheControl = json.RawMessage(ir.EphemeralCacheControlWire)
+					out[len(out)-1] = last
 				}
-				losses = append(losses, ir.Loss{
-					Path:   fmt.Sprintf("%s[%d].native[%d]", path, i, bAnnIdx),
-					Field:  field,
-					Reason: reason,
-					Detail: detail,
-				})
+				losses = append(losses, ir.BreakpointTranslationLosses(ann.Value, fmt.Sprintf("%s[%d].native[%d]", path, i, bAnnIdx))...)
 			}
 		}
 	}

@@ -1201,6 +1201,10 @@ def dump_request(req: Request) -> dict[str, Any]:
             if req.params.verbosity not in ("low", "medium", "high"):
                 raise CodecError("invalid params.verbosity")
             p_dict["verbosity"] = req.params.verbosity
+        if req.params.logprobs is not None:
+            p_dict["logprobs"] = req.params.logprobs
+        if req.params.top_logprobs is not None:
+            p_dict["top_logprobs"] = req.params.top_logprobs
         if req.params.response_format is not None:
             p_dict["response_format"] = dump_response_format(req.params.response_format)
         if p_dict:
@@ -1434,6 +1438,8 @@ def load_request(data: dict[str, Any] | str) -> Request:
             reasoning_effort=effort,
             verbosity=p.get("verbosity"),
             response_format=response_format,
+            logprobs=p.get("logprobs"),
+            top_logprobs=p.get("top_logprobs"),
         )
 
     metadata = raw.get("metadata")

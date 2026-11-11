@@ -12,14 +12,12 @@ import (
 // (IR -> face). System content renders as one leading system message; text
 // content remains a string while image input renders as content parts.
 func getSystemContent(system ir.SystemBlock) any {
-	for _, ann := range system.Native {
-		if ann.Source == ir.NativeSourceOpenAI && ann.Kind == ir.NativeKindPromptCacheBreakpoint {
-			return []ContentPart{{
-				Type:                  ContentPartTypeText,
-				Text:                  system.Text,
-				PromptCacheBreakpoint: json.RawMessage(ann.Value),
-			}}
-		}
+	if pcb := ir.OpenAIBreakpointWire(system.Native); len(pcb) > 0 {
+		return []ContentPart{{
+			Type:                  ContentPartTypeText,
+			Text:                  system.Text,
+			PromptCacheBreakpoint: pcb,
+		}}
 	}
 	return system.Text
 }
@@ -49,6 +47,15 @@ func EncodeRequest(req *ir.Request, opts ...Option) (*Request, []ir.Loss, error)
 	}
 	o := newOptions(opts...)
 	out := &Request{Model: o.models.Map(req.Model)}
+	if req.Params.Logprobs != nil {
+		out.Logprobs = *req.Params.Logprobs
+	} else if req.Params.TopLogprobs != nil {
+		out.Logprobs = true
+	}
+	if req.Params.TopLogprobs != nil {
+		v := *req.Params.TopLogprobs
+		out.TopLogprobs = v
+	}
 	if len(req.Metadata) > 0 {
 		for key := range req.Metadata {
 			if key == "" {
@@ -126,11 +133,9 @@ func EncodeRequest(req *ir.Request, opts ...Option) (*Request, []ir.Loss, error)
 		if !hasDeveloper {
 			hasBreakpoint := false
 			for _, system := range req.System {
-				for _, ann := range system.Native {
-					if ann.Source == ir.NativeSourceOpenAI && ann.Kind == ir.NativeKindPromptCacheBreakpoint {
-						hasBreakpoint = true
-						break
-					}
+				if ir.HasOpenAIBreakpoint(system.Native) {
+					hasBreakpoint = true
+					break
 				}
 			}
 			if !hasBreakpoint {

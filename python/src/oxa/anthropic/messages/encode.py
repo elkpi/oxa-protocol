@@ -140,14 +140,8 @@ def encode_request(
                 )
             for s_ann_idx, ann in enumerate(getattr(block, "native", ())):
                 if ann.source == "openai" and ann.kind == "prompt_cache_breakpoint":
-                    losses.append(
-                        Loss(
-                            path=f"system[{index}].native[{s_ann_idx}]",
-                            field=ann.omission.field if ann.omission and ann.omission.field else "prompt_cache_breakpoint",
-                            reason=ann.omission.reason if ann.omission and ann.omission.reason else LOSS_UNMAPPED_FIELD,
-                            detail=ann.omission.detail or PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL,
-                        )
-                    )
+                    from oxa.ir.native import _breakpoint_translation_losses
+                    losses.extend(_breakpoint_translation_losses(ann.value, f"system[{index}].native[{s_ann_idx}]"))
         out["system"] = encode_system(req.system)
 
     tools_wire: list[dict[str, Any]] = []
@@ -434,14 +428,8 @@ def encode_request_blocks(
         losses.extend(b_losses)
         for b_ann_idx, ann in enumerate(getattr(block, "native", ())):
             if ann.source == "openai" and ann.kind == "prompt_cache_breakpoint":
-                losses.append(
-                    Loss(
-                        path=f"{path}[{index}].native[{b_ann_idx}]",
-                        field=ann.omission.field if ann.omission and ann.omission.field else "prompt_cache_breakpoint",
-                        reason=ann.omission.reason if ann.omission and ann.omission.reason else LOSS_UNMAPPED_FIELD,
-                        detail=ann.omission.detail or PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL,
-                    )
-                )
+                from oxa.ir.native import _breakpoint_translation_losses
+                losses.extend(_breakpoint_translation_losses(ann.value, f"{path}[{index}].native[{b_ann_idx}]"))
     return out, losses
 
 
