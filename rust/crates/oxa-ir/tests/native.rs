@@ -161,9 +161,12 @@ fn test_cache_control_omission_loss_detail() {
 
     let losses = omitted_native_request_losses(&req, "chatcompletions").expect("losses");
     assert_eq!(losses.len(), 1);
-    assert_eq!(losses[0].field, "cache_control");
+    assert_eq!(losses[0].field, "type");
     assert_eq!(losses[0].reason, LossReason::UnmappedField);
-    assert_eq!(losses[0].detail, CACHE_CONTROL_LOSS_DETAIL);
+    assert_eq!(
+        losses[0].detail,
+        "cache_control.type is not represented by prompt_cache_breakpoint"
+    );
 
     let req_no_om = Request {
         model: "m".into(),
@@ -192,9 +195,12 @@ fn test_cache_control_omission_loss_detail() {
     let losses_no_om =
         omitted_native_request_losses(&req_no_om, "chatcompletions").expect("losses");
     assert_eq!(losses_no_om.len(), 1);
-    assert_eq!(losses_no_om[0].field, "cache_control");
+    assert_eq!(losses_no_om[0].field, "type");
     assert_eq!(losses_no_om[0].reason, LossReason::UnmappedField);
-    assert_eq!(losses_no_om[0].detail, CACHE_CONTROL_LOSS_DETAIL);
+    assert_eq!(
+        losses_no_om[0].detail,
+        "cache_control.type is not represented by prompt_cache_breakpoint"
+    );
 
     let req_empty_detail = Request {
         model: "m".into(),
@@ -227,7 +233,11 @@ fn test_cache_control_omission_loss_detail() {
     let losses_empty =
         omitted_native_request_losses(&req_empty_detail, "chatcompletions").expect("losses");
     assert_eq!(losses_empty.len(), 1);
-    assert_eq!(losses_empty[0].detail, CACHE_CONTROL_LOSS_DETAIL);
+    assert_eq!(losses_empty[0].field, "type");
+    assert_eq!(
+        losses_empty[0].detail,
+        "cache_control.type is not represented by prompt_cache_breakpoint"
+    );
 }
 
 #[test]

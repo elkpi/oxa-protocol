@@ -38,16 +38,6 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
             wire.function_call.is_some(),
             "legacy Chat Completions function_call has no IR equivalent in v1.",
         ),
-        (
-            "logprobs",
-            wire.logprobs.is_some(),
-            "Chat Completions log-probability sampling has no IR equivalent in v1.",
-        ),
-        (
-            "top_logprobs",
-            wire.top_logprobs.is_some(),
-            "Chat Completions log-probability sampling has no IR equivalent in v1.",
-        ),
     ] {
         if present {
             losses.push(loss(name, name, LossReason::UnmappedField, detail));
@@ -546,6 +536,11 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         reasoning_effort: decode_reasoning_effort(wire.reasoning_effort.as_deref(), &mut losses),
         verbosity,
         response_format,
+        logprobs: wire.logprobs.as_ref().map(|v| v.as_bool()).flatten(),
+        top_logprobs: wire
+            .top_logprobs
+            .as_ref()
+            .and_then(|v| v.as_i64().filter(|n| *n >= 0)),
     };
     let params_set = params.temperature.is_some()
         || params.top_p.is_some()
@@ -553,7 +548,9 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         || params.stop_sequences.is_some()
         || params.reasoning_effort.is_some()
         || params.verbosity.is_some()
-        || params.response_format.is_some();
+        || params.response_format.is_some()
+        || params.logprobs.is_some()
+        || params.top_logprobs.is_some();
     if params_set {
         req.params = Some(params);
     }

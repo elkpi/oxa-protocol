@@ -667,16 +667,9 @@ pub(crate) fn encode_user_content(blocks: &[Block], path: &str) -> (ContentValue
     for (index, block) in blocks.iter().enumerate() {
         match block {
             Block::Text { text: value, citations, native } => {
-                let mut pcb = None;
-                for ann in native {
-                    if ann.source == oxa_ir::NATIVE_SOURCE_OPENAI
-                        && ann.kind == oxa_ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
-                        && let Ok(v) = serde_json::from_str::<serde_json::Value>(&ann.value)
-                    {
-                        pcb = Some(v);
-                        has_image = true;
-                        break;
-                    }
+                let pcb = oxa_ir::openai_breakpoint_wire(native);
+                if pcb.is_some() {
+                    has_image = true;
                 }
                 parts.push(ContentPart {
                     kind: CONTENT_PART_TYPE_TEXT.to_string(),
@@ -738,14 +731,8 @@ pub(crate) fn encode_user_content(blocks: &[Block], path: &str) -> (ContentValue
             ) {
                 Ok(mut part) => {
                     has_image = true;
-                    for ann in native {
-                        if ann.source == oxa_ir::NATIVE_SOURCE_OPENAI
-                            && ann.kind == oxa_ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
-                            && let Ok(v) = serde_json::from_str::<serde_json::Value>(&ann.value)
-                        {
-                            part.prompt_cache_breakpoint = Some(v);
-                            break;
-                        }
+                    if let Some(v) = oxa_ir::openai_breakpoint_wire(native) {
+                        part.prompt_cache_breakpoint = Some(v);
                     }
                     parts.push(part);
                 }
@@ -793,16 +780,7 @@ pub(crate) fn encode_user_content(blocks: &[Block], path: &str) -> (ContentValue
                     continue;
                 }
                 has_image = true;
-                let mut pcb = None;
-                for ann in native {
-                    if ann.source == oxa_ir::NATIVE_SOURCE_OPENAI
-                        && ann.kind == oxa_ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
-                        && let Ok(v) = serde_json::from_str::<serde_json::Value>(&ann.value)
-                    {
-                        pcb = Some(v);
-                        break;
-                    }
-                }
+                let pcb = oxa_ir::openai_breakpoint_wire(native);
                 if let Some(fid) = file_id {
                     parts.push(ContentPart {
                         kind: CONTENT_PART_TYPE_FILE.to_string(),

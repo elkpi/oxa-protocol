@@ -210,10 +210,7 @@ pub fn encode_request(req: &IrRequest, config: &Config) -> Result<(Request, Vec<
         );
         let has_breakpoint = req.system.iter().any(|block| {
             let oxa_ir::SystemBlock::Text { native, .. } = block;
-            native.iter().any(|ann| {
-                ann.source == oxa_ir::NATIVE_SOURCE_OPENAI
-                    && ann.kind == oxa_ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
-            })
+            oxa_ir::openai_breakpoint_wire(native).is_some()
         });
         if !has_developer && !has_breakpoint {
             let mut text = String::new();
@@ -331,6 +328,14 @@ pub fn encode_request(req: &IrRequest, config: &Config) -> Result<(Request, Vec<
         out.temperature = params.temperature;
         out.top_p = params.top_p;
         out.verbosity = params.verbosity.clone();
+        if let Some(flag) = params.logprobs {
+            out.logprobs = Some(serde_json::Value::Bool(flag));
+        } else if params.top_logprobs.is_some() {
+            out.logprobs = Some(serde_json::Value::Bool(true));
+        }
+        if let Some(n) = params.top_logprobs {
+            out.top_logprobs = Some(serde_json::Value::from(n));
+        }
         out.max_tokens = params.max_tokens;
         let stop = params
             .stop_sequences
@@ -587,18 +592,13 @@ pub(crate) fn encode_finish_reason(
 }
 
 fn get_system_content(text: &str, native: &[oxa_ir::NativeAnnotation]) -> ContentValue {
-    for ann in native {
-        if ann.source == oxa_ir::NATIVE_SOURCE_OPENAI
-            && ann.kind == oxa_ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
-            && let Ok(v) = serde_json::from_str::<serde_json::Value>(&ann.value)
-        {
-            return ContentValue::Parts(vec![crate::types::ContentPart {
-                kind: crate::types::CONTENT_PART_TYPE_TEXT.to_string(),
-                text: text.to_string(),
-                prompt_cache_breakpoint: Some(v),
-                ..Default::default()
-            }]);
-        }
+    if let Some(v) = oxa_ir::openai_breakpoint_wire(native) {
+        return ContentValue::Parts(vec![crate::types::ContentPart {
+            kind: crate::types::CONTENT_PART_TYPE_TEXT.to_string(),
+            text: text.to_string(),
+            prompt_cache_breakpoint: Some(v),
+            ..Default::default()
+        }]);
     }
     ContentValue::Text(text.to_string())
 }

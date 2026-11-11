@@ -937,6 +937,14 @@ pub struct Params {
         skip_serializing_if = "Option::is_none"
     )]
     pub response_format: Option<ResponseFormat>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logprobs: Option<bool>,
+    #[serde(
+        rename = "top_logprobs",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub top_logprobs: Option<i64>,
 }
 
 /// Output formatting preference (spec/01 §3.7.1, since 2.1).

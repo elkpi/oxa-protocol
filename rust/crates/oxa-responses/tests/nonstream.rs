@@ -73,6 +73,8 @@ fn encodes_tool_results_before_normal_user_content_and_reports_reordering() {
             reasoning_effort: None,
             verbosity: None,
             response_format: None,
+            logprobs: None,
+            top_logprobs: None,
         }),
         metadata: None,
         native: Vec::new(),

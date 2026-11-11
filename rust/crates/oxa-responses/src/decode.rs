@@ -386,6 +386,8 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         reasoning_effort,
         verbosity,
         response_format,
+        logprobs: None,
+        top_logprobs: None,
     };
     if params.temperature.is_some()
         || params.top_p.is_some()

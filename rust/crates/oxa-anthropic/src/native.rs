@@ -612,6 +612,12 @@ pub fn get_block_cache_control(native: &[NativeAnnotation]) -> Option<Value> {
             return serde_json::from_str(&n.value).ok();
         }
     }
+    if native.iter().any(|n| {
+        n.source == oxa_ir::NATIVE_SOURCE_OPENAI
+            && n.kind == oxa_ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
+    }) {
+        return Some(serde_json::json!({"type": "ephemeral"}));
+    }
     None
 }
 

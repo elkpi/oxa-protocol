@@ -453,6 +453,8 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         reasoning_effort: None,
         verbosity: None,
         response_format: None,
+        logprobs: None,
+        top_logprobs: None,
     };
     req.params = Some(params);
     let nat_losses = crate::native::decode_request_native(wire, &mut req)?;

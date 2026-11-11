@@ -380,27 +380,10 @@ pub fn encode_request(req: &IrRequest, config: &Config) -> Result<(Request, Vec<
                 if ann.source == oxa_ir::NATIVE_SOURCE_OPENAI
                     && ann.kind == oxa_ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
                 {
-                    let field = ann
-                        .omission
-                        .as_ref()
-                        .map(|o| o.field.clone())
-                        .unwrap_or_else(|| "prompt_cache_breakpoint".into());
-                    let reason = ann
-                        .omission
-                        .as_ref()
-                        .map(|o| o.reason)
-                        .unwrap_or(LossReason::UnmappedField);
-                    let detail = ann
-                        .omission
-                        .as_ref()
-                        .and_then(|o| o.detail.clone())
-                        .unwrap_or_else(|| oxa_ir::PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL.into());
-                    losses.push(Loss {
-                        path: format!("system[{index}].native[{ann_idx}]"),
-                        field,
-                        reason,
-                        detail,
-                    });
+                    losses.extend(oxa_ir::breakpoint_translation_losses(
+                        &ann.value,
+                        &format!("system[{index}].native[{ann_idx}]"),
+                    ));
                 }
             }
         }
@@ -859,27 +842,10 @@ fn encode_request_blocks(
             if ann.source == oxa_ir::NATIVE_SOURCE_OPENAI
                 && ann.kind == oxa_ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
             {
-                let field = ann
-                    .omission
-                    .as_ref()
-                    .map(|o| o.field.clone())
-                    .unwrap_or_else(|| "prompt_cache_breakpoint".into());
-                let reason = ann
-                    .omission
-                    .as_ref()
-                    .map(|o| o.reason)
-                    .unwrap_or(LossReason::UnmappedField);
-                let detail = ann
-                    .omission
-                    .as_ref()
-                    .and_then(|o| o.detail.clone())
-                    .unwrap_or_else(|| oxa_ir::PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL.into());
-                losses.push(Loss {
-                    path: format!("{path}[{index}].native[{ann_idx}]"),
-                    field,
-                    reason,
-                    detail,
-                });
+                losses.extend(oxa_ir::breakpoint_translation_losses(
+                    &ann.value,
+                    &format!("{path}[{index}].native[{ann_idx}]"),
+                ));
             }
         }
     }

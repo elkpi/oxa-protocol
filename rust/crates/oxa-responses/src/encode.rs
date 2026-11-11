@@ -1154,15 +1154,7 @@ fn validate_usage(usage: &Usage) -> Result<(), Error> {
 
 fn system_block_breakpoint(block: &oxa_ir::SystemBlock) -> Option<serde_json::Value> {
     let oxa_ir::SystemBlock::Text { native, .. } = block;
-    for ann in native {
-        if ann.source == oxa_ir::NATIVE_SOURCE_OPENAI
-            && ann.kind == oxa_ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
-            && let Ok(v) = serde_json::from_str::<serde_json::Value>(&ann.value)
-        {
-            return Some(v);
-        }
-    }
-    None
+    oxa_ir::openai_breakpoint_wire(native)
 }
 
 fn encode_system_instructions(

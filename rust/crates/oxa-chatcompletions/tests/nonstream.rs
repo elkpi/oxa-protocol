@@ -214,6 +214,8 @@ fn encodes_reasoning_content_and_reports_signature_losses() {
             reasoning_effort: Some(ReasoningEffort::High),
             verbosity: None,
             response_format: None,
+            logprobs: None,
+            top_logprobs: None,
         }),
         metadata: None,
         native: Vec::new(),

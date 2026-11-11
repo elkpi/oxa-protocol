@@ -706,6 +706,7 @@ pub fn omitted_native_request_losses(request: &Request, target: &str) -> Result<
             has_active_budget_proj,
             current_effort,
             target,
+            false,
         );
     }
 
@@ -719,6 +720,7 @@ pub fn omitted_native_request_losses(request: &Request, target: &str) -> Result<
                 false,
                 None,
                 target,
+                true,
             );
         }
     }
@@ -747,6 +749,7 @@ pub fn omitted_native_request_losses(request: &Request, target: &str) -> Result<
                     false,
                     None,
                     target,
+                    false,
                 );
             }
         }
@@ -805,6 +808,10 @@ fn collect_block_omissions(losses: &mut Vec<Loss>, blk: &Block, path: &str, targ
         }
     };
 
+    let breakpoint_host = matches!(
+        blk,
+        Block::Text { .. } | Block::Image { .. } | Block::Document { .. }
+    );
     for (i, ann) in native.iter().enumerate() {
         append_omission_loss(
             losses,
@@ -813,6 +820,7 @@ fn collect_block_omissions(losses: &mut Vec<Loss>, blk: &Block, path: &str, targ
             false,
             None,
             target,
+            breakpoint_host,
         );
     }
 
@@ -833,6 +841,7 @@ fn append_omission_loss(
     has_active_budget_proj: bool,
     current_effort: Option<crate::request::ReasoningEffort>,
     target: &str,
+    breakpoint_host: bool,
 ) {
     if ann.source == NATIVE_SOURCE_OPENAI {
         match ann.kind.as_str() {
@@ -977,6 +986,10 @@ fn append_omission_loss(
                 if target == "chatcompletions" || target == "responses" {
                     return;
                 }
+                if target == "anthropic" && breakpoint_host {
+                    losses.extend(breakpoint_translation_losses(&ann.value, path));
+                    return;
+                }
                 let (field, reason, detail) = if let Some(ref om) = ann.omission {
                     let f = if om.field.is_empty() {
                         "prompt_cache_breakpoint".to_string()
@@ -1081,6 +1094,10 @@ fn append_omission_loss(
             }
         }
         NATIVE_KIND_CACHE_CONTROL => {
+            if breakpoint_host && (target == "chatcompletions" || target == "responses") {
+                losses.extend(cache_control_translation_losses(&ann.value, path));
+                return;
+            }
             let (field, reason, detail) = if let Some(ref om) = ann.omission {
                 let f = if om.field.is_empty() {
                     "cache_control".to_string()
@@ -1237,4 +1254,62 @@ fn append_omission_loss(
             });
         }
     }
+}
+
+fn cache_control_translation_losses(value: &str, path: &str) -> Vec<Loss> {
+    let mut losses = vec![Loss {
+        path: path.into(),
+        field: "type".into(),
+        reason: LossReason::UnmappedField,
+        detail: "cache_control.type is not represented by prompt_cache_breakpoint".into(),
+    }];
+    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(value) {
+        if parsed.get("ttl").is_some() {
+            losses.push(Loss {
+                path: path.into(),
+                field: "ttl".into(),
+                reason: LossReason::UnmappedField,
+                detail: "cache_control.ttl has no equivalent prompt cache ttl".into(),
+            });
+        }
+    }
+    losses
+}
+
+pub fn breakpoint_translation_losses(value: &str, path: &str) -> Vec<Loss> {
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(value) else {
+        return Vec::new();
+    };
+    let mut losses = Vec::new();
+    if parsed.get("mode").is_some() {
+        losses.push(Loss {
+            path: path.into(),
+            field: "mode".into(),
+            reason: LossReason::UnmappedField,
+            detail: "prompt_cache_breakpoint.mode is not represented by cache_control".into(),
+        });
+    }
+    if parsed.get("ttl").is_some() {
+        losses.push(Loss {
+            path: path.into(),
+            field: "ttl".into(),
+            reason: LossReason::UnmappedField,
+            detail: "prompt_cache_breakpoint.ttl has no equivalent cache_control ttl".into(),
+        });
+    }
+    losses
+}
+
+pub fn openai_breakpoint_wire(native: &[NativeAnnotation]) -> Option<serde_json::Value> {
+    for ann in native {
+        if ann.source == NATIVE_SOURCE_OPENAI && ann.kind == NATIVE_KIND_PROMPT_CACHE_BREAKPOINT {
+            return serde_json::from_str(&ann.value).ok();
+        }
+    }
+    for ann in native {
+        if ann.source == NATIVE_SOURCE_ANTHROPIC && ann.kind == NATIVE_KIND_CACHE_CONTROL {
+            return Some(serde_json::json!({"mode": "explicit"}));
+        }
+    }
+    None
 }
