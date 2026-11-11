@@ -5,7 +5,7 @@
 namespace oxa::openai::responses {
 inline const detail::AuditProfile& wire_profile() {
     static const detail::AuditProfile profile{
-        {{"request", {{"model", ""}, {"input", "input_item[]"}, {"instructions", ""}, {"temperature", ""}, {"top_p", ""}, {"max_output_tokens", ""}, {"tools", "tool[]"}, {"tool_choice", "tool_choice"}, {"parallel_tool_calls", ""}, {"prompt_cache_key", ""}, {"prompt_cache_options", "prompt_cache_options_def"}, {"text", "text_params"}, {"reasoning", "reasoning"}, {"metadata", ""}}},
+        {{"request", {{"model", ""}, {"input", "input_item[]"}, {"instructions", ""}, {"temperature", ""}, {"top_p", ""}, {"max_output_tokens", ""}, {"tools", "tool[]"}, {"tool_choice", "tool_choice"}, {"parallel_tool_calls", ""}, {"prompt_cache_key", ""}, {"prompt_cache_options", "prompt_cache_options_def"}, {"text", "text_params"}, {"reasoning", "reasoning"}, {"top_logprobs", ""}, {"metadata", ""}}},
          {"prompt_cache_options_def", {{"mode", ""}, {"ttl", ""}}},
          {"prompt_cache_breakpoint_def", {{"mode", ""}, {"ttl", ""}}},
          {"response", {{"id", ""}, {"object", ""}, {"status", ""}, {"model", ""}, {"output", "output_item[]"}, {"usage", "usage"}, {"incomplete_details", "incomplete"}, {"error", ""}}},

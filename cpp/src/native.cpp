@@ -333,7 +333,8 @@ void append_omission_loss(std::vector<Loss>& losses,
                           std::string_view path,
                           bool has_active_budget_proj,
                           const std::optional<std::string>& current_effort,
-                          std::string_view target) {
+                          std::string_view target,
+                          bool breakpoint_host = false) {
     if (ann.source == NATIVE_SOURCE_OPENAI) {
         if (ann.kind == NATIVE_KIND_MAX_COMPLETION_TOKENS || ann.kind == NATIVE_KIND_STREAM) {
             return;
@@ -421,6 +422,13 @@ void append_omission_loss(std::vector<Loss>& losses,
         }
         if (ann.kind == NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
             if (target == "chatcompletions" || target == "responses") {
+                return;
+            }
+            if (target == "anthropic" && breakpoint_host) {
+                if (auto parsed = json::parse(ann.value); parsed.ok() && parsed->is_object()) {
+                    if (parsed->find("mode")) losses.push_back(Loss{std::string(path), "mode", std::string(LOSS_UNMAPPED_FIELD), "prompt_cache_breakpoint.mode is not represented by cache_control"});
+                    if (parsed->find("ttl")) losses.push_back(Loss{std::string(path), "ttl", std::string(LOSS_UNMAPPED_FIELD), "prompt_cache_breakpoint.ttl has no equivalent cache_control ttl"});
+                }
                 return;
             }
             std::string field = "prompt_cache_breakpoint";
@@ -512,6 +520,13 @@ void append_omission_loss(std::vector<Loss>& losses,
     }
 
     if (ann.kind == NATIVE_KIND_CACHE_CONTROL) {
+        if (breakpoint_host && (target == "chatcompletions" || target == "responses")) {
+            losses.push_back(Loss{std::string(path), "type", std::string(LOSS_UNMAPPED_FIELD), "cache_control.type is not represented by prompt_cache_breakpoint"});
+            if (auto parsed = json::parse(ann.value); parsed.ok() && parsed->is_object() && parsed->find("ttl")) {
+                losses.push_back(Loss{std::string(path), "ttl", std::string(LOSS_UNMAPPED_FIELD), "cache_control.ttl has no equivalent prompt cache ttl"});
+            }
+            return;
+        }
         std::string field = "cache_control";
         std::string reason = std::string(LOSS_UNMAPPED_FIELD);
         std::string detail = std::string(CACHE_CONTROL_LOSS_DETAIL);
@@ -633,7 +648,7 @@ struct BlockOmissionCollector {
     void operator()(const WebSearchCallBlock&) const {}
     void operator()(const TextBlock& b) const {
         for (std::size_t i = 0; i < b.native.size(); ++i) {
-            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target);
+            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target, true);
         }
     }
     void operator()(const ThinkingBlock& b) const {
@@ -643,7 +658,7 @@ struct BlockOmissionCollector {
     }
     void operator()(const ImageBlock& b) const {
         for (std::size_t i = 0; i < b.native.size(); ++i) {
-            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target);
+            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target, true);
         }
     }
     void operator()(const DocumentBlock& b) const {
@@ -651,7 +666,7 @@ struct BlockOmissionCollector {
             return;
         }
         for (std::size_t i = 0; i < b.native.size(); ++i) {
-            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target);
+            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target, true);
         }
     }
     void operator()(const RedactedThinkingBlock& /*b*/) const {
@@ -983,7 +998,7 @@ StatusOr<std::vector<Loss>> omitted_native_request_losses(const Request& req, st
 
     for (std::size_t s_idx = 0; s_idx < req.system.size(); ++s_idx) {
         for (std::size_t i = 0; i < req.system[s_idx].native.size(); ++i) {
-            append_omission_loss(losses, req.system[s_idx].native[i], "system[" + std::to_string(s_idx) + "].native[" + std::to_string(i) + "]", false, std::nullopt, target);
+            append_omission_loss(losses, req.system[s_idx].native[i], "system[" + std::to_string(s_idx) + "].native[" + std::to_string(i) + "]", false, std::nullopt, target, true);
         }
     }
 
@@ -1007,6 +1022,23 @@ StatusOr<std::vector<Loss>> omitted_native_request_losses(const Request& req, st
     }
 
     return losses;
+}
+
+std::optional<json::Value> openai_breakpoint_wire(const std::vector<NativeAnnotation>& native) {
+    for (const auto& ann : native) {
+        if (ann.source == NATIVE_SOURCE_OPENAI && ann.kind == NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
+            auto parsed = json::parse(ann.value);
+            if (parsed.ok()) return std::move(*parsed);
+        }
+    }
+    for (const auto& ann : native) {
+        if (ann.source == NATIVE_SOURCE_ANTHROPIC && ann.kind == NATIVE_KIND_CACHE_CONTROL) {
+            json::Value obj = json::Value::object();
+            obj.set("mode", json::Value::string("explicit"));
+            return obj;
+        }
+    }
+    return std::nullopt;
 }
 
 }  // namespace oxa::ir

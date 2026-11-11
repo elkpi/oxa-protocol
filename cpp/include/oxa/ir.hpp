@@ -460,6 +460,8 @@ struct Params {
     std::optional<std::string> reasoning_effort;
     std::optional<std::string> verbosity;
     std::optional<ResponseFormat> response_format;
+    std::optional<bool> logprobs;
+    std::optional<std::int64_t> top_logprobs;
 };
 
 struct Request {
@@ -590,6 +592,8 @@ StatusOr<NativeAnnotation> load_native_annotation(const json::Value& v);
 
 Status validate_native_request(const Request& req);
 Status validate_tool_strict(const Request& req);
+std::optional<json::Value> openai_breakpoint_wire(const std::vector<NativeAnnotation>& native);
+
 StatusOr<std::vector<Loss>> omitted_native_request_losses(const Request& req, std::string_view target);
 Status validate_citation_value(std::string_view val);
 Status validate_citation(std::string_view source, std::string_view val);

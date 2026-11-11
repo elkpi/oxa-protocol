@@ -317,6 +317,13 @@ inline std::optional<json::Value> get_block_cache_control(
             }
         }
     }
+    for (const auto& n : native) {
+        if (n.source == ir::NATIVE_SOURCE_OPENAI && n.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
+            json::Value cc = json::Value::object();
+            cc.set("type", json::Value::string("ephemeral"));
+            return cc;
+        }
+    }
     return std::nullopt;
 }
 

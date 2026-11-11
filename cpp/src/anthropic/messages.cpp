@@ -1172,15 +1172,16 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
             for (std::size_t ai = 0; ai < s.native.size(); ++ai) {
                 const auto& ann = s.native[ai];
                 if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                    std::string field = ann.omission.has_value() && !ann.omission->field.empty() ? ann.omission->field : "prompt_cache_breakpoint";
-                    std::string reason = ann.omission.has_value() && !ann.omission->reason.empty() ? ann.omission->reason : std::string(ir::LOSS_UNMAPPED_FIELD);
-                    std::string detail = ann.omission.has_value() && ann.omission->detail.has_value() ? *ann.omission->detail : std::string(ir::PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL);
-                    losses.push_back(ir::Loss{
-                        "system[" + std::to_string(i) + "].native[" + std::to_string(ai) + "]",
-                        std::move(field),
-                        std::move(reason),
-                        std::move(detail),
-                    });
+                    auto parsed = json::parse(ann.value);
+                    if (parsed.ok() && parsed->is_object()) {
+                        const std::string path = "system[" + std::to_string(i) + "].native[" + std::to_string(ai) + "]";
+                        if (parsed->find("mode")) {
+                            losses.push_back(ir::Loss{path, "mode", std::string(ir::LOSS_UNMAPPED_FIELD), "prompt_cache_breakpoint.mode is not represented by cache_control"});
+                        }
+                        if (parsed->find("ttl")) {
+                            losses.push_back(ir::Loss{path, "ttl", std::string(ir::LOSS_UNMAPPED_FIELD), "prompt_cache_breakpoint.ttl has no equivalent cache_control ttl"});
+                        }
+                    }
                 }
             }
         }
@@ -1449,15 +1450,16 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                     for (std::size_t ai = 0; ai < nats->size(); ++ai) {
                         const auto& ann = (*nats)[ai];
                         if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                            std::string field = ann.omission.has_value() && !ann.omission->field.empty() ? ann.omission->field : "prompt_cache_breakpoint";
-                            std::string reason = ann.omission.has_value() && !ann.omission->reason.empty() ? ann.omission->reason : std::string(ir::LOSS_UNMAPPED_FIELD);
-                            std::string detail = ann.omission.has_value() && ann.omission->detail.has_value() ? *ann.omission->detail : std::string(ir::PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL);
-                            losses.push_back(ir::Loss{
-                                "messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "].native[" + std::to_string(ai) + "]",
-                                std::move(field),
-                                std::move(reason),
-                                std::move(detail),
-                            });
+                            auto parsed = json::parse(ann.value);
+                            if (parsed.ok() && parsed->is_object()) {
+                                const std::string path = "messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "].native[" + std::to_string(ai) + "]";
+                                if (parsed->find("mode")) {
+                                    losses.push_back(ir::Loss{path, "mode", std::string(ir::LOSS_UNMAPPED_FIELD), "prompt_cache_breakpoint.mode is not represented by cache_control"});
+                                }
+                                if (parsed->find("ttl")) {
+                                    losses.push_back(ir::Loss{path, "ttl", std::string(ir::LOSS_UNMAPPED_FIELD), "prompt_cache_breakpoint.ttl has no equivalent cache_control ttl"});
+                                }
+                            }
                         }
                     }
                 }

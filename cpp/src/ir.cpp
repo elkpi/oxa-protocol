@@ -922,6 +922,12 @@ json::Value dump_request(const Request& r) {
         if (r.params->verbosity.has_value()) {
             p.set("verbosity", json::Value::string(*r.params->verbosity));
         }
+        if (r.params->logprobs.has_value()) {
+            p.set("logprobs", json::Value::boolean(*r.params->logprobs));
+        }
+        if (r.params->top_logprobs.has_value()) {
+            p.set("top_logprobs", json::Value::integer(*r.params->top_logprobs));
+        }
         if (r.params->response_format.has_value()) {
             const auto& rf = *r.params->response_format;
             json::Value format = json::Value::object();
@@ -1257,6 +1263,15 @@ StatusOr<Request> load_request(const json::Value& v) {
                 return invalid_argument("invalid params verbosity: " + verb);
             }
             p.verbosity = verb;
+        }
+        if ((f = params->find("logprobs")) != nullptr) {
+            if (!f->is_bool()) return invalid_argument("params logprobs must be a boolean");
+            p.logprobs = f->as_bool();
+        }
+        if ((f = params->find("top_logprobs")) != nullptr) {
+            if (!f->is_int()) return invalid_argument("params top_logprobs must be an integer");
+            if (f->as_int() < 0) return invalid_argument("params top_logprobs must be non-negative");
+            p.top_logprobs = f->as_int();
         }
         if ((f = params->find("response_format")) != nullptr) {
             if (!f->is_object()) return invalid_argument("params response_format must be an object");

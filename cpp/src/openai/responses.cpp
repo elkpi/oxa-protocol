@@ -1445,6 +1445,12 @@ static StatusOr<Conversion<ir::Request>> decode_request_unchecked(const json::Va
             }
         }
     }
+    if (const auto* tl = wire.find("top_logprobs"); tl && !tl->is_null()) {
+        if (!tl->is_int()) return invalid_argument("responses: top_logprobs must be an integer");
+        if (tl->as_int() < 0) return invalid_argument("responses: top_logprobs must be a non-negative integer");
+        params.top_logprobs = tl->as_int();
+        has_params = true;
+    }
     if (has_params) req.params = std::move(params);
 
     return Conversion<ir::Request>{std::move(req), std::move(losses)};
@@ -1712,28 +1718,20 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
         for (const auto& s : req.system) if (s.role == "developer") has_developer = true;
         bool has_breakpoint = false;
         for (const auto& s : req.system) {
-            for (const auto& ann : s.native) {
-                if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                    has_breakpoint = true;
-                    break;
-                }
+            if (ir::openai_breakpoint_wire(s.native).has_value()) {
+                has_breakpoint = true;
+                break;
             }
-            if (has_breakpoint) break;
         }
         auto system_item_content = [](const ir::SystemBlock& s) -> json::Value {
-            for (const auto& ann : s.native) {
-                if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                    auto parsed = json::parse(ann.value);
-                    if (parsed.ok()) {
-                        json::Value parts = json::Value::array();
-                        json::Value part = json::Value::object();
-                        part.set("type", json::Value::string("input_text"));
-                        part.set("text", json::Value::string(s.text));
-                        part.set("prompt_cache_breakpoint", std::move(*parsed));
-                        parts.push_back(std::move(part));
-                        return parts;
-                    }
-                }
+            if (auto pcb = ir::openai_breakpoint_wire(s.native)) {
+                json::Value parts = json::Value::array();
+                json::Value part = json::Value::object();
+                part.set("type", json::Value::string("input_text"));
+                part.set("text", json::Value::string(s.text));
+                part.set("prompt_cache_breakpoint", std::move(*pcb));
+                parts.push_back(std::move(part));
+                return parts;
             }
             return json::Value::string(s.text);
         };
@@ -2068,29 +2066,14 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                 mi.set("role", json::Value::string("user"));
                 bool has_pcb = false;
                 for (const auto* b : normal) {
-                    if (const auto* tb = std::get_if<ir::TextBlock>(b)) {
-                        for (const auto& ann : tb->native) {
-                            if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                                has_pcb = true;
-                                break;
-                            }
-                        }
-                    } else if (const auto* img = std::get_if<ir::ImageBlock>(b)) {
-                        for (const auto& ann : img->native) {
-                            if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                                has_pcb = true;
-                                break;
-                            }
-                        }
-                    } else if (const auto* doc = std::get_if<ir::DocumentBlock>(b)) {
-                        for (const auto& ann : doc->native) {
-                            if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                                has_pcb = true;
-                                break;
-                            }
-                        }
+                    const std::vector<ir::NativeAnnotation>* native = nullptr;
+                    if (const auto* tb = std::get_if<ir::TextBlock>(b)) native = &tb->native;
+                    else if (const auto* img = std::get_if<ir::ImageBlock>(b)) native = &img->native;
+                    else if (const auto* doc = std::get_if<ir::DocumentBlock>(b)) native = &doc->native;
+                    if (native && ir::openai_breakpoint_wire(*native).has_value()) {
+                        has_pcb = true;
+                        break;
                     }
-                    if (has_pcb) break;
                 }
                 if (!has_pcb && normal.size() == 1 && std::holds_alternative<ir::TextBlock>(*normal[0])) {
                     const auto& tb = std::get<ir::TextBlock>(*normal[0]);
@@ -2102,12 +2085,8 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                             json::Value part = json::Value::object();
                             part.set("type", json::Value::string("input_text"));
                             part.set("text", json::Value::string(tb->text));
-                            for (const auto& ann : tb->native) {
-                                if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                                    auto parsed = json::parse(ann.value);
-                                    if (parsed.ok()) part.set("prompt_cache_breakpoint", std::move(*parsed));
-                                    break;
-                                }
+                            if (auto pcb = ir::openai_breakpoint_wire(tb->native)) {
+                                part.set("prompt_cache_breakpoint", std::move(*pcb));
                             }
                             parts.push_back(std::move(part));
                         } else if (const auto* img = std::get_if<ir::ImageBlock>(b)) {
@@ -2119,12 +2098,8 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                             } else if (img->url.has_value()) {
                                 part.set("image_url", json::Value::string(*img->url));
                             }
-                            for (const auto& ann : img->native) {
-                                if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                                    auto parsed = json::parse(ann.value);
-                                    if (parsed.ok()) part.set("prompt_cache_breakpoint", std::move(*parsed));
-                                    break;
-                                }
+                            if (auto pcb = ir::openai_breakpoint_wire(img->native)) {
+                                part.set("prompt_cache_breakpoint", std::move(*pcb));
                             }
                             parts.push_back(std::move(part));
                         } else if (const auto* doc = std::get_if<ir::DocumentBlock>(b)) {
@@ -2137,12 +2112,8 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                             } else if (doc->data.has_value() && !doc->data->empty()) {
                                 part.set("file_data", json::Value::string(*doc->data));
                             }
-                            for (const auto& ann : doc->native) {
-                                if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                                    auto parsed = json::parse(ann.value);
-                                    if (parsed.ok()) part.set("prompt_cache_breakpoint", std::move(*parsed));
-                                    break;
-                                }
+                            if (auto pcb = ir::openai_breakpoint_wire(doc->native)) {
+                                part.set("prompt_cache_breakpoint", std::move(*pcb));
                             }
                             parts.push_back(std::move(part));
                         }
@@ -2350,6 +2321,24 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
         }
         if (has_text_val) {
             out.set("text", std::move(text_val));
+        }
+        bool send_top = p.top_logprobs.has_value();
+        if (p.logprobs.has_value()) {
+            if (*p.logprobs) {
+                if (!p.top_logprobs.has_value()) {
+                    losses.push_back(make_resp_loss(
+                        "params.logprobs", "logprobs", ir::LOSS_UNMAPPED_FIELD,
+                        "Responses has no logprobs boolean; top_logprobs is the sampling switch"));
+                }
+            } else {
+                send_top = false;
+                losses.push_back(make_resp_loss(
+                    "params.logprobs", "logprobs", ir::LOSS_UNMAPPED_FIELD,
+                    "Responses has no logprobs boolean; explicit false is dropped"));
+            }
+        }
+        if (send_top) {
+            out.set("top_logprobs", json::Value::integer(*p.top_logprobs));
         }
         if (p.stop_sequences.has_value() && !p.stop_sequences->empty()) {
             losses.push_back(make_resp_loss(
