@@ -47,6 +47,8 @@ from oxa.ir import (
     ToolResultBlock,
     ToolUseBlock,
     WebSearchCallBlock,
+    ServerToolUseBlock,
+    WebSearchToolResultBlock,
 )
 from oxa.ir import (
     ROLE_ASSISTANT as IR_ROLE_ASSISTANT,
@@ -931,6 +933,10 @@ def encode_user_content(blocks: list[Block], path: str) -> tuple[Any, list[Loss]
             if pcb is not None:
                 f_dict["prompt_cache_breakpoint"] = pcb
             parts.append(f_dict)
+        elif isinstance(block, (ServerToolUseBlock, WebSearchToolResultBlock)):
+            other_blocks += 1
+            from oxa.ir import WEB_SEARCH_HISTORY_LOSS_DETAIL
+            losses.append(loss(f"{path}[{index}]", "type", LOSS_UNSUPPORTED_SEMANTIC, WEB_SEARCH_HISTORY_LOSS_DETAIL))
         else:
             other_blocks += 1
             losses.append(
@@ -1166,6 +1172,9 @@ def encode_assistant_message(
                 "status": block.status,
                 "action": block.action,
             })
+        elif isinstance(block, (ServerToolUseBlock, WebSearchToolResultBlock)):
+            from oxa.ir import WEB_SEARCH_HISTORY_LOSS_DETAIL
+            losses.append(loss(f"{path}[{index}]", "type", LOSS_UNSUPPORTED_SEMANTIC, WEB_SEARCH_HISTORY_LOSS_DETAIL))
         elif isinstance(block, ToolUseBlock):
             dot_idx = block.name.find(".")
             call_dict = {"type": ITEM_TYPE_FUNCTION_CALL, "call_id": block.id, "arguments": block.input}

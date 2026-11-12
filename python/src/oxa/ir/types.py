@@ -21,6 +21,8 @@ from oxa.ir.constants import (
     BLOCK_TYPE_APPLY_PATCH_TOOL_USE,
     BLOCK_TYPE_APPLY_PATCH_TOOL_RESULT,
     BLOCK_TYPE_COMPACTION_ITEM,
+    BLOCK_TYPE_SERVER_TOOL_USE,
+    BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT,
     BLOCK_TYPE_WEB_SEARCH_CALL,
     BLOCK_TYPE_REFUSAL,
     BLOCK_TYPE_TOOL_REFERENCE,
@@ -306,6 +308,37 @@ class WebSearchCallBlock:
 
 
 @dataclass(frozen=True, slots=True)
+class ServerToolUseBlock:
+    """Anthropic provider-hosted web_search call in history (spec/12 N-AN-23)."""
+
+    id: str
+    input: str
+    name: str = "web_search"
+    caller: str | None = None
+    native: tuple[NativeAnnotation, ...] = ()
+    type: str = field(default=BLOCK_TYPE_SERVER_TOOL_USE, init=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.native, tuple):
+            object.__setattr__(self, "native", _normalize_native(self.native))
+
+
+@dataclass(frozen=True, slots=True)
+class WebSearchToolResultBlock:
+    """Anthropic web_search result paired with a ServerToolUseBlock (spec/12 N-AN-23)."""
+
+    tool_use_id: str
+    content: str
+    caller: str | None = None
+    native: tuple[NativeAnnotation, ...] = ()
+    type: str = field(default=BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT, init=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.native, tuple):
+            object.__setattr__(self, "native", _normalize_native(self.native))
+
+
+@dataclass(frozen=True, slots=True)
 class RefusalBlock:
     """A model refusal content block (spec/01 §3.4, since 2.5.0)."""
 
@@ -362,6 +395,8 @@ Block = (
     | WebSearchCallBlock
     | RefusalBlock
     | CompactionItemBlock
+    | ServerToolUseBlock
+    | WebSearchToolResultBlock
 )
 SystemBlock = TextBlock
 

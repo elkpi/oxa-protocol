@@ -44,6 +44,8 @@ from oxa.ir import (
     ToolUseBlock,
     WebSearchCallBlock,
     CompactionItemBlock,
+    ServerToolUseBlock,
+    WebSearchToolResultBlock,
 )
 from oxa.ir import (
     Message as IrMessage,
@@ -512,6 +514,9 @@ def encode_user_content(blocks: list[Block], path: str) -> tuple[Any, list[Loss]
                     "Anthropic compaction block cannot be represented on the target face",
                 )
             )
+        elif isinstance(block, (ServerToolUseBlock, WebSearchToolResultBlock)):
+            from oxa.ir import WEB_SEARCH_HISTORY_LOSS_DETAIL
+            losses.append(loss(f"{path}[{index}]", "type", LOSS_UNSUPPORTED_SEMANTIC, WEB_SEARCH_HISTORY_LOSS_DETAIL))
         elif isinstance(block, EncryptedContentBlock):
             losses.append(
                 loss(
@@ -703,6 +708,9 @@ def encode_assistant_message(blocks: list[Block], path: str) -> tuple[dict[str, 
         elif isinstance(block, CompactionItemBlock):
             from oxa.ir import COMPACTION_ITEM_LOSS_DETAIL
             losses.append(loss(f"{path}[{index}]", "type", LOSS_UNSUPPORTED_SEMANTIC, COMPACTION_ITEM_LOSS_DETAIL))
+        elif isinstance(block, (ServerToolUseBlock, WebSearchToolResultBlock)):
+            from oxa.ir import WEB_SEARCH_HISTORY_LOSS_DETAIL
+            losses.append(loss(f"{path}[{index}]", "type", LOSS_UNSUPPORTED_SEMANTIC, WEB_SEARCH_HISTORY_LOSS_DETAIL))
         elif isinstance(block, (CustomToolResultBlock, ApplyPatchToolUseBlock, ApplyPatchToolResultBlock)):
             losses.append(loss(f"{path}[{index}]", "type", LOSS_UNSUPPORTED_SEMANTIC, "unsupported block in assistant message"))
         elif isinstance(block, ImageBlock):

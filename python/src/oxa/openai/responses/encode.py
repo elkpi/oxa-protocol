@@ -36,6 +36,8 @@ from oxa.ir import (
     RedactedThinkingBlock,
     ToolUseBlock,
     CompactionItemBlock,
+    ServerToolUseBlock,
+    WebSearchToolResultBlock,
     WebSearchCallBlock,
     RefusalBlock,
     ToolReferenceBlock,
@@ -653,6 +655,9 @@ def encode_response(
                 item["output"] = block.output
             calls.append(item)
             apco_index += 1
+        elif isinstance(block, (ServerToolUseBlock, WebSearchToolResultBlock)):
+            from oxa.ir import WEB_SEARCH_HISTORY_LOSS_DETAIL
+            losses.append(loss(f"content[{index}]", "type", LOSS_UNSUPPORTED_SEMANTIC, WEB_SEARCH_HISTORY_LOSS_DETAIL))
         elif isinstance(block, CompactionItemBlock):
             if not block.encrypted_content:
                 raise ValueError("responses: content encrypted_content is required")

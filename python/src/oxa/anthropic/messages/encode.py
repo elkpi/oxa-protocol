@@ -80,6 +80,8 @@ from oxa.ir import (
     ToolUseBlock,
     WebSearchCallBlock,
     CompactionItemBlock,
+    ServerToolUseBlock,
+    WebSearchToolResultBlock,
 )
 from oxa.ir import (
     ROLE_ASSISTANT as IR_ROLE_ASSISTANT,
@@ -528,6 +530,33 @@ def encode_request_block(
         if not mapped:
             return None, losses, False
 
+    elif isinstance(block, ServerToolUseBlock):
+        if not block.id:
+            raise ValueError(f"anthropic: {path}.id is required")
+        if block.name != "web_search":
+            raise ValueError(f'anthropic: {path}.name must be "web_search"')
+        if not block.input:
+            raise ValueError(f"anthropic: {path}.input is required")
+        encoded = {
+            "type": "server_tool_use",
+            "id": block.id,
+            "name": "web_search",
+            "input": json.loads(block.input),
+        }
+        if block.caller is not None:
+            encoded["caller"] = json.loads(block.caller)
+    elif isinstance(block, WebSearchToolResultBlock):
+        if not block.tool_use_id:
+            raise ValueError(f"anthropic: {path}.tool_use_id is required")
+        if not block.content:
+            raise ValueError(f"anthropic: {path}.content is required")
+        encoded = {
+            "type": "web_search_tool_result",
+            "tool_use_id": block.tool_use_id,
+            "content": json.loads(block.content),
+        }
+        if block.caller is not None:
+            encoded["caller"] = json.loads(block.caller)
     elif isinstance(block, WebSearchCallBlock):
         return None, [loss(path, "type", LOSS_UNSUPPORTED_SEMANTIC, "Responses web_search_call has no Anthropic equivalent")], False
     elif isinstance(block, CompactionItemBlock):
@@ -1051,6 +1080,35 @@ def encode_response_block(
             [],
             True,
         )
+    if isinstance(block, ServerToolUseBlock):
+        if not block.id:
+            raise ValueError(f"anthropic: {path}.id is required")
+        if block.name != "web_search":
+            raise ValueError(f'anthropic: {path}.name must be "web_search"')
+        if not block.input:
+            raise ValueError(f"anthropic: {path}.input is required")
+        encoded = {
+            "type": "server_tool_use",
+            "id": block.id,
+            "name": "web_search",
+            "input": json.loads(block.input),
+        }
+        if block.caller is not None:
+            encoded["caller"] = json.loads(block.caller)
+        return encoded, [], True
+    if isinstance(block, WebSearchToolResultBlock):
+        if not block.tool_use_id:
+            raise ValueError(f"anthropic: {path}.tool_use_id is required")
+        if not block.content:
+            raise ValueError(f"anthropic: {path}.content is required")
+        encoded = {
+            "type": "web_search_tool_result",
+            "tool_use_id": block.tool_use_id,
+            "content": json.loads(block.content),
+        }
+        if block.caller is not None:
+            encoded["caller"] = json.loads(block.caller)
+        return encoded, [], True
     if isinstance(block, (CustomToolResultBlock, ApplyPatchToolUseBlock, ApplyPatchToolResultBlock)):
         return None, [loss(path, "type", LOSS_UNSUPPORTED_SEMANTIC, "custom tools have no Anthropic mapping")], False
     return (

@@ -51,6 +51,8 @@ from oxa.ir import (
     ToolReferenceBlock,
     ToolResultBlock,
     ToolUseBlock,
+    ServerToolUseBlock,
+    WebSearchToolResultBlock,
 )
 from oxa.ir.native import (
     DOCUMENT_CITATIONS_LOSS_DETAIL,
@@ -602,6 +604,43 @@ def decode_block(
             if not isinstance(tool_name, str) or not tool_name:
                 raise ValueError(f"anthropic: {path}.tool_name is required")
         block = ToolReferenceBlock(tool_name=tool_name)
+
+    elif kind == "server_tool_use":
+        ident = wire.get("id")
+        if not isinstance(ident, str) or not ident:
+            raise ValueError(f"anthropic: {path}.id is required")
+        name = wire.get("name")
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"anthropic: {path}.name is required")
+        if name != "web_search":
+            losses.append(loss(path, "type", LOSS_UNSUPPORTED_SEMANTIC, f'Anthropic server tool "{name}" has no IR equivalent'))
+            return [], losses, False
+        raw_input = wire.get("input")
+        if not isinstance(raw_input, dict):
+            raise ValueError(f"anthropic: {path}.input must be a JSON object")
+        caller = wire.get("caller")
+        if caller is not None and not isinstance(caller, dict):
+            raise ValueError(f"anthropic: {path}.caller must be a JSON object")
+        block = ServerToolUseBlock(
+            id=ident,
+            input=json.dumps(raw_input, separators=(",", ":"), sort_keys=True),
+            caller=None if caller is None else json.dumps(caller, separators=(",", ":"), sort_keys=True),
+        )
+    elif kind == "web_search_tool_result":
+        tool_use_id = wire.get("tool_use_id")
+        if not isinstance(tool_use_id, str) or not tool_use_id:
+            raise ValueError(f"anthropic: {path}.tool_use_id is required")
+        content = wire.get("content")
+        if not isinstance(content, (list, dict)):
+            raise ValueError(f"anthropic: {path}.content must be a JSON array or object")
+        caller = wire.get("caller")
+        if caller is not None and not isinstance(caller, dict):
+            raise ValueError(f"anthropic: {path}.caller must be a JSON object")
+        block = WebSearchToolResultBlock(
+            tool_use_id=tool_use_id,
+            content=json.dumps(content, separators=(",", ":"), sort_keys=True),
+            caller=None if caller is None else json.dumps(caller, separators=(",", ":"), sort_keys=True),
+        )
 
     else:
         losses.append(

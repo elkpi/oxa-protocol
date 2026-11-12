@@ -31,6 +31,8 @@ BLOCK_TYPE_APPLY_PATCH_TOOL_USE: Final = "apply_patch_tool_use"
 BLOCK_TYPE_APPLY_PATCH_TOOL_RESULT: Final = "apply_patch_tool_result"
 BLOCK_TYPE_WEB_SEARCH_CALL: Final = "web_search_call"
 BLOCK_TYPE_COMPACTION_ITEM: Final = "compaction_item"
+BLOCK_TYPE_SERVER_TOOL_USE: Final = "server_tool_use"
+BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT: Final = "web_search_tool_result"
 BLOCK_TYPE_REFUSAL: Final = "refusal"
 BLOCK_TYPE_TOOL_REFERENCE: Final = "tool_reference"
 TOOL_TYPE_APPLY_PATCH: Final = "apply_patch"
@@ -50,6 +52,8 @@ BlockType = Literal[
     "apply_patch_tool_result",
     "web_search_call",
     "compaction_item",
+    "server_tool_use",
+    "web_search_tool_result",
     "refusal",
     "tool_reference",
 ]

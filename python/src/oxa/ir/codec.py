@@ -12,6 +12,8 @@ from oxa.ir.constants import (
     BLOCK_TYPE_APPLY_PATCH_TOOL_USE,
     BLOCK_TYPE_APPLY_PATCH_TOOL_RESULT,
     BLOCK_TYPE_COMPACTION_ITEM,
+    BLOCK_TYPE_SERVER_TOOL_USE,
+    BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT,
     BLOCK_TYPE_WEB_SEARCH_CALL,
     BLOCK_TYPE_REFUSAL,
     BLOCK_TYPE_DOCUMENT,
@@ -55,6 +57,8 @@ from oxa.ir.types import (
     ApplyPatchToolUseBlock,
     CompactionItem,
     CompactionItemBlock,
+    ServerToolUseBlock,
+    WebSearchToolResultBlock,
     WebSearchCallBlock,
     ApplyPatchUpdateFileOperation,
     Block,
@@ -458,6 +462,10 @@ def dump_block(block: Block) -> dict[str, Any]:
         return res
     if isinstance(block, CompactionItemBlock):
         return _dump_compaction_item(block)
+    if isinstance(block, ServerToolUseBlock):
+        return _dump_server_tool_use(block)
+    if isinstance(block, WebSearchToolResultBlock):
+        return _dump_web_search_tool_result(block)
     if isinstance(block, WebSearchCallBlock):
         _validate_web_search(block.id, block.status, block.action)
         from oxa.ir.web_search import validate_web_search_extra
@@ -621,6 +629,10 @@ def dump_request_block(block: Block) -> dict[str, Any]:
             out["output"] = block.output
     elif isinstance(block, CompactionItemBlock):
         out = _dump_compaction_item(block)
+    elif isinstance(block, ServerToolUseBlock):
+        out = _dump_server_tool_use(block)
+    elif isinstance(block, WebSearchToolResultBlock):
+        out = _dump_web_search_tool_result(block)
     elif isinstance(block, WebSearchCallBlock):
         _validate_web_search(block.id, block.status, block.action)
         from oxa.ir.web_search import validate_web_search_extra
@@ -786,6 +798,10 @@ def load_block(data: dict[str, Any]) -> Block:
         )
     if kind == BLOCK_TYPE_COMPACTION_ITEM:
         return _load_compaction_item(data)
+    if kind == BLOCK_TYPE_SERVER_TOOL_USE:
+        return _load_server_tool_use(data, ())
+    if kind == BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT:
+        return _load_web_search_tool_result(data, ())
     if kind == BLOCK_TYPE_WEB_SEARCH_CALL:
         return load_web_search_block(data)
     if kind == BLOCK_TYPE_REFUSAL:
@@ -919,6 +935,10 @@ def load_request_block(data: dict[str, Any]) -> Block:
         if native:
             raise CodecError("compaction_item does not support native annotations")
         return _load_compaction_item(data)
+    if kind == BLOCK_TYPE_SERVER_TOOL_USE:
+        return _load_server_tool_use(data, native)
+    if kind == BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT:
+        return _load_web_search_tool_result(data, native)
     if kind == BLOCK_TYPE_WEB_SEARCH_CALL:
         return load_web_search_block(data)
     if kind == BLOCK_TYPE_REFUSAL:
@@ -955,6 +975,67 @@ def _load_compaction_item(data: dict[str, Any]) -> CompactionItemBlock:
     if not isinstance(ident, str) or not isinstance(created, str):
         raise CodecError("ir: compaction_item id and created_by must be strings")
     return CompactionItemBlock(encrypted_content=cipher, id=ident, created_by=created)
+
+
+def _dump_server_tool_use(block: ServerToolUseBlock) -> dict[str, Any]:
+    if not block.id:
+        raise CodecError("ir: server_tool_use requires id")
+    if block.name != "web_search":
+        raise CodecError('ir: server_tool_use name must be "web_search"')
+    if not isinstance(block.input, str) or not block.input:
+        raise CodecError("ir: server_tool_use requires input")
+    out: dict[str, Any] = {
+        "type": BLOCK_TYPE_SERVER_TOOL_USE,
+        "id": block.id,
+        "name": "web_search",
+        "input": block.input,
+    }
+    if block.caller is not None:
+        out["caller"] = block.caller
+    return out
+
+
+def _dump_web_search_tool_result(block: WebSearchToolResultBlock) -> dict[str, Any]:
+    if not block.tool_use_id:
+        raise CodecError("ir: web_search_tool_result requires tool_use_id")
+    if not isinstance(block.content, str) or not block.content:
+        raise CodecError("ir: web_search_tool_result requires content")
+    out: dict[str, Any] = {
+        "type": BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT,
+        "tool_use_id": block.tool_use_id,
+        "content": block.content,
+    }
+    if block.caller is not None:
+        out["caller"] = block.caller
+    return out
+
+
+def _load_server_tool_use(data: dict[str, Any], native: tuple[NativeAnnotation, ...]) -> ServerToolUseBlock:
+    ident = data.get("id")
+    if not isinstance(ident, str) or not ident:
+        raise CodecError("ir: server_tool_use requires id")
+    if data.get("name") != "web_search":
+        raise CodecError('ir: server_tool_use name must be "web_search"')
+    value = data.get("input")
+    if not isinstance(value, str) or not value:
+        raise CodecError("ir: server_tool_use requires input")
+    caller = data.get("caller")
+    if caller is not None and not isinstance(caller, str):
+        raise CodecError("ir: server_tool_use caller must be a string")
+    return ServerToolUseBlock(id=ident, input=value, caller=caller, native=native)
+
+
+def _load_web_search_tool_result(data: dict[str, Any], native: tuple[NativeAnnotation, ...]) -> WebSearchToolResultBlock:
+    tool_use_id = data.get("tool_use_id")
+    if not isinstance(tool_use_id, str) or not tool_use_id:
+        raise CodecError("ir: web_search_tool_result requires tool_use_id")
+    content = data.get("content")
+    if not isinstance(content, str) or not content:
+        raise CodecError("ir: web_search_tool_result requires content")
+    caller = data.get("caller")
+    if caller is not None and not isinstance(caller, str):
+        raise CodecError("ir: web_search_tool_result caller must be a string")
+    return WebSearchToolResultBlock(tool_use_id=tool_use_id, content=content, caller=caller, native=native)
 
 
 def _dump_compaction_checkpoint(item: CompactionItem) -> dict[str, Any]:

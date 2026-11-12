@@ -47,6 +47,10 @@ DEFER_LOADING_LOSS_DETAIL = (
 )
 EAGER_INPUT_STREAMING_LOSS_DETAIL = "target does not preserve eager tool input streaming semantics"
 STREAM_OPTIONS_LOSS_DETAIL = "target does not emit the requested final usage chunk"
+WEB_SEARCH_HISTORY_LOSS_DETAIL = (
+    "Anthropic web_search history cannot be represented on the target face"
+)
+
 RESPONSES_CONTEXT_MANAGEMENT_LOSS_DETAIL = (
     "Responses context_management has no equivalent on the target face"
 )
