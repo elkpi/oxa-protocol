@@ -302,6 +302,17 @@ struct BlockValidator {
         }
         return ok_status();
     }
+    Status operator()(const ServerToolUseBlock& b) const {
+        if (b.id.empty()) return invalid_argument("ir: " + std::string(path) + ": server_tool_use requires id");
+        if (b.name != "web_search") return invalid_argument("ir: " + std::string(path) + ": server_tool_use name must be \"web_search\"");
+        if (b.input.empty()) return invalid_argument("ir: " + std::string(path) + ": server_tool_use requires input");
+        return validate_annotations(b.native, host, path);
+    }
+    Status operator()(const WebSearchToolResultBlock& b) const {
+        if (b.tool_use_id.empty()) return invalid_argument("ir: " + std::string(path) + ": web_search_tool_result requires tool_use_id");
+        if (b.content.empty()) return invalid_argument("ir: " + std::string(path) + ": web_search_tool_result requires content");
+        return validate_annotations(b.native, host, path);
+    }
     Status operator()(const ToolResultBlock& b) const {
         auto st = validate_annotations(b.native, host, path);
         if (!st.ok()) return st;
@@ -724,6 +735,16 @@ struct BlockOmissionCollector {
     void operator()(const CompactionItemBlock&) const {
         // Whole-block drop on non-Responses faces; annotations are absent and
         // the cross-face loss is reported by the encoder.
+    }
+    void operator()(const ServerToolUseBlock& b) const {
+        for (std::size_t i = 0; i < b.native.size(); ++i) {
+            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target);
+        }
+    }
+    void operator()(const WebSearchToolResultBlock& b) const {
+        for (std::size_t i = 0; i < b.native.size(); ++i) {
+            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target);
+        }
     }
     void operator()(const ToolResultBlock& b) const {
         for (std::size_t i = 0; i < b.native.size(); ++i) {

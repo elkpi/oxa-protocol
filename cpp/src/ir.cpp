@@ -340,6 +340,26 @@ json::Value dump_block_impl(const Block& b, F&& recurse) {
             out.set("output", std::move(output)); }
         return out;
     }
+    if (const auto* st = std::get_if<ServerToolUseBlock>(&b)) {
+        if (st->id.empty()) throw std::invalid_argument("ir: server_tool_use requires id");
+        if (st->name != "web_search") throw std::invalid_argument("ir: server_tool_use name must be \"web_search\"");
+        if (st->input.empty()) throw std::invalid_argument("ir: server_tool_use requires input");
+        out.set("type", json::Value::string(std::string(BLOCK_TYPE_SERVER_TOOL_USE)));
+        out.set("id", json::Value::string(st->id));
+        out.set("name", json::Value::string(st->name));
+        out.set("input", json::Value::string(st->input));
+        if (st->caller) out.set("caller", json::Value::string(*st->caller));
+        return out;
+    }
+    if (const auto* wr = std::get_if<WebSearchToolResultBlock>(&b)) {
+        if (wr->tool_use_id.empty()) throw std::invalid_argument("ir: web_search_tool_result requires tool_use_id");
+        if (wr->content.empty()) throw std::invalid_argument("ir: web_search_tool_result requires content");
+        out.set("type", json::Value::string(std::string(BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT)));
+        out.set("tool_use_id", json::Value::string(wr->tool_use_id));
+        out.set("content", json::Value::string(wr->content));
+        if (wr->caller) out.set("caller", json::Value::string(*wr->caller));
+        return out;
+    }
     if (const auto* ci = std::get_if<CompactionItemBlock>(&b)) {
         if (ci->encrypted_content.empty()) throw std::invalid_argument("ir: compaction_item encrypted_content is required");
         out.set("type", json::Value::string(std::string(BLOCK_TYPE_COMPACTION_ITEM)));
@@ -478,6 +498,8 @@ json::Value dump_request_block(const Block& b) {
     const auto* nat = std::visit([](const auto& val) -> const std::vector<NativeAnnotation>* {
         if constexpr (std::is_same_v<std::decay_t<decltype(val)>, WebSearchCallBlock> ||
                       std::is_same_v<std::decay_t<decltype(val)>, CompactionItemBlock>) return nullptr;
+        else if constexpr (std::is_same_v<std::decay_t<decltype(val)>, ServerToolUseBlock> ||
+                           std::is_same_v<std::decay_t<decltype(val)>, WebSearchToolResultBlock>) return &val.native;
         else return &val.native;
     }, b);
     if (nat != nullptr && !nat->empty()) {
@@ -710,6 +732,39 @@ StatusOr<Block> load_block_impl(const json::Value& v, Recurse&& recurse, std::ve
         if (has(v, "category")) {
             OXA_ASSIGN_OR_RETURN(std::string category, require_string(v, "category", "refusal block"));
             block.category = std::move(category);
+        }
+        return Block(std::move(block));
+    }
+    if (kind == BLOCK_TYPE_SERVER_TOOL_USE) {
+        OXA_ASSIGN_OR_RETURN(std::string id, require_string(v, "id", "server_tool_use block"));
+        if (id.empty()) return invalid_argument("ir: server_tool_use requires id");
+        OXA_ASSIGN_OR_RETURN(std::string name, require_string(v, "name", "server_tool_use block"));
+        if (name != "web_search") return invalid_argument("ir: server_tool_use name must be \"web_search\"");
+        OXA_ASSIGN_OR_RETURN(std::string input, require_string(v, "input", "server_tool_use block"));
+        if (input.empty()) return invalid_argument("ir: server_tool_use requires input");
+        ServerToolUseBlock block;
+        block.id = std::move(id);
+        block.name = std::move(name);
+        block.input = std::move(input);
+        block.native = std::move(native);
+        if (const auto* caller = v.find("caller")) {
+            if (!caller->is_string()) return invalid_argument("server_tool_use caller must be a string");
+            block.caller = caller->as_string();
+        }
+        return Block(std::move(block));
+    }
+    if (kind == BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT) {
+        OXA_ASSIGN_OR_RETURN(std::string tool_use_id, require_string(v, "tool_use_id", "web_search_tool_result block"));
+        if (tool_use_id.empty()) return invalid_argument("ir: web_search_tool_result requires tool_use_id");
+        OXA_ASSIGN_OR_RETURN(std::string content, require_string(v, "content", "web_search_tool_result block"));
+        if (content.empty()) return invalid_argument("ir: web_search_tool_result requires content");
+        WebSearchToolResultBlock block;
+        block.tool_use_id = std::move(tool_use_id);
+        block.content = std::move(content);
+        block.native = std::move(native);
+        if (const auto* caller = v.find("caller")) {
+            if (!caller->is_string()) return invalid_argument("web_search_tool_result caller must be a string");
+            block.caller = caller->as_string();
         }
         return Block(std::move(block));
     }

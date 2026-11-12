@@ -531,5 +531,20 @@ function blockDocument(block: Block): JsonObject {
           ? {}
           : { created_by: block.created_by }),
       };
+    case "server_tool_use":
+      return {
+        type: "server_tool_use",
+        id: block.id,
+        name: block.name,
+        input: block.input,
+        ...(block.caller === undefined ? {} : { caller: block.caller }),
+      };
+    case "web_search_tool_result":
+      return {
+        type: "web_search_tool_result",
+        tool_use_id: block.tool_use_id,
+        content: block.content,
+        ...(block.caller === undefined ? {} : { caller: block.caller }),
+      };
   }
 }

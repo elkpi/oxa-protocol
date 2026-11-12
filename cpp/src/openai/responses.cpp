@@ -2054,6 +2054,11 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                         "type", ir::LOSS_UNSUPPORTED_SEMANTIC,
                         "this IR block cannot be rendered in a Responses item"));
                     normal.push_back(&b);
+                } else if (std::holds_alternative<ir::ServerToolUseBlock>(b) || std::holds_alternative<ir::WebSearchToolResultBlock>(b)) {
+                    losses.push_back(make_resp_loss(
+                        "messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "]",
+                        "type", ir::LOSS_UNSUPPORTED_SEMANTIC,
+                        std::string(ir::WEB_SEARCH_HISTORY_LOSS_DETAIL)));
                 } else {
                     if (const auto* utb = std::get_if<ir::TextBlock>(&b);
                         utb && utb->citations.has_value() && !utb->citations->empty()) {
@@ -2283,6 +2288,11 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                         "messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "]",
                         "type", ir::LOSS_UNSUPPORTED_SEMANTIC,
                         std::string(ir::COMPACTION_ITEM_LOSS_DETAIL)));
+                } else if (std::holds_alternative<ir::ServerToolUseBlock>(b) || std::holds_alternative<ir::WebSearchToolResultBlock>(b)) {
+                    losses.push_back(make_resp_loss(
+                        "messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "]",
+                        "type", ir::LOSS_UNSUPPORTED_SEMANTIC,
+                        std::string(ir::WEB_SEARCH_HISTORY_LOSS_DETAIL)));
                 } else if (const auto* ws = std::get_if<ir::WebSearchCallBlock>(&b)) {
                     OXA_ASSIGN_OR_RETURN(auto item, encode_web_search_item(*ws, "messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "]"));
                     fc_items.push_back(std::move(item));
@@ -2346,7 +2356,7 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                 mi.set("role", json::Value::string("assistant"));
                 mi.set("content", std::move(assistant_parts));
                 items.push_back(std::move(mi));
-            } else if (has_text || (!has_reasoning && fc_items.empty())) {
+            } else if (has_text || (m.content.empty() && !has_reasoning && fc_items.empty())) {
                 json::Value mi = json::Value::object();
                 mi.set("role", json::Value::string("assistant"));
                 mi.set("content", json::Value::string(std::move(a_txt)));
@@ -2856,6 +2866,10 @@ StatusOr<Conversion<json::Value>> encode_response(const ir::Response& resp,
             if (!ci->id.empty()) item.set("id", json::Value::string(ci->id));
             if (!ci->created_by.empty()) item.set("created_by", json::Value::string(ci->created_by));
             compaction_items.push_back(std::move(item));
+        } else if (std::holds_alternative<ir::ServerToolUseBlock>(b) || std::holds_alternative<ir::WebSearchToolResultBlock>(b)) {
+            losses.push_back(make_resp_loss(
+                "content[" + std::to_string(i) + "]", "type", ir::LOSS_UNSUPPORTED_SEMANTIC,
+                std::string(ir::WEB_SEARCH_HISTORY_LOSS_DETAIL)));
         } else if (const auto* ws = std::get_if<ir::WebSearchCallBlock>(&b)) {
             OXA_ASSIGN_OR_RETURN(auto item, encode_web_search_item(*ws, "content[" + std::to_string(i) + "]"));
             calls.push_back(std::move(item));

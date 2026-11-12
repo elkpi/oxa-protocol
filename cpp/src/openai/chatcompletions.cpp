@@ -1113,6 +1113,11 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                     }
                 } else if (std::holds_alternative<ir::WebSearchCallBlock>(b)) {
                     losses.push_back(make_cc_loss("messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "]", "type", ir::LOSS_UNSUPPORTED_SEMANTIC, "Responses web_search_call has no Chat Completions equivalent"));
+                } else if (std::holds_alternative<ir::ServerToolUseBlock>(b) || std::holds_alternative<ir::WebSearchToolResultBlock>(b)) {
+                    losses.push_back(make_cc_loss(
+                        "messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "]",
+                        "type", ir::LOSS_UNSUPPORTED_SEMANTIC,
+                        std::string(ir::WEB_SEARCH_HISTORY_LOSS_DETAIL)));
                 } else if (std::holds_alternative<ir::EncryptedContentBlock>(b)) {
                     losses.push_back(make_cc_loss(
                         "messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "]",
@@ -1250,6 +1255,11 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                     }
                 } else if (std::holds_alternative<ir::WebSearchCallBlock>(b)) {
                     losses.push_back(make_cc_loss("messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "]", "type", ir::LOSS_UNSUPPORTED_SEMANTIC, "Responses web_search_call has no Chat Completions equivalent"));
+                } else if (std::holds_alternative<ir::ServerToolUseBlock>(b) || std::holds_alternative<ir::WebSearchToolResultBlock>(b)) {
+                    losses.push_back(make_cc_loss(
+                        "messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "]",
+                        "type", ir::LOSS_UNSUPPORTED_SEMANTIC,
+                        std::string(ir::WEB_SEARCH_HISTORY_LOSS_DETAIL)));
                 } else if (std::holds_alternative<ir::EncryptedContentBlock>(b)) {
                     losses.push_back(make_cc_loss(
                         "messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "]",
@@ -1760,6 +1770,9 @@ StatusOr<Conversion<json::Value>> encode_response(const ir::Response& resp,
         } else if (std::holds_alternative<ir::CompactionItemBlock>(b)) {
             losses.push_back(make_cc_loss("content[" + std::to_string(i) + "]", "type",
                 ir::LOSS_UNSUPPORTED_SEMANTIC, std::string(ir::COMPACTION_ITEM_LOSS_DETAIL)));
+        } else if (std::holds_alternative<ir::ServerToolUseBlock>(b) || std::holds_alternative<ir::WebSearchToolResultBlock>(b)) {
+            losses.push_back(make_cc_loss("content[" + std::to_string(i) + "]", "type",
+                ir::LOSS_UNSUPPORTED_SEMANTIC, std::string(ir::WEB_SEARCH_HISTORY_LOSS_DETAIL)));
         } else {
             losses.push_back(make_cc_loss(
                 "content[" + std::to_string(i) + "]", "content", ir::LOSS_UNSUPPORTED_SEMANTIC,

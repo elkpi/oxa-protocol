@@ -25,6 +25,8 @@ inline constexpr std::string_view BLOCK_TYPE_DOCUMENT = "document";
 inline constexpr std::string_view BLOCK_TYPE_TOOL_USE = "tool_use";
 inline constexpr std::string_view BLOCK_TYPE_TOOL_RESULT = "tool_result";
 inline constexpr std::string_view BLOCK_TYPE_TOOL_REFERENCE = "tool_reference";
+inline constexpr std::string_view BLOCK_TYPE_SERVER_TOOL_USE = "server_tool_use";
+inline constexpr std::string_view BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT = "web_search_tool_result";
 
 inline constexpr std::string_view SOURCE_TYPE_BASE64 = "base64";
 inline constexpr std::string_view SOURCE_TYPE_URL = "url";

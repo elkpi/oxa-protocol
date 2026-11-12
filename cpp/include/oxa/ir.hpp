@@ -74,6 +74,9 @@ inline constexpr std::string_view PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL =
 
 // Cross-face omission text for a Responses compaction checkpoint (spec/11
 // N-R-22). It MUST NOT contain the ciphertext.
+inline constexpr std::string_view WEB_SEARCH_HISTORY_LOSS_DETAIL =
+    "Anthropic web_search history cannot be represented on the target face";
+
 inline constexpr std::string_view COMPACTION_ITEM_LOSS_DETAIL =
     "Responses compaction item cannot be represented on the target face";
 
@@ -106,6 +109,8 @@ inline constexpr std::string_view BLOCK_TYPE_IMAGE = "image";
 inline constexpr std::string_view BLOCK_TYPE_DOCUMENT = "document";
 inline constexpr std::string_view BLOCK_TYPE_WEB_SEARCH_CALL = "web_search_call";
 inline constexpr std::string_view BLOCK_TYPE_COMPACTION_ITEM = "compaction_item";
+inline constexpr std::string_view BLOCK_TYPE_SERVER_TOOL_USE = "server_tool_use";
+inline constexpr std::string_view BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT = "web_search_tool_result";
 inline constexpr std::string_view BLOCK_TYPE_TOOL_USE = "tool_use";
 inline constexpr std::string_view BLOCK_TYPE_TOOL_RESULT = "tool_result";
 inline constexpr std::string_view BLOCK_TYPE_CUSTOM_TOOL_USE = "custom_tool_use";
@@ -403,6 +408,23 @@ struct CompactionItemBlock {
     std::string created_by;
 };
 
+// Anthropic provider-hosted web_search history (spec/12 N-AN-23). `input`,
+// `content`, and `caller` are canonical compact JSON text and stay opaque.
+struct ServerToolUseBlock {
+    std::string id;
+    std::string name = "web_search";
+    std::string input;
+    std::optional<std::string> caller;
+    std::vector<NativeAnnotation> native;
+};
+
+struct WebSearchToolResultBlock {
+    std::string tool_use_id;
+    std::string content;
+    std::optional<std::string> caller;
+    std::vector<NativeAnnotation> native;
+};
+
 struct RefusalBlock {
     std::string refusal;
     std::optional<std::string> category;
@@ -426,7 +448,7 @@ using Block = std::variant<TextBlock, ThinkingBlock, RedactedThinkingBlock, Encr
                            ToolUseBlock, ToolResultBlock,
                            CustomToolUseBlock, CustomToolResultBlock,
                            ApplyPatchToolUseBlock, ApplyPatchToolResultBlock, WebSearchCallBlock, RefusalBlock, ToolReferenceBlock, CompactionBlock,
-                           CompactionItemBlock>;
+                           CompactionItemBlock, ServerToolUseBlock, WebSearchToolResultBlock>;
 
 struct BlockHolder {
     Block block;
@@ -621,6 +643,16 @@ StatusOr<NativeAnnotation> load_native_annotation(const json::Value& v);
 Status validate_native_request(const Request& req);
 Status validate_tool_strict(const Request& req);
 std::optional<json::Value> openai_breakpoint_wire(const std::vector<NativeAnnotation>& native);
+
+// ir_text_value decodes an IR string token (a JSON string literal) into the
+// text it carries. Used for INV-1 opaque JSON text fields.
+inline std::string ir_text_value(const std::string& token) {
+    if (token.size() >= 2 && token.front() == '"' && token.back() == '"') {
+        auto parsed = json::parse(token);
+        if (parsed.ok() && parsed->is_string()) return parsed->as_string();
+    }
+    return token;
+}
 
 StatusOr<std::vector<Loss>> omitted_native_request_losses(const Request& req, std::string_view target);
 Status validate_citation_value(std::string_view val);
