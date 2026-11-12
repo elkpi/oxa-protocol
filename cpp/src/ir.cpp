@@ -271,6 +271,7 @@ json::Value dump_block_impl(const Block& b, F&& recurse) {
             }
             out.set("citations", std::move(cites));
         }
+        if (t->logprobs.has_value()) out.set("logprobs", json::Value::string(*t->logprobs));
         return out;
     }
     if (const auto* rt = std::get_if<RedactedThinkingBlock>(&b)) {
@@ -512,6 +513,10 @@ StatusOr<Block> load_block_impl(const json::Value& v, Recurse&& recurse, std::ve
     if (kind == BLOCK_TYPE_TEXT) {
         OXA_ASSIGN_OR_RETURN(std::string txt, require_string(v, "text", "text block"));
         TextBlock block{std::move(txt), std::move(native)};
+        if (const auto* lp = v.find("logprobs")) {
+            if (!lp->is_string()) return invalid_argument("text block logprobs must be a string");
+            block.logprobs = lp->as_string();
+        }
         if (const auto* cites_val = v.find("citations")) {
             if (!cites_val->is_array()) {
                 return invalid_argument("text block citations must be an array");

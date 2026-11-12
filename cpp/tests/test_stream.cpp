@@ -141,7 +141,7 @@ int main() {
             CHECK(r->executed == expected);
         };
 
-        // Pair counts across the ten vectors: one multi-delta-text vector per
+        // Pair counts across the twelve vectors: one multi-delta-text vector per
         // ordered pair, plus two focused Chat Completions -> Anthropic vectors
         // (interleaved tool-argument fragments, usage-only terminal).
         ChatCompletionsStreamConverter cc;
@@ -153,10 +153,10 @@ int main() {
         run_pair(ant, cc, 1);
         run_pair(ant, ant, 1);
         run_pair(ant, resp, 1);
-        run_pair(resp, cc, 1);
-        run_pair(resp, ant, 1);
+        run_pair(resp, cc, 2);
+        run_pair(resp, ant, 2);
         run_pair(resp, resp, 1);
-        std::printf("test_stream (cross): all 10 cross stream vectors passed\n");
+        std::printf("test_stream (cross): all 12 cross stream vectors passed\n");
     }
 
     // 5. Unit tests for stream decoder/encoder edge cases & grammar checks
@@ -411,6 +411,6 @@ int main() {
         }
     }
 
-    std::puts("test_stream: all 52 stream vectors and 10 cross stream vectors passed");
+    std::puts("test_stream: all 52 stream vectors and 12 cross stream vectors passed");
     return 0;
 }

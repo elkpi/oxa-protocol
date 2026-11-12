@@ -1908,6 +1908,14 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
     if (req.params.has_value() && req.params->verbosity.has_value()) {
         losses.push_back(make_ant_loss("params.verbosity", "verbosity", ir::LOSS_UNMAPPED_FIELD, ""));
     }
+    if (req.params.has_value() && req.params->logprobs.has_value()) {
+        losses.push_back(make_ant_loss("params.logprobs", "logprobs", ir::LOSS_UNMAPPED_FIELD,
+            "Anthropic Messages has no log-probability sampling parameter"));
+    }
+    if (req.params.has_value() && req.params->top_logprobs.has_value()) {
+        losses.push_back(make_ant_loss("params.top_logprobs", "top_logprobs", ir::LOSS_UNMAPPED_FIELD,
+            "Anthropic Messages has no log-probability sampling parameter"));
+    }
     if (req.params && req.params->response_format) {
         const auto& rf = *req.params->response_format;
         if (rf.type == "json_schema") {
@@ -2661,6 +2669,20 @@ StatusOr<Conversion<std::vector<json::Value>>> StreamEncoder::apply(const ir::Ev
             skipped_atomic_ = true; skipped_custom_ = false; open_tool_ = false; open_thinking_ = false;
             losses.push_back(make_ant_loss("events[" + std::to_string(cbs->index) + "].block", "type",
                 ir::LOSS_UNSUPPORTED_SEMANTIC, "apply_patch tools have no equivalent in Anthropic Messages"));
+            return Conversion<std::vector<json::Value>>{std::move(chunks), std::move(losses)};
+        }
+        if (std::holds_alternative<ir::CompactionItemBlock>(cbs->block) ||
+            std::holds_alternative<ir::ServerToolUseBlock>(cbs->block) ||
+            std::holds_alternative<ir::WebSearchToolResultBlock>(cbs->block)) {
+            skipped_atomic_ = true;
+            skipped_custom_ = false;
+            open_tool_ = false;
+            open_thinking_ = false;
+            std::string_view detail = std::holds_alternative<ir::CompactionItemBlock>(cbs->block)
+                ? ir::COMPACTION_ITEM_LOSS_DETAIL
+                : ir::WEB_SEARCH_HISTORY_LOSS_DETAIL;
+            losses.push_back(make_ant_loss("events[" + std::to_string(cbs->index) + "].block", "type",
+                ir::LOSS_UNSUPPORTED_SEMANTIC, std::string(detail)));
             return Conversion<std::vector<json::Value>>{std::move(chunks), std::move(losses)};
         }
         skipped_custom_ = false;

@@ -655,17 +655,19 @@ void append_omission_loss(std::vector<Loss>& losses,
 void collect_block_omissions(std::vector<Loss>& losses,
                              const Block& blk,
                              std::string_view path,
-                             std::string_view target);
+                             std::string_view target,
+                             bool breakpoint_host);
 
 struct BlockOmissionCollector {
     std::vector<Loss>& losses;
     std::string_view path;
     std::string_view target;
+    bool breakpoint_host;
 
     void operator()(const WebSearchCallBlock&) const {}
     void operator()(const TextBlock& b) const {
         for (std::size_t i = 0; i < b.native.size(); ++i) {
-            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target, true);
+            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target, breakpoint_host);
         }
     }
     void operator()(const ThinkingBlock& b) const {
@@ -675,7 +677,7 @@ struct BlockOmissionCollector {
     }
     void operator()(const ImageBlock& b) const {
         for (std::size_t i = 0; i < b.native.size(); ++i) {
-            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target, true);
+            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target, breakpoint_host);
         }
     }
     void operator()(const DocumentBlock& b) const {
@@ -683,7 +685,7 @@ struct BlockOmissionCollector {
             return;
         }
         for (std::size_t i = 0; i < b.native.size(); ++i) {
-            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target, true);
+            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target, breakpoint_host);
         }
     }
     void operator()(const RedactedThinkingBlock& /*b*/) const {
@@ -754,7 +756,7 @@ struct BlockOmissionCollector {
             if (std::holds_alternative<DocumentBlock>(b.content[k].block)) {
                 continue;
             }
-            collect_block_omissions(losses, b.content[k].block, std::string(path) + ".content[" + std::to_string(k) + "]", target);
+            collect_block_omissions(losses, b.content[k].block, std::string(path) + ".content[" + std::to_string(k) + "]", target, false);
         }
     }
     void operator()(const CustomToolResultBlock& b) const {
@@ -766,7 +768,7 @@ struct BlockOmissionCollector {
                 if (std::holds_alternative<DocumentBlock>((*vec)[k].block)) {
                     continue;
                 }
-                collect_block_omissions(losses, (*vec)[k].block, std::string(path) + ".output.content[" + std::to_string(k) + "]", target);
+                collect_block_omissions(losses, (*vec)[k].block, std::string(path) + ".output.content[" + std::to_string(k) + "]", target, false);
             }
         }
     }
@@ -775,8 +777,9 @@ struct BlockOmissionCollector {
 void collect_block_omissions(std::vector<Loss>& losses,
                              const Block& blk,
                              std::string_view path,
-                             std::string_view target) {
-    std::visit(BlockOmissionCollector{losses, path, target}, blk);
+                             std::string_view target,
+                             bool breakpoint_host) {
+    std::visit(BlockOmissionCollector{losses, path, target, breakpoint_host}, blk);
 }
 
 }  // namespace
@@ -1040,7 +1043,7 @@ StatusOr<std::vector<Loss>> omitted_native_request_losses(const Request& req, st
                 continue;
             }
             std::string content_path = "messages[" + std::to_string(m_idx) + "].content[" + std::to_string(c_idx) + "]";
-            collect_block_omissions(losses, msg.content[c_idx], content_path, target);
+            collect_block_omissions(losses, msg.content[c_idx], content_path, target, msg.role == ir::ROLE_USER);
         }
     }
 

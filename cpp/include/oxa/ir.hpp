@@ -251,6 +251,7 @@ struct TextCitation {
 struct TextBlock {
     std::string text;
     std::optional<std::vector<TextCitation>> citations;
+    std::optional<std::string> logprobs;  // raw JSON text (INV-1); output-side only
     std::vector<NativeAnnotation> native;
     std::string role;
 

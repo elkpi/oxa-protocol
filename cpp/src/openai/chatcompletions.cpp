@@ -2119,7 +2119,7 @@ StatusOr<Conversion<std::vector<json::Value>>> StreamEncoder::apply(const ir::Ev
                 detail = std::string(ir::ENCRYPTED_CONTENT_LOSS_DETAIL);
             }
             losses.push_back(make_cc_loss("events[" + std::to_string(ordinal) + "].block", "type",
-                ir::LOSS_UNSUPPORTED_SEMANTIC, detail));
+                ir::LOSS_UNSUPPORTED_SEMANTIC, std::string(detail)));
             return Conversion<std::vector<json::Value>>{std::move(chunks), std::move(losses)};
         }
         if (std::holds_alternative<ir::ThinkingBlock>(cbs->block)) {
@@ -2171,6 +2171,18 @@ StatusOr<Conversion<std::vector<json::Value>>> StreamEncoder::apply(const ir::Ev
             (void)apr;
             losses.push_back(make_cc_loss("events[" + std::to_string(ordinal) + "].block", "type",
                 ir::LOSS_UNSUPPORTED_SEMANTIC, "apply_patch tool results are not implemented by this profile"));
+            ActiveBlock act; act.kind = ActiveBlock::Kind::SkippedAtomic; act.index = cbs->index;
+            active_ = std::move(act);
+            return Conversion<std::vector<json::Value>>{std::move(chunks), std::move(losses)};
+        }
+        if (std::holds_alternative<ir::CompactionItemBlock>(cbs->block) ||
+            std::holds_alternative<ir::ServerToolUseBlock>(cbs->block) ||
+            std::holds_alternative<ir::WebSearchToolResultBlock>(cbs->block)) {
+            std::string_view detail = std::holds_alternative<ir::CompactionItemBlock>(cbs->block)
+                ? ir::COMPACTION_ITEM_LOSS_DETAIL
+                : ir::WEB_SEARCH_HISTORY_LOSS_DETAIL;
+            losses.push_back(make_cc_loss("events[" + std::to_string(ordinal) + "].block", "type",
+                ir::LOSS_UNSUPPORTED_SEMANTIC, std::string(detail)));
             ActiveBlock act; act.kind = ActiveBlock::Kind::SkippedAtomic; act.index = cbs->index;
             active_ = std::move(act);
             return Conversion<std::vector<json::Value>>{std::move(chunks), std::move(losses)};

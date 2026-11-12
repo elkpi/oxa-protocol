@@ -2551,6 +2551,9 @@ static StatusOr<Conversion<ir::Response>> decode_response_unchecked(const json::
                         if (const auto* txt = part.find("text"); txt && txt->is_string()) {
                             ir::TextBlock tb{txt->as_string()};
                             tb.citations = std::move(citations);
+                            if (const auto* lp = part.find("logprobs"); lp != nullptr && !lp->is_null()) {
+                                tb.logprobs = json::serialize(*lp);
+                            }
                             resp.content.push_back(std::move(tb));
                         }
                     }
@@ -2781,6 +2784,10 @@ StatusOr<Conversion<json::Value>> encode_response(const ir::Response& resp,
             op.set("type", json::Value::string("output_text"));
             op.set("text", json::Value::string(tb->text));
             op.set("annotations", std::move(part_annotations));
+            if (tb->logprobs.has_value()) {
+                OXA_ASSIGN_OR_RETURN(json::Value lp, json::parse(*tb->logprobs));
+                op.set("logprobs", std::move(lp));
+            }
             text_parts.push_back(std::move(op));
         } else if (const auto* ec = std::get_if<ir::EncryptedContentBlock>(&b)) {
             if (ec->data.empty()) {
