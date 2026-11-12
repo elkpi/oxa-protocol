@@ -21,6 +21,7 @@ import {
   validateCitationValue,
   validateRequest,
   ENCRYPTED_CONTENT_LOSS_DETAIL,
+  COMPACTION_ITEM_LOSS_DETAIL,
 } from "../../ir/index.js";
 import { auditWire, mergeWireLosses } from "../../json/wire-audit.js";
 import { ANTHROPIC_REQUEST, ANTHROPIC_RESPONSE } from "./audit.js";
@@ -806,6 +807,14 @@ export function encodeRequest(
 ): ConversionResult<JsonObject> {
   validateRequest(request);
   const losses: Loss[] = [];
+  (request.compaction_items ?? []).forEach((_item, i) =>
+    losses.push({
+      path: `compaction_items[${i}]`,
+      field: "type",
+      reason: "unsupported-semantic",
+      detail: COMPACTION_ITEM_LOSS_DETAIL,
+    }),
+  );
   const metadata = encodeAnthropicMetadata(request.metadata, losses);
   const maxTokens = request.params?.max_tokens ?? 4096n;
   if (request.params?.max_tokens === undefined)
@@ -2034,6 +2043,13 @@ function encodeContent(
       block.type === "web_search_call"
     ) {
       losses.push(loss(`${path}[${index}]`, "type", "unsupported-semantic"));
+    } else if (block.type === "compaction_item") {
+      losses.push({
+        path: `${path}[${index}]`,
+        field: "type",
+        reason: "unsupported-semantic",
+        detail: COMPACTION_ITEM_LOSS_DETAIL,
+      });
     }
   }
   return output;

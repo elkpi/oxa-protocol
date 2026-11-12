@@ -117,6 +117,7 @@ export {
   type RedactedThinkingBlock,
   type EncryptedContentBlock,
   ENCRYPTED_CONTENT_LOSS_DETAIL,
+  COMPACTION_ITEM_LOSS_DETAIL,
   type RefusalBlock,
   type ToolReferenceBlock,
   type CompactionBlock,

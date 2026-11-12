@@ -522,5 +522,14 @@ function blockDocument(block: Block): JsonObject {
         refusal: block.refusal,
         ...(block.category === undefined ? {} : { category: block.category }),
       };
+    case "compaction_item":
+      return {
+        type: "compaction_item",
+        encrypted_content: block.encrypted_content,
+        ...(block.id === undefined ? {} : { id: block.id }),
+        ...(block.created_by === undefined
+          ? {}
+          : { created_by: block.created_by }),
+      };
   }
 }

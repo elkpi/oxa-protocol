@@ -191,6 +191,15 @@ const INPUT_ITEM: WireAuditSpec = {
             action: undefined,
           },
         };
+      case "compaction":
+        return {
+          fields: {
+            type: undefined,
+            id: undefined,
+            encrypted_content: undefined,
+            created_by: undefined,
+          },
+        };
       case "additional_tools":
         // Item-level unknown fields are retained for same-face replay
         // (spec/11 N-R-15); declarations inside tools[] are audited like
@@ -406,6 +415,15 @@ const OUTPUT_ITEM: WireAuditSpec = {
             id: undefined,
             status: undefined,
             action: undefined,
+          },
+        };
+      case "compaction":
+        return {
+          fields: {
+            type: undefined,
+            id: undefined,
+            encrypted_content: undefined,
+            created_by: undefined,
           },
         };
       default:

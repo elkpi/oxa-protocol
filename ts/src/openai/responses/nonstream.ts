@@ -189,6 +189,12 @@ function decodeRequestObject(
     }
   }
   const messages: Message[] = [];
+  const compactionItems: {
+    encrypted_content: string;
+    id?: string;
+    created_by?: string;
+    after_message: number;
+  }[] = [];
   const addToolGroup = (
     item: JsonObject,
     index: number,
@@ -252,6 +258,14 @@ function decodeRequestObject(
         item.type === undefined
           ? "message"
           : string(item.type, `input[${index}].type`);
+      if (type === "compaction") {
+        compactionItems.push({
+          ...compactionFields(item, `input[${index}]`),
+          after_message: messages.length - 1,
+        });
+        index += 1;
+        continue;
+      }
       if (
         type === "function_call" ||
         type === "custom_tool_call" ||
@@ -600,6 +614,9 @@ function decodeRequestObject(
     ...(Object.keys(params).length === 0 ? {} : { params }),
     ...stringMetadata(wire.metadata, "responses"),
     ...(native.length === 0 ? {} : { native }),
+    ...(compactionItems.length === 0
+      ? {}
+      : { compaction_items: compactionItems }),
   };
   validateRequest(request);
   return { value: request, losses };
@@ -930,6 +947,7 @@ function decodeResponseObject(
   const losses: Loss[] = [];
   const texts: Block[] = [];
   const calls: Block[] = [];
+  const compactions: Block[] = [];
   for (let index = 0; index < array(wire.output, "output").length; index += 1) {
     const item = object(
       array(wire.output, "output")[index],
@@ -1089,6 +1107,9 @@ function decodeResponseObject(
       });
     } else if (item.type === "web_search_call") {
       calls.push(decodeWebSearchCall(item, `output[${index}]`, losses));
+    } else if (item.type === "compaction") {
+      const fields = compactionFields(item, `output[${index}]`);
+      compactions.push({ type: "compaction_item", ...fields });
     } else if (item.type === "function_call") {
       const rawName = nonEmptyString(item.name, `output[${index}].name`);
       const ns =
@@ -1223,7 +1244,7 @@ function decodeResponseObject(
     value: {
       id: string(wire.id, "id"),
       model: mapModel(options.modelMapper, string(wire.model, "model")),
-      content: [...texts, ...calls],
+      content: [...compactions, ...texts, ...calls],
       stop_reason: stopReason,
       usage,
     },
@@ -1361,6 +1382,7 @@ export function encodeRequest(
     });
   };
   let requestOrdinal = 0;
+  appendCompactionItems(items, request, -1);
   for (let index = 0; index < request.messages.length; index += 1) {
     emitGroups(index, -1, items);
     const message = request.messages[index]!;
@@ -1538,6 +1560,7 @@ export function encodeRequest(
       }
       if (start < message.content.length || message.content.length === 0)
         emitAssistantSegment(start, message.content.length);
+      appendCompactionItems(items, request, index);
       continue;
     }
     const boundaries = [
@@ -1574,6 +1597,7 @@ export function encodeRequest(
           start,
         );
     }
+    appendCompactionItems(items, request, index);
   }
   emitGroups(request.messages.length, -1, items);
   const systemPlan = encodeSystemPlan(request.system);
@@ -1750,6 +1774,7 @@ export function encodeResponse(
   let apcIndex = 0;
   let apcoIndex = 0;
   let refusalMsg: string | undefined;
+  const compactionOutput: JsonValue[] = [];
   for (let index = 0; index < response.content.length; index += 1) {
     const block = response.content[index]!;
     if (block.type === "refusal") {
@@ -1833,6 +1858,17 @@ export function encodeResponse(
         ...(block.output !== undefined ? { output: block.output } : {}),
       });
       apcoIndex += 1;
+    } else if (block.type === "compaction_item") {
+      if (block.encrypted_content === "")
+        fail("responses: content encrypted_content is required");
+      compactionOutput.push({
+        type: "compaction",
+        ...(block.id === undefined || block.id === "" ? {} : { id: block.id }),
+        encrypted_content: block.encrypted_content,
+        ...(block.created_by === undefined || block.created_by === ""
+          ? {}
+          : { created_by: block.created_by }),
+      });
     } else if (block.type === "web_search_call") {
       inspectWebSearchCall(block.id, block.status, block.action);
       validateWebSearchExtra(block.extra);
@@ -1907,6 +1943,7 @@ export function encodeResponse(
           : [{ type: "output_text", text: "", annotations: [] }],
     });
   output.push(...calls);
+  output.unshift(...compactionOutput);
   let status = "completed";
   let incompleteDetails: JsonObject | undefined;
   let error: JsonObject | undefined;
@@ -3172,6 +3209,47 @@ function object(value: JsonValue | undefined, name: string): JsonObject {
 function objectOrThrow(value: JsonValue, name: string): JsonObject {
   return object(value, name);
 }
+function compactionFields(
+  item: JsonObject,
+  path: string,
+): { encrypted_content: string; id?: string; created_by?: string } {
+  const encrypted = nonEmptyString(
+    item.encrypted_content,
+    `${path}.encrypted_content`,
+  );
+  const id =
+    item.id === undefined ? undefined : nonEmptyString(item.id, `${path}.id`);
+  const createdBy =
+    item.created_by === undefined
+      ? undefined
+      : nonEmptyString(item.created_by, `${path}.created_by`);
+  return {
+    encrypted_content: encrypted,
+    ...(id === undefined ? {} : { id }),
+    ...(createdBy === undefined ? {} : { created_by: createdBy }),
+  };
+}
+
+function appendCompactionItems(
+  items: JsonValue[],
+  request: Request,
+  after: number,
+): void {
+  for (const item of request.compaction_items ?? []) {
+    if (item.after_message !== after) continue;
+    if (item.encrypted_content === "")
+      fail("responses: compaction item encrypted_content is required");
+    items.push({
+      type: "compaction",
+      ...(item.id === undefined || item.id === "" ? {} : { id: item.id }),
+      encrypted_content: item.encrypted_content,
+      ...(item.created_by === undefined || item.created_by === ""
+        ? {}
+        : { created_by: item.created_by }),
+    });
+  }
+}
+
 function string(value: JsonValue | undefined, name: string): string {
   if (typeof value !== "string") fail(`${name} must be a string`);
   return value;

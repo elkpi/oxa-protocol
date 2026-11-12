@@ -866,6 +866,7 @@ function collectBlockOmissions(
     blk.type === "redacted_thinking" ||
     blk.type === "encrypted_content" ||
     blk.type === "web_search_call" ||
+    blk.type === "compaction_item" ||
     (blk.type === "tool_reference" && target !== "anthropic") ||
     (blk.type === "document" &&
       target === "chatcompletions" &&
@@ -1007,7 +1008,8 @@ function appendOmissionLoss(
           return;
         }
         if (target === "anthropic" && breakpointHost) {
-          for (const loss of breakpointTranslationLosses(ann.value, path)) losses.push(loss);
+          for (const loss of breakpointTranslationLosses(ann.value, path))
+            losses.push(loss);
           return;
         }
         const field = ann.omission?.field || "prompt_cache_breakpoint";
@@ -1100,7 +1102,8 @@ function appendOmissionLoss(
         breakpointHost &&
         (target === "chatcompletions" || target === "responses")
       ) {
-        for (const loss of cacheControlTranslationLosses(ann.value, path)) losses.push(loss);
+        for (const loss of cacheControlTranslationLosses(ann.value, path))
+          losses.push(loss);
         return;
       }
       const field = ann.omission?.field || "cache_control";
@@ -1202,7 +1205,10 @@ export const CACHE_CONTROL_TYPE_LOSS_DETAIL =
 export const BREAKPOINT_MODE_LOSS_DETAIL =
   "prompt_cache_breakpoint.mode is not represented by cache_control";
 
-export function cacheControlTranslationLosses(value: string, path: string): Loss[] {
+export function cacheControlTranslationLosses(
+  value: string,
+  path: string,
+): Loss[] {
   const losses: Loss[] = [
     {
       path,
@@ -1227,7 +1233,10 @@ export function cacheControlTranslationLosses(value: string, path: string): Loss
   return losses;
 }
 
-export function breakpointTranslationLosses(value: string, path: string): Loss[] {
+export function breakpointTranslationLosses(
+  value: string,
+  path: string,
+): Loss[] {
   const losses: Loss[] = [];
   try {
     const parsed = JSON.parse(value) as { mode?: unknown; ttl?: unknown };
@@ -1245,7 +1254,8 @@ export function breakpointTranslationLosses(value: string, path: string): Loss[]
           path,
           field: "ttl",
           reason: "unmapped-field",
-          detail: "prompt_cache_breakpoint.ttl has no equivalent cache_control ttl",
+          detail:
+            "prompt_cache_breakpoint.ttl has no equivalent cache_control ttl",
         });
       }
     }

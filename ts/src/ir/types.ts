@@ -74,6 +74,10 @@ export interface ThinkingBlock {
 export const ENCRYPTED_CONTENT_LOSS_DETAIL =
   "responses encrypted reasoning replay state; the target face cannot preserve this block";
 
+/** Cross-face omission text for a Responses compaction checkpoint (spec/11 N-R-22). */
+export const COMPACTION_ITEM_LOSS_DETAIL =
+  "Responses compaction item cannot be represented on the target face";
+
 export interface RedactedThinkingBlock {
   readonly type: "redacted_thinking";
   readonly data: string;
@@ -184,6 +188,20 @@ export interface ToolReferenceBlock {
   readonly native?: readonly NativeAnnotation[];
 }
 
+export interface CompactionItemBlock {
+  readonly type: "compaction_item";
+  readonly encrypted_content: string;
+  readonly id?: string;
+  readonly created_by?: string;
+}
+
+export interface CompactionItem {
+  readonly encrypted_content: string;
+  readonly id?: string;
+  readonly created_by?: string;
+  readonly after_message: number;
+}
+
 export interface CompactionBlock {
   readonly type: "compaction";
   readonly content?: string | null;
@@ -210,7 +228,8 @@ export type Block =
   | ApplyPatchToolUseBlock
   | ApplyPatchToolResultBlock
   | WebSearchCallBlock
-  | RefusalBlock;
+  | RefusalBlock
+  | CompactionItemBlock;
 export interface TextDelta {
   readonly type: "text_delta";
   readonly text: string;
@@ -422,6 +441,7 @@ export interface Request {
   readonly metadata?: Readonly<Record<string, string>>;
   readonly native?: readonly NativeAnnotation[];
   readonly tool_change_groups?: readonly ToolChangeGroup[];
+  readonly compaction_items?: readonly CompactionItem[];
 }
 export interface Response {
   readonly id: string;

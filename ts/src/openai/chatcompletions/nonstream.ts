@@ -21,6 +21,7 @@ import {
   PROMPT_CACHE_KEY_LOSS_DETAIL,
   PROMPT_CACHE_OPTIONS_LOSS_DETAIL,
   PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL,
+  COMPACTION_ITEM_LOSS_DETAIL,
   NATIVE_KIND_PROMPT_CACHE_OPTIONS,
   NATIVE_KIND_PROMPT_CACHE_BREAKPOINT,
   type NativeAnnotation,
@@ -647,6 +648,14 @@ export function encodeRequest(
 ): ConversionResult<JsonObject> {
   validateRequest(request);
   const losses: Loss[] = [];
+  (request.compaction_items ?? []).forEach((_item, i) =>
+    losses.push({
+      path: `compaction_items[${i}]`,
+      field: "type",
+      reason: "unsupported-semantic",
+      detail: COMPACTION_ITEM_LOSS_DETAIL,
+    }),
+  );
   (request.tool_change_groups ?? []).forEach((group, i) => {
     if (group.parts.length === 0)
       losses.push({
@@ -1522,6 +1531,13 @@ function encodeAssistant(
       });
     else if (block.type === "web_search_call")
       losses.push(loss(`${path}[${index}]`, "type", "unsupported-semantic"));
+    else if (block.type === "compaction_item")
+      losses.push({
+        path: `${path}[${index}]`,
+        field: "type",
+        reason: "unsupported-semantic",
+        detail: COMPACTION_ITEM_LOSS_DETAIL,
+      });
     else if (block.type === "custom_tool_use") {
       toolCalls.push({
         id: block.id,
