@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v3.3.0] - 2026-11-12
+
+### Added
+
+- Preserve Responses `type: "compaction"` checkpoints on requests, responses,
+  and streams, including checkpoints after segmented assistant messages.
+  Preserve same-face Anthropic `compact_20260112` and Responses
+  `context_management` compaction triggers as source-tagged native state.
+- Preserve Anthropic `server_tool_use` and `web_search_tool_result` history
+  with opaque canonical JSON text, including future result object types.
+- Preserve Chat Completions request `logprobs`/`top_logprobs` and Responses
+  request `top_logprobs` (N-R-24); carry Responses output `logprobs` as
+  canonical opaque text on text blocks.
+
+### Fixed
+
+- Translate explicit cache breakpoints across faces only on capable hosts.
+  Assistant text, `tool_result` children, tool declarations, and top-level
+  request annotations now report the whole capability-gap loss.
+- Omit compaction and web-search history blocks with losses on Chat
+  Completions and Anthropic streams instead of failing the stream; keep
+  Anthropic wire block indexes contiguous.
+- Keep integers beyond 2^53 intact when canonicalizing opaque JSON.
+- Coordinate all five implementation packages at version 3.3.0; the IR
+  document contract remains 0.3.0 and the shared suite contains 646 vectors.
+
 ## [v3.1.0] - 2026-11-08
 
 ### Added

@@ -5,7 +5,7 @@ implementations. The spec follows [Semantic Versioning](https://semver.org/);
 precedence between spec, vectors, and schemas is defined in
 [README.md](README.md#source-of-truth-precedence).
 
-## Unreleased
+## 3.3.0 - 2026-11-12
 
 - Log-probability sampling is preserved on the OpenAI family: Chat Completions request `logprobs`/`top_logprobs` map to `Params`, Responses request `top_logprobs` maps 1:1 with the documented boolean-loss rule (N-R-24), and Responses output_text `logprobs` payloads travel as canonical opaque JSON text on text blocks. Anthropic omits them with one `unmapped-field` loss each.
 - Cache breakpoints are explicit cross-face markers on every host that can carry them (system blocks and non-tool_result user content). Hosts that cannot carry one (assistant text, tool_result children, tool declarations, top-level request) report the whole-annotation capability-gap loss instead of a `type`/`ttl` spelling loss.
