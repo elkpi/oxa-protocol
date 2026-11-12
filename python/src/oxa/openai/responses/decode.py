@@ -32,6 +32,8 @@ from oxa.ir import (
     OutputTokensDetails,
     Params,
     ReasoningEffort,
+    CompactionItem,
+    CompactionItemBlock,
     RefusalBlock,
     Request,
     Response,
@@ -247,6 +249,10 @@ def decode_request(
                     index = next_idx
                 else:
                     raise ValueError(f"responses: input[{index}]: unknown role {role!r}")
+            elif kind == "compaction":
+                cipher, ident, created = _compaction_fields(item, f"input[{index}]")
+                req.compaction_items.append(CompactionItem(encrypted_content=cipher, after_message=len(req.messages) - 1, id=ident, created_by=created))
+                index += 1
             elif kind in (ITEM_TYPE_FUNCTION_CALL, ITEM_TYPE_CUSTOM_TOOL_CALL, "apply_patch_call", ITEM_TYPE_REASONING, "web_search_call"):
                 msg, next_idx, run_losses = decode_assistant_run(raw_input, index, decoded_calls, dropped, markers)
                 if msg is not None:
@@ -373,6 +379,7 @@ def decode_request(
             metadata=string_metadata(wire.get("metadata"), "responses"),
             native=tuple(native) if native else (),
             tool_change_groups=req.tool_change_groups,
+            compaction_items=req.compaction_items,
         ),
         losses,
     )
@@ -436,6 +443,17 @@ def decode_text_format(value: Any, losses: list[Loss]) -> ResponseFormat | None:
     return None
 
 
+def _compaction_fields(item: dict[str, Any], path: str) -> tuple[str, str, str]:
+    cipher = item.get("encrypted_content")
+    if not isinstance(cipher, str) or not cipher:
+        raise ValueError(f"responses: {path}.encrypted_content is required")
+    ident = item.get("id", "")
+    created = item.get("created_by", "")
+    if not isinstance(ident, str) or not isinstance(created, str):
+        raise ValueError(f"responses: {path} id and created_by must be strings")
+    return cipher, ident, created
+
+
 @audit_decode("responses", "response")
 def decode_response(
     wire: dict[str, Any],
@@ -447,6 +465,7 @@ def decode_response(
     thinkings: list[Block] = []
     text: list[Block] = []
     calls: list[Block] = []
+    compactions: list[Block] = []
     has_tool_use = False
 
     for item_index, item in enumerate(wire.get("output", [])):
@@ -595,6 +614,9 @@ def decode_response(
             else:
                 raise ValueError(f"responses: output[{item_index}].output must be a string or array")
             has_tool_use = True
+        elif kind == "compaction":
+            cipher, ident, created = _compaction_fields(item, f"output[{item_index}]")
+            compactions.append(CompactionItemBlock(encrypted_content=cipher, id=ident, created_by=created))
         elif kind == "web_search_call":
             from oxa.openai.responses.web_search import decode_web_search_item
 
@@ -613,7 +635,7 @@ def decode_response(
 
     stop_reason, status_losses = decode_status(wire, has_tool_use)
     losses.extend(status_losses)
-    content = thinkings + text + calls
+    content = compactions + thinkings + text + calls
     has_refusal = any(isinstance(b, RefusalBlock) for b in content)
     if has_refusal and stop_reason == STOP_END_TURN:
         stop_reason = STOP_REFUSAL

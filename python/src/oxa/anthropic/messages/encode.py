@@ -79,6 +79,7 @@ from oxa.ir import (
     ToolReferenceBlock,
     ToolUseBlock,
     WebSearchCallBlock,
+    CompactionItemBlock,
 )
 from oxa.ir import (
     ROLE_ASSISTANT as IR_ROLE_ASSISTANT,
@@ -112,6 +113,10 @@ def encode_request(
     validate_tool_availability(req)
     validate_native_request(req)
     losses: list[Loss] = []
+    from oxa.ir import COMPACTION_ITEM_LOSS_DETAIL
+
+    for index in range(len(req.compaction_items)):
+        losses.append(loss(f"compaction_items[{index}]", "type", LOSS_UNSUPPORTED_SEMANTIC, COMPACTION_ITEM_LOSS_DETAIL))
 
     metadata, meta_losses = encode_anthropic_metadata(req.metadata)
     losses.extend(meta_losses)
@@ -525,6 +530,9 @@ def encode_request_block(
 
     elif isinstance(block, WebSearchCallBlock):
         return None, [loss(path, "type", LOSS_UNSUPPORTED_SEMANTIC, "Responses web_search_call has no Anthropic equivalent")], False
+    elif isinstance(block, CompactionItemBlock):
+        from oxa.ir import COMPACTION_ITEM_LOSS_DETAIL
+        return None, [loss(path, "type", LOSS_UNSUPPORTED_SEMANTIC, COMPACTION_ITEM_LOSS_DETAIL)], False
     elif isinstance(block, (ApplyPatchToolUseBlock, ApplyPatchToolResultBlock)):
         return None, [loss(path, "type", LOSS_UNSUPPORTED_SEMANTIC, "apply_patch tools have no Anthropic mapping")], False
 

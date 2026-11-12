@@ -35,6 +35,7 @@ from oxa.ir import (
     ThinkingBlock,
     RedactedThinkingBlock,
     ToolUseBlock,
+    CompactionItemBlock,
     WebSearchCallBlock,
     RefusalBlock,
     ToolReferenceBlock,
@@ -316,6 +317,23 @@ def encode_request(
                     pass
 
     items: list[dict[str, Any]] = list(leading)
+
+    def append_compaction(after: int) -> None:
+        for item in req.compaction_items:
+            if item.after_message != after:
+                continue
+            if item.after_message < -1 or item.after_message >= len(req.messages):
+                raise ValueError("responses: compaction_items after_message is out of range")
+            if not item.encrypted_content:
+                raise ValueError("responses: compaction item encrypted_content is required")
+            wire_item: dict[str, Any] = {"type": "compaction", "encrypted_content": item.encrypted_content}
+            if item.id:
+                wire_item["id"] = item.id
+            if item.created_by:
+                wire_item["created_by"] = item.created_by
+            items.append(wire_item)
+
+    append_compaction(-1)
     for group in req.tool_change_groups:
         if (group.message_index < 0 or group.message_index > len(req.messages)
                 or group.content_index < -1
@@ -353,6 +371,7 @@ def encode_request(
             start = boundary
         if start < len(message.content) or not message.content:
             emit_segment(message, index, start, len(message.content))
+        append_compaction(index)
     emit_groups(len(req.messages), -1)
     if (
         len(req.system) == 0
@@ -514,6 +533,7 @@ def encode_response(
     apc_index = 0
     apco_index = 0
     refusal_msg: str | None = None
+    compaction_output: list[dict[str, Any]] = []
 
     for index, block in enumerate(resp.content):
         if isinstance(block, RefusalBlock):
@@ -626,6 +646,15 @@ def encode_response(
                 item["output"] = block.output
             calls.append(item)
             apco_index += 1
+        elif isinstance(block, CompactionItemBlock):
+            if not block.encrypted_content:
+                raise ValueError("responses: content encrypted_content is required")
+            wire_item = {"type": "compaction", "encrypted_content": block.encrypted_content}
+            if block.id:
+                wire_item["id"] = block.id
+            if block.created_by:
+                wire_item["created_by"] = block.created_by
+            compaction_output.append(wire_item)
         elif isinstance(block, WebSearchCallBlock):
             from oxa.ir.web_search import inspect_web_search, validate_web_search_extra
             inspect_web_search(block.id, block.status, block.action)
@@ -708,6 +737,8 @@ def encode_response(
         if "encrypted_content" in item:
             item_dict["encrypted_content"] = item["encrypted_content"]
         output.insert(0, item_dict)
+    for item in reversed(compaction_output):
+        output.insert(0, item)
 
     status = STATUS_COMPLETED
     incomplete_details = None

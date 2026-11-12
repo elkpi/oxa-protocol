@@ -13,12 +13,14 @@ from oxa.ir.constants import (
     BLOCK_TYPE_REDACTED_THINKING,
     BLOCK_TYPE_ENCRYPTED_CONTENT,
     ENCRYPTED_CONTENT_LOSS_DETAIL,
+    COMPACTION_ITEM_LOSS_DETAIL,
     BLOCK_TYPE_TOOL_RESULT,
     BLOCK_TYPE_TOOL_USE,
     BLOCK_TYPE_CUSTOM_TOOL_USE,
     BLOCK_TYPE_CUSTOM_TOOL_RESULT,
     BLOCK_TYPE_APPLY_PATCH_TOOL_USE,
     BLOCK_TYPE_APPLY_PATCH_TOOL_RESULT,
+    BLOCK_TYPE_COMPACTION_ITEM,
     BLOCK_TYPE_WEB_SEARCH_CALL,
     BLOCK_TYPE_REFUSAL,
     BLOCK_TYPE_TOOL_REFERENCE,
@@ -275,6 +277,26 @@ class ApplyPatchToolResultBlock:
 
 
 @dataclass(frozen=True, slots=True)
+class CompactionItemBlock:
+    """Responses compaction checkpoint (spec/11 N-R-22). Not an Anthropic compaction block."""
+
+    encrypted_content: str
+    id: str = ""
+    created_by: str = ""
+    type: str = field(default=BLOCK_TYPE_COMPACTION_ITEM, init=False)
+
+
+@dataclass(frozen=True, slots=True)
+class CompactionItem:
+    """One Responses compaction checkpoint placed relative to request messages."""
+
+    encrypted_content: str
+    after_message: int
+    id: str = ""
+    created_by: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class WebSearchCallBlock:
     id: str
     status: str
@@ -339,6 +361,7 @@ Block = (
     | ApplyPatchToolResultBlock
     | WebSearchCallBlock
     | RefusalBlock
+    | CompactionItemBlock
 )
 SystemBlock = TextBlock
 
@@ -517,6 +540,7 @@ class Request:
     metadata: dict[str, str] | None = None
     native: tuple[NativeAnnotation, ...] = ()
     tool_change_groups: list[ToolChangeGroup] = field(default_factory=list)
+    compaction_items: list[CompactionItem] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not isinstance(self.native, tuple):

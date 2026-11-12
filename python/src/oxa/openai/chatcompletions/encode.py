@@ -65,6 +65,10 @@ def encode_request(
     from oxa.ir.codec import validate_tool_availability
     validate_tool_availability(req)
     losses: list[Loss] = []
+    from oxa.ir import COMPACTION_ITEM_LOSS_DETAIL
+
+    for index in range(len(req.compaction_items)):
+        losses.append(loss(f"compaction_items[{index}]", "type", LOSS_UNSUPPORTED_SEMANTIC, COMPACTION_ITEM_LOSS_DETAIL))
 
     model = req.model
     if table is not None:

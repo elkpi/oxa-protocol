@@ -35,6 +35,7 @@ from oxa.ir import (
     ThinkingDelta,
     CitationDelta,
     ToolUseBlock,
+    CompactionItemBlock,
     WebSearchCallBlock,
 )
 from oxa.modelmap import Table
@@ -88,6 +89,7 @@ class _StreamOutputItem:
     namespace: str = ""
     encrypted_content: str = ""
     web_search_item: dict[str, Any] | None = None
+    compaction_item: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -214,6 +216,8 @@ class StreamEncoder:
                 return self._start_custom_tool_block(ev.index, ev.block.id, ev.block.name, ev.block.input)
             if isinstance(ev.block, WebSearchCallBlock):
                 return self._start_web_search_block(ev.index, ev.block)
+            if isinstance(ev.block, CompactionItemBlock):
+                return self._start_compaction_block(ev.index, ev.block)
             if isinstance(ev.block, EncryptedContentBlock):
                 return self._start_encrypted_content_block(ev.index, ev.block)
             raise ValueError("responses: ContentBlockStart carries unsupported block")
@@ -227,7 +231,7 @@ class StreamEncoder:
             if self._active_block.kind in ("apply_patch_call", "apply_patch_call_output"):
                 raise ValueError("responses: apply patch item does not accept deltas")
 
-            if self._active_block.kind in ("redacted", "encrypted_content", "web_search_call"):
+            if self._active_block.kind in ("redacted", "encrypted_content", "web_search_call", "compaction"):
                 raise ValueError("responses: block received unexpected delta")
 
             if self._active_block.kind == "message":
@@ -299,6 +303,8 @@ class StreamEncoder:
                 return [], []
             if self._active_block.kind == "web_search_call":
                 return self._stop_web_search_block()
+            if self._active_block.kind == "compaction":
+                return self._stop_compaction_block()
             if self._active_block.kind == "message":
                 return self._stop_text_block()
             if self._active_block.kind == "reasoning":
@@ -930,6 +936,59 @@ class StreamEncoder:
         self._active_item.encrypted_content = block.data
         self._active_block = _StreamEncodeBlock(index=index, kind="encrypted_content", content_index=0)
         return out, []
+
+    def _start_compaction_block(
+        self, index: int, block: CompactionItemBlock
+    ) -> tuple[list[dict[str, Any]], list[Loss]]:
+        if not block.encrypted_content:
+            raise ValueError("responses: compaction item encrypted_content is required")
+        out: list[dict[str, Any]] = []
+        if self._active_item is not None:
+            if self._active_item.kind == "message":
+                out.append(self._close_message_item())
+            elif self._active_item.kind == "reasoning":
+                out.append(self._close_reasoning_item())
+            else:
+                raise ValueError("responses: compaction cannot open before the active item completes")
+        output_index = self._next_output_index
+        self._next_output_index += 1
+        ident = block.id or "cmp_abc123"
+        item_dict: dict[str, Any] = {
+            "type": "compaction",
+            "id": ident,
+            "encrypted_content": block.encrypted_content,
+        }
+        if block.created_by:
+            item_dict["created_by"] = block.created_by
+        self._active_item = _StreamOutputItem(
+            kind="compaction",
+            id=ident,
+            output_index=output_index,
+            compaction_item=item_dict,
+        )
+        self._active_block = _StreamEncodeBlock(index=index, kind="compaction", content_index=0)
+        out.append({
+            "type": EVENT_TYPE_RESPONSE_OUTPUT_ITEM_ADDED,
+            "output_index": output_index,
+            "item": item_dict,
+        })
+        return out, []
+
+    def _stop_compaction_block(self) -> tuple[list[dict[str, Any]], list[Loss]]:
+        if self._active_item is None or self._active_item.kind != "compaction":
+            raise ValueError("responses: compaction stop without an active item")
+        item = self._active_item
+        wire_item = item.compaction_item
+        assert wire_item is not None
+        self._completed.append(wire_item)
+        output_index = item.output_index
+        self._active_item = None
+        self._active_block = None
+        return [{
+            "type": EVENT_TYPE_RESPONSE_OUTPUT_ITEM_DONE,
+            "output_index": output_index,
+            "item": wire_item,
+        }], []
 
     def _start_web_search_block(
         self, index: int, block: WebSearchCallBlock
