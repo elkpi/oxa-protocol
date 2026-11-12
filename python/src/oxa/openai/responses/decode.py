@@ -65,8 +65,10 @@ from oxa.ir.native import (
     NATIVE_KIND_DEFER_LOADING,
     DEFER_LOADING_LOSS_DETAIL,
     NATIVE_KIND_PROMPT_CACHE_KEY,
+    RESPONSES_CONTEXT_MANAGEMENT_LOSS_DETAIL,
     PROMPT_CACHE_KEY_LOSS_DETAIL,
     NATIVE_KIND_PROMPT_CACHE_OPTIONS,
+    NATIVE_KIND_CONTEXT_MANAGEMENT,
     PROMPT_CACHE_OPTIONS_LOSS_DETAIL,
 )
 import json
@@ -185,6 +187,44 @@ def decode_request(
                 ),
             )
         )
+
+    if "context_management" in wire:
+        cm = wire["context_management"]
+        if not isinstance(cm, list):
+            raise TypeError("responses: context_management must be an array")
+        kept: list[dict[str, Any]] = []
+        for index, entry in enumerate(cm):
+            path = f"context_management[{index}]"
+            if not isinstance(entry, dict):
+                raise TypeError(f"responses: {path} must be an object")
+            kind = entry.get("type")
+            if not isinstance(kind, str) or not kind:
+                raise TypeError(f"responses: {path}.type is required")
+            if kind != "compaction":
+                losses.append(loss(f"{path}.type", "type", LOSS_UNMAPPED_VALUE, f"unknown context_management type {kind!r}"))
+                continue
+            canonical: dict[str, Any] = {"type": "compaction"}
+            if "compact_threshold" in entry:
+                threshold = entry["compact_threshold"]
+                if not isinstance(threshold, int) or isinstance(threshold, bool):
+                    raise TypeError(f"responses: {path}.compact_threshold must be an integer")
+                if threshold < 1000:
+                    raise TypeError(f"responses: {path}.compact_threshold must be at least 1000")
+                canonical["compact_threshold"] = threshold
+            kept.append(canonical)
+        if kept:
+            native.append(
+                NativeAnnotation(
+                    source=NATIVE_SOURCE_OPENAI,
+                    kind=NATIVE_KIND_CONTEXT_MANAGEMENT,
+                    value=json.dumps(kept, separators=(",", ":"), sort_keys=True),
+                    omission=NativeOmission(
+                        field="context_management",
+                        reason=LOSS_UNMAPPED_FIELD,
+                        detail=RESPONSES_CONTEXT_MANAGEMENT_LOSS_DETAIL,
+                    ),
+                )
+            )
 
     raw_input = wire.get("input")
     markers: list[dict[str, Any]] = []
