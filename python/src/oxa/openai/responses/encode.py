@@ -386,6 +386,30 @@ def encode_request(
         out["input"] = items
 
     if req.params:
+        send_top = req.params.top_logprobs
+        if req.params.logprobs is not None:
+            if req.params.logprobs:
+                if req.params.top_logprobs is None:
+                    losses.append(
+                        loss(
+                            "params.logprobs",
+                            "logprobs",
+                            LOSS_UNMAPPED_FIELD,
+                            "Responses has no logprobs boolean; top_logprobs is the sampling switch",
+                        )
+                    )
+            else:
+                send_top = None
+                losses.append(
+                    loss(
+                        "params.logprobs",
+                        "logprobs",
+                        LOSS_UNMAPPED_FIELD,
+                        "Responses has no logprobs boolean; explicit false is dropped",
+                    )
+                )
+        if send_top is not None:
+            out["top_logprobs"] = send_top
         if req.params.temperature is not None:
             out["temperature"] = req.params.temperature
         if req.params.top_p is not None:
@@ -580,11 +604,14 @@ def encode_response(
                             "anthropic text citations; the target face cannot preserve source locations and replay metadata",
                         )
                     )
-            text_parts.append({
+            text_part = {
                 "type": PART_TYPE_OUTPUT_TEXT,
                 "text": block.text,
                 "annotations": part_annotations,
-            })
+            }
+            if block.logprobs:
+                text_part["logprobs"] = json.loads(block.logprobs)
+            text_parts.append(text_part)
         elif isinstance(block, RedactedThinkingBlock):
             losses.append(
                 loss(

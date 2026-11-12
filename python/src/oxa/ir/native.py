@@ -469,6 +469,7 @@ def omitted_native_request_losses(req: Any, target: str) -> list[Loss]:
                 blk,
                 f"messages[{m_idx}].content[{c_idx}]",
                 target,
+                role == ROLE_USER,
             )
 
     for t_idx, tool in enumerate(getattr(req, "tools", ()) or ()):
@@ -485,7 +486,13 @@ def omitted_native_request_losses(req: Any, target: str) -> list[Loss]:
     return losses
 
 
-def _collect_block_omissions(losses: list[Loss], blk: Any, path: str, target: str) -> None:
+def _collect_block_omissions(
+    losses: list[Loss],
+    blk: Any,
+    path: str,
+    target: str,
+    breakpoint_host: bool,
+) -> None:
     blk_type = getattr(blk, "type", "")
     if blk_type == BLOCK_TYPE_REDACTED_THINKING or (
         blk_type == BLOCK_TYPE_DOCUMENT
@@ -502,7 +509,7 @@ def _collect_block_omissions(losses: list[Loss], blk: Any, path: str, target: st
         # reported a second time.
         return
     for i, ann in enumerate(getattr(blk, "native", ())):
-        host = blk_type in ("text", "image", "document")
+        host = breakpoint_host and blk_type in ("text", "image", "document")
         _append_omission_loss(losses, ann, f"{path}.native[{i}]", False, None, target, host)
 
     content = getattr(blk, "content", None)
@@ -510,14 +517,18 @@ def _collect_block_omissions(losses: list[Loss], blk: Any, path: str, target: st
         for k, child in enumerate(content):
             if getattr(child, "type", "") == BLOCK_TYPE_DOCUMENT:
                 continue
-            _collect_block_omissions(losses, child, f"{path}.content[{k}]", target)
+            _collect_block_omissions(
+                losses, child, f"{path}.content[{k}]", target, False
+            )
 
     output = getattr(blk, "output", None)
     if isinstance(output, list):
         for k, child in enumerate(output):
             if getattr(child, "type", "") == BLOCK_TYPE_DOCUMENT:
                 continue
-            _collect_block_omissions(losses, child, f"{path}.output.content[{k}]", target)
+            _collect_block_omissions(
+                losses, child, f"{path}.output.content[{k}]", target, False
+            )
 
 
 def _append_omission_loss(

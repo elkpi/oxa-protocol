@@ -386,6 +386,12 @@ def decode_request(
 
     verbosity = decode_verbosity(text_config.get("verbosity") if isinstance(text_config, dict) else None, "text.verbosity", losses)
     max_tokens = wire.get("max_output_tokens")
+    top_logprobs = wire.get("top_logprobs")
+    if top_logprobs is not None:
+        if isinstance(top_logprobs, bool) or not isinstance(top_logprobs, int):
+            raise ValueError("responses: top_logprobs must be an integer")
+        if top_logprobs < 0:
+            raise ValueError("responses: top_logprobs must be a non-negative integer")
     format_raw = text_config.get("format") if isinstance(text_config, dict) else None
     response_format = decode_text_format(format_raw, losses)
     if isinstance(response_format, ResponseFormatJsonSchema):
@@ -395,6 +401,7 @@ def decode_request(
         wire.get("temperature") is not None
         or wire.get("top_p") is not None
         or max_tokens is not None
+        or top_logprobs is not None
         or reasoning_effort is not None
         or verbosity is not None
         or response_format is not None
@@ -403,6 +410,7 @@ def decode_request(
             temperature=wire.get("temperature"),
             top_p=wire.get("top_p"),
             max_tokens=max_tokens,
+            top_logprobs=top_logprobs,
             reasoning_effort=reasoning_effort,
             verbosity=verbosity,
             response_format=response_format,
@@ -545,7 +553,23 @@ def decode_response(
                         cite_list.append(TextCitation(source="openai", value=compact))
                     if cite_list:
                         citations = tuple(cite_list)
-                text.append(TextBlock(text=part.get("text", ""), citations=citations))
+                logprobs = part.get("logprobs")
+                text.append(
+                    TextBlock(
+                        text=part.get("text", ""),
+                        citations=citations,
+                        logprobs=(
+                            None
+                            if logprobs is None
+                            else json.dumps(
+                                logprobs,
+                                separators=(",", ":"),
+                                ensure_ascii=False,
+                                sort_keys=True,
+                            )
+                        ),
+                    )
+                )
         elif kind == ITEM_TYPE_REASONING:
             summary = item.get("summary", [])
             enc = item.get("encrypted_content")

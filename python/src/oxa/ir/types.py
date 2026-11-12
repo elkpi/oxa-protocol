@@ -69,6 +69,7 @@ class TextBlock:
     text: str
     native: tuple[NativeAnnotation, ...] = ()
     citations: tuple[TextCitation, ...] | None = None
+    logprobs: str | None = None
     role: str = ""
     type: str = field(default=BLOCK_TYPE_TEXT, init=False)
 

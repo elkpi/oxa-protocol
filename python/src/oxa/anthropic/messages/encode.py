@@ -393,6 +393,24 @@ def encode_request(
             out["stop_sequences"] = req.params.stop_sequences
     if req.params and req.params.verbosity is not None:
         losses.append(loss("params.verbosity", "verbosity", LOSS_UNMAPPED_FIELD, ""))
+    if req.params and req.params.logprobs is not None:
+        losses.append(
+            loss(
+                "params.logprobs",
+                "logprobs",
+                LOSS_UNMAPPED_FIELD,
+                "Anthropic Messages has no log-probability sampling parameter",
+            )
+        )
+    if req.params and req.params.top_logprobs is not None:
+        losses.append(
+            loss(
+                "params.top_logprobs",
+                "top_logprobs",
+                LOSS_UNMAPPED_FIELD,
+                "Anthropic Messages has no log-probability sampling parameter",
+            )
+        )
     native_losses = encode_request_native(req, out)
     losses.extend(native_losses)
 

@@ -368,6 +368,8 @@ def dump_block(block: Block) -> dict[str, Any]:
                     raise CodecError(f"ir: unknown citation source {c.source!r}")
                 validate_citation(c.source, c.value)
             out["citations"] = [{"source": c.source, "value": c.value} for c in block.citations]
+        if block.logprobs is not None:
+            out["logprobs"] = block.logprobs
         return out
     if isinstance(block, RedactedThinkingBlock):
         return {"type": BLOCK_TYPE_REDACTED_THINKING, "data": block.data}
@@ -515,6 +517,8 @@ def dump_request_block(block: Block) -> dict[str, Any]:
                     raise CodecError(f"ir: unknown citation source {c.source!r}")
                 validate_citation(c.source, c.value)
             out["citations"] = [{"source": c.source, "value": c.value} for c in block.citations]
+        if block.logprobs is not None:
+            out["logprobs"] = block.logprobs
         if block.role:
             raise CodecError("role is only permitted on system blocks")
     elif isinstance(block, RedactedThinkingBlock):
@@ -721,7 +725,10 @@ def load_block(data: dict[str, Any]) -> Block:
                     raise CodecError("citation value must be a string")
                 validate_citation(item["source"], val)
                 cites.append(TextCitation(source=item["source"], value=val))
-        return TextBlock(text=data["text"], citations=tuple(cites) if cites else None)
+        logprobs = data.get("logprobs")
+        if logprobs is not None and not isinstance(logprobs, str):
+            raise CodecError("logprobs must be a string")
+        return TextBlock(text=data["text"], citations=tuple(cites) if cites else None, logprobs=logprobs)
     if kind == BLOCK_TYPE_REDACTED_THINKING:
         d = data.get("data")
         if not isinstance(d, str):
@@ -843,7 +850,10 @@ def load_request_block(data: dict[str, Any]) -> Block:
                     raise CodecError("citation value must be a string")
                 validate_citation(item["source"], val)
                 cites.append(TextCitation(source=item["source"], value=val))
-        return TextBlock(text=data["text"], citations=tuple(cites) if cites else None, native=native)
+        logprobs = data.get("logprobs")
+        if logprobs is not None and not isinstance(logprobs, str):
+            raise CodecError("logprobs must be a string")
+        return TextBlock(text=data["text"], citations=tuple(cites) if cites else None, native=native, logprobs=logprobs)
     if kind == BLOCK_TYPE_REDACTED_THINKING:
         d = data.get("data")
         if not isinstance(d, str):

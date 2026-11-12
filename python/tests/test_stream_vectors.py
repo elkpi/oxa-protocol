@@ -76,7 +76,7 @@ class StreamVectorsTest(unittest.TestCase):
             return
 
         vectors = load_vectors(root, "cross", "stream")
-        self.assertEqual(len(vectors), 10, "expected 10 cross stream vectors")
+        self.assertEqual(len(vectors), 12, "expected 12 cross stream vectors")
 
         seen_pairs: set[tuple[str, str]] = set()
         for vector in vectors:
