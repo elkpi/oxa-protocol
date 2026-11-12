@@ -617,7 +617,8 @@ StatusOr<std::pair<std::vector<ir::Block>, std::vector<ir::Loss>>> decode_conten
             if (is_request) {
                 if (canon.has_value() && !blocks.empty()) {
                     std::visit([&](auto& blk) {
-                        if constexpr (!std::is_same_v<std::decay_t<decltype(blk)>, ir::WebSearchCallBlock>) blk.native.push_back(ir::NativeAnnotation{
+                        if constexpr (!std::is_same_v<std::decay_t<decltype(blk)>, ir::WebSearchCallBlock> &&
+                                      !std::is_same_v<std::decay_t<decltype(blk)>, ir::CompactionItemBlock>) blk.native.push_back(ir::NativeAnnotation{
                             std::string(ir::NATIVE_SOURCE_ANTHROPIC),
                             std::string(ir::NATIVE_KIND_CACHE_CONTROL),
                             std::move(*canon),
@@ -1136,6 +1137,9 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
     OXA_RETURN_IF_ERROR(ir::validate_tool_strict(req));
     OXA_RETURN_IF_ERROR(ir::validate_native_request(req));
     std::vector<ir::Loss> losses;
+    for (std::size_t ci = 0; ci < req.compaction_items.size(); ++ci) {
+        losses.push_back(make_ant_loss("compaction_items[" + std::to_string(ci) + "]", "type", ir::LOSS_UNSUPPORTED_SEMANTIC, std::string(ir::COMPACTION_ITEM_LOSS_DETAIL)));
+    }
     json::Value out = json::Value::object();
     out.set("model", json::Value::string(opts.model_map.map(req.model)));
     if (req.metadata.has_value() && !req.metadata->empty()) {
@@ -1994,6 +1998,8 @@ StatusOr<Conversion<json::Value>> encode_response(const ir::Response& resp,
             retained_tool_use = true;
         } else if (std::holds_alternative<ir::WebSearchCallBlock>(b)) {
             losses.push_back(make_ant_loss("content[" + std::to_string(i) + "]", "type", ir::LOSS_UNSUPPORTED_SEMANTIC, "Responses web_search_call has no Anthropic equivalent"));
+        } else if (std::holds_alternative<ir::CompactionItemBlock>(b)) {
+            losses.push_back(make_ant_loss("content[" + std::to_string(i) + "]", "type", ir::LOSS_UNSUPPORTED_SEMANTIC, std::string(ir::COMPACTION_ITEM_LOSS_DETAIL)));
         } else if (std::holds_alternative<ir::ApplyPatchToolUseBlock>(b) || std::holds_alternative<ir::ApplyPatchToolResultBlock>(b)) {
             losses.push_back(make_ant_loss("content[" + std::to_string(i) + "]", "type",
                 ir::LOSS_UNSUPPORTED_SEMANTIC, "apply_patch tools have no equivalent in Anthropic Messages"));

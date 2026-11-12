@@ -296,6 +296,12 @@ struct BlockValidator {
         if (!st.ok()) return st;
         return check_no_prompt_cache_breakpoint(b.native, path);
     }
+    Status operator()(const CompactionItemBlock& b) const {
+        if (b.encrypted_content.empty()) {
+            return invalid_argument("ir: " + std::string(path) + ": compaction_item encrypted_content is required");
+        }
+        return ok_status();
+    }
     Status operator()(const ToolResultBlock& b) const {
         auto st = validate_annotations(b.native, host, path);
         if (!st.ok()) return st;
@@ -714,6 +720,10 @@ struct BlockOmissionCollector {
         for (std::size_t i = 0; i < b.native.size(); ++i) {
             append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target);
         }
+    }
+    void operator()(const CompactionItemBlock&) const {
+        // Whole-block drop on non-Responses faces; annotations are absent and
+        // the cross-face loss is reported by the encoder.
     }
     void operator()(const ToolResultBlock& b) const {
         for (std::size_t i = 0; i < b.native.size(); ++i) {

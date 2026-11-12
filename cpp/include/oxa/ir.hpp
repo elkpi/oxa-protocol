@@ -69,6 +69,11 @@ inline constexpr std::string_view PROMPT_CACHE_OPTIONS_LOSS_DETAIL =
 inline constexpr std::string_view PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL =
     "Anthropic Messages has no prompt_cache_breakpoint parameter; prompt cache breakpoint is dropped";
 
+// Cross-face omission text for a Responses compaction checkpoint (spec/11
+// N-R-22). It MUST NOT contain the ciphertext.
+inline constexpr std::string_view COMPACTION_ITEM_LOSS_DETAIL =
+    "Responses compaction item cannot be represented on the target face";
+
 inline constexpr std::string_view DEFER_LOADING_LOSS_DETAIL =
     "deferred tool loading is a provider-side context-assembly instruction; the tool definition is unchanged and loads up front when the target has no tool search";
 
@@ -97,6 +102,7 @@ inline constexpr std::string_view BLOCK_TYPE_ENCRYPTED_CONTENT = "encrypted_cont
 inline constexpr std::string_view BLOCK_TYPE_IMAGE = "image";
 inline constexpr std::string_view BLOCK_TYPE_DOCUMENT = "document";
 inline constexpr std::string_view BLOCK_TYPE_WEB_SEARCH_CALL = "web_search_call";
+inline constexpr std::string_view BLOCK_TYPE_COMPACTION_ITEM = "compaction_item";
 inline constexpr std::string_view BLOCK_TYPE_TOOL_USE = "tool_use";
 inline constexpr std::string_view BLOCK_TYPE_TOOL_RESULT = "tool_result";
 inline constexpr std::string_view BLOCK_TYPE_CUSTOM_TOOL_USE = "custom_tool_use";
@@ -386,6 +392,14 @@ struct WebSearchCallBlock {
     json::Value extra = json::Value::object();
 };
 
+// Responses compaction checkpoint (spec/11 N-R-22). The ciphertext stays
+// opaque and MUST NOT appear in a loss detail. Not an Anthropic CompactionBlock.
+struct CompactionItemBlock {
+    std::string encrypted_content;
+    std::string id;
+    std::string created_by;
+};
+
 struct RefusalBlock {
     std::string refusal;
     std::optional<std::string> category;
@@ -408,7 +422,8 @@ struct ToolReferenceBlock {
 using Block = std::variant<TextBlock, ThinkingBlock, RedactedThinkingBlock, EncryptedContentBlock, ImageBlock, DocumentBlock,
                            ToolUseBlock, ToolResultBlock,
                            CustomToolUseBlock, CustomToolResultBlock,
-                           ApplyPatchToolUseBlock, ApplyPatchToolResultBlock, WebSearchCallBlock, RefusalBlock, ToolReferenceBlock, CompactionBlock>;
+                           ApplyPatchToolUseBlock, ApplyPatchToolResultBlock, WebSearchCallBlock, RefusalBlock, ToolReferenceBlock, CompactionBlock,
+                           CompactionItemBlock>;
 
 struct BlockHolder {
     Block block;
@@ -464,6 +479,15 @@ struct Params {
     std::optional<std::int64_t> top_logprobs;
 };
 
+// One Responses compaction checkpoint placed relative to request messages
+// (spec/11 N-R-22). `after_message` -1 emits the item before every message.
+struct CompactionItem {
+    std::string encrypted_content;
+    std::string id;
+    std::string created_by;
+    std::int64_t after_message = -1;
+};
+
 struct Request {
     std::string model;
     std::vector<Message> messages;
@@ -474,6 +498,7 @@ struct Request {
     std::optional<std::map<std::string, std::string>> metadata;
     std::vector<NativeAnnotation> native;
     std::vector<ToolChangeGroup> tool_change_groups;
+    std::vector<CompactionItem> compaction_items;
 };
 
 // ---- response (spec/01 §4) -------------------------------------------------

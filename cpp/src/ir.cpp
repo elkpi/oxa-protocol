@@ -235,7 +235,8 @@ namespace {
 #if defined(__EXCEPTIONS) || defined(__cpp_exceptions)
 bool block_has_native(const Block& b) {
     return std::visit([](const auto& val) {
-        if constexpr (std::is_same_v<std::decay_t<decltype(val)>, WebSearchCallBlock>) return false;
+        if constexpr (std::is_same_v<std::decay_t<decltype(val)>, WebSearchCallBlock> ||
+                      std::is_same_v<std::decay_t<decltype(val)>, CompactionItemBlock>) return false;
         else return !val.native.empty();
     }, b);
 }
@@ -337,6 +338,14 @@ json::Value dump_block_impl(const Block& b, F&& recurse) {
         else { json::Value output = json::Value::array();
             for (const auto& inner : std::get<std::vector<BlockHolder>>(cr->output)) output.push_back(recurse(inner.block));
             out.set("output", std::move(output)); }
+        return out;
+    }
+    if (const auto* ci = std::get_if<CompactionItemBlock>(&b)) {
+        if (ci->encrypted_content.empty()) throw std::invalid_argument("ir: compaction_item encrypted_content is required");
+        out.set("type", json::Value::string(std::string(BLOCK_TYPE_COMPACTION_ITEM)));
+        out.set("encrypted_content", json::Value::string(ci->encrypted_content));
+        if (!ci->id.empty()) out.set("id", json::Value::string(ci->id));
+        if (!ci->created_by.empty()) out.set("created_by", json::Value::string(ci->created_by));
         return out;
     }
     if (const auto* ws = std::get_if<WebSearchCallBlock>(&b)) {
@@ -467,7 +476,8 @@ json::Value dump_block(const Block& b) {
 json::Value dump_request_block(const Block& b) {
     json::Value out = dump_block_impl(b, [](const Block& inner) { return dump_request_block(inner); });
     const auto* nat = std::visit([](const auto& val) -> const std::vector<NativeAnnotation>* {
-        if constexpr (std::is_same_v<std::decay_t<decltype(val)>, WebSearchCallBlock>) return nullptr;
+        if constexpr (std::is_same_v<std::decay_t<decltype(val)>, WebSearchCallBlock> ||
+                      std::is_same_v<std::decay_t<decltype(val)>, CompactionItemBlock>) return nullptr;
         else return &val.native;
     }, b);
     if (nat != nullptr && !nat->empty()) {
@@ -703,6 +713,21 @@ StatusOr<Block> load_block_impl(const json::Value& v, Recurse&& recurse, std::ve
         }
         return Block(std::move(block));
     }
+    if (kind == BLOCK_TYPE_COMPACTION_ITEM) {
+        if (!native.empty()) return invalid_argument("compaction_item does not support native annotations");
+        OXA_ASSIGN_OR_RETURN(std::string cipher, require_string(v, "encrypted_content", "compaction_item block"));
+        if (cipher.empty()) return invalid_argument("ir: compaction_item encrypted_content is required");
+        CompactionItemBlock block{std::move(cipher), {}, {}};
+        if (const auto* id = v.find("id")) {
+            if (!id->is_string()) return invalid_argument("compaction_item id must be a string");
+            block.id = id->as_string();
+        }
+        if (const auto* created = v.find("created_by")) {
+            if (!created->is_string()) return invalid_argument("compaction_item created_by must be a string");
+            block.created_by = created->as_string();
+        }
+        return Block(std::move(block));
+    }
     if (kind == "tool_reference") {
         OXA_ASSIGN_OR_RETURN(std::string tool_name, require_string(v, "tool_name", "tool_reference block"));
         if (tool_name.empty()) {
@@ -808,6 +833,23 @@ json::Value dump_request(const Request& r) {
         messages.push_back(std::move(mv));
     }
     out.set("messages", std::move(messages));
+
+    if (!r.compaction_items.empty()) {
+        json::Value items = json::Value::array();
+        for (const auto& item : r.compaction_items) {
+            if (item.encrypted_content.empty()) throw std::invalid_argument("ir: compaction_items encrypted_content is required");
+            if (item.after_message < -1 || item.after_message >= static_cast<std::int64_t>(r.messages.size())) {
+                throw std::invalid_argument("ir: compaction_items after_message is out of range");
+            }
+            json::Value value = json::Value::object();
+            value.set("encrypted_content", json::Value::string(item.encrypted_content));
+            if (!item.id.empty()) value.set("id", json::Value::string(item.id));
+            if (!item.created_by.empty()) value.set("created_by", json::Value::string(item.created_by));
+            value.set("after_message", json::Value::integer(item.after_message));
+            items.push_back(std::move(value));
+        }
+        out.set("compaction_items", std::move(items));
+    }
 
     if (!r.tool_change_groups.empty()) {
         json::Value groups = json::Value::array();
@@ -1051,6 +1093,36 @@ StatusOr<Request> load_request(const json::Value& v) {
             if (std::holds_alternative<CompactionBlock>(r.messages[i].content[j]) && (i != 0 || j != 0)) return invalid_argument("compaction must be first block of first message");
         }
     }
+    if (const auto* items = v.find("compaction_items")) {
+        if (!items->is_array()) return invalid_argument("compaction_items must be an array");
+        std::size_t item_index = 0;
+        for (const auto& item : items->as_array()) {
+            if (!item.is_object()) return invalid_argument("compaction_items entries must be objects");
+            CompactionItem parsed;
+            OXA_ASSIGN_OR_RETURN(parsed.encrypted_content, require_string(item, "encrypted_content", "compaction_item"));
+            if (parsed.encrypted_content.empty()) return invalid_argument("ir: compaction_items encrypted_content is required");
+            if (const auto* after = item.find("after_message")) {
+                if (!after->is_int()) return invalid_argument("compaction_items after_message must be an integer");
+                parsed.after_message = after->as_int();
+            } else {
+                return invalid_argument("compaction_items after_message is required");
+            }
+            if (parsed.after_message < -1 || parsed.after_message >= static_cast<std::int64_t>(r.messages.size())) {
+                return invalid_argument("ir: compaction_items[" + std::to_string(item_index) + "].after_message is out of range");
+            }
+            if (const auto* id = item.find("id")) {
+                if (!id->is_string()) return invalid_argument("compaction_items id must be a string");
+                parsed.id = id->as_string();
+            }
+            if (const auto* created = item.find("created_by")) {
+                if (!created->is_string()) return invalid_argument("compaction_items created_by must be a string");
+                parsed.created_by = created->as_string();
+            }
+            r.compaction_items.push_back(std::move(parsed));
+            ++item_index;
+        }
+    }
+
     if (const auto* groups = v.find("tool_change_groups")) {
         if (!groups->is_array()) return invalid_argument("tool_change_groups must be an array");
         for (const auto& value : groups->as_array()) {
@@ -1684,7 +1756,7 @@ Status validate_with(const std::vector<Event>& events, bool allow_synthesized) {
                 open_is_thinking = true;
                 open_is_atomic = false;
                 signature_seen = false;
-            } else if (std::holds_alternative<RedactedThinkingBlock>(cbs->block) || std::holds_alternative<EncryptedContentBlock>(cbs->block) || std::holds_alternative<WebSearchCallBlock>(cbs->block) || std::holds_alternative<ToolReferenceBlock>(cbs->block)) {
+            } else if (std::holds_alternative<RedactedThinkingBlock>(cbs->block) || std::holds_alternative<EncryptedContentBlock>(cbs->block) || std::holds_alternative<WebSearchCallBlock>(cbs->block) || std::holds_alternative<ToolReferenceBlock>(cbs->block) || std::holds_alternative<CompactionItemBlock>(cbs->block)) {
                 open_is_tool = false;
                 open_is_custom_tool = false;
                 open_is_thinking = false;

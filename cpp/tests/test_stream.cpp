@@ -121,7 +121,7 @@ int main() {
             }
         }
         CHECK(r->failures.empty());
-        CHECK(r->executed == 29);
+        CHECK(r->executed == 31);
         std::printf("test_stream (responses): all %zu vectors passed\n", r->executed);
     }
 
@@ -411,6 +411,6 @@ int main() {
         }
     }
 
-    std::puts("test_stream: all 50 stream vectors and 10 cross stream vectors passed");
+    std::puts("test_stream: all 52 stream vectors and 10 cross stream vectors passed");
     return 0;
 }

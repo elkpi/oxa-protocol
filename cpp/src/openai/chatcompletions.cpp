@@ -867,6 +867,9 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
     OXA_RETURN_IF_ERROR(ir::validate_tool_availability(req));
     OXA_RETURN_IF_ERROR(ir::validate_tool_strict(req));
     std::vector<ir::Loss> losses;
+    for (std::size_t ci = 0; ci < req.compaction_items.size(); ++ci) {
+        losses.push_back(make_cc_loss("compaction_items[" + std::to_string(ci) + "]", "type", ir::LOSS_UNSUPPORTED_SEMANTIC, std::string(ir::COMPACTION_ITEM_LOSS_DETAIL)));
+    }
     for (std::size_t gi = 0; gi < req.tool_change_groups.size(); ++gi) {
         const auto& group = req.tool_change_groups[gi];
         if (group.parts.empty()) losses.push_back(make_cc_loss("tool_change_groups[" + std::to_string(gi) + "]", "tools", ir::LOSS_UNSUPPORTED_SEMANTIC, "empty positional tool group cannot be represented on the target face"));
@@ -1754,6 +1757,9 @@ StatusOr<Conversion<json::Value>> encode_response(const ir::Response& resp,
         } else if (std::holds_alternative<ir::ApplyPatchToolResultBlock>(b)) {
             losses.push_back(make_cc_loss("content[" + std::to_string(i) + "]", "content",
                 ir::LOSS_UNSUPPORTED_SEMANTIC, "IR apply_patch_tool_result block cannot be rendered in a Chat Completions assistant message"));
+        } else if (std::holds_alternative<ir::CompactionItemBlock>(b)) {
+            losses.push_back(make_cc_loss("content[" + std::to_string(i) + "]", "type",
+                ir::LOSS_UNSUPPORTED_SEMANTIC, std::string(ir::COMPACTION_ITEM_LOSS_DETAIL)));
         } else {
             losses.push_back(make_cc_loss(
                 "content[" + std::to_string(i) + "]", "content", ir::LOSS_UNSUPPORTED_SEMANTIC,
