@@ -1,0 +1,123 @@
+{
+  "name": "cross.nonstream.anthropic-to-chatcompletions-unhosted-cache-breakpoints-request",
+  "description": "Cache breakpoints on assistant text and tool_result children have no Chat Completions host; each whole annotation is omitted with the capability-gap loss instead of a type-only loss.",
+  "spec_version": "0.3.0",
+  "mode": "nonstream",
+  "conversion": "protocol-to-protocol",
+  "source": {
+    "protocol": "anthropic"
+  },
+  "target": {
+    "protocol": "chatcompletions"
+  },
+  "input": {
+    "model": "claude-opus-5-5",
+    "max_tokens": 16000,
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "go"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "answer",
+            "cache_control": {
+              "type": "ephemeral"
+            }
+          },
+          {
+            "type": "tool_use",
+            "id": "t1",
+            "name": "lookup",
+            "input": {}
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "t1",
+            "cache_control": {
+              "type": "ephemeral"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "body",
+                "cache_control": {
+                  "type": "ephemeral"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "expected_output": {
+    "model": "claude-opus-5-5",
+    "messages": [
+      {
+        "role": "user",
+        "content": "go"
+      },
+      {
+        "role": "assistant",
+        "content": "answer",
+        "tool_calls": [
+          {
+            "id": "t1",
+            "type": "function",
+            "function": {
+              "name": "lookup",
+              "arguments": "{}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": "body",
+        "tool_call_id": "t1"
+      }
+    ],
+    "max_tokens": 16000
+  },
+  "expected_losses": [
+    {
+      "path": "messages[1].content[0].native[0]",
+      "field": "cache_control",
+      "reason": "unmapped-field",
+      "detail": "anthropic-native cache breakpoint; the target face has no cache_control representation"
+    },
+    {
+      "path": "messages[2].content[0].native[0]",
+      "field": "cache_control",
+      "reason": "unmapped-field",
+      "detail": "anthropic-native cache breakpoint; the target face has no cache_control representation"
+    },
+    {
+      "path": "messages[2].content[0].content[0].native[0]",
+      "field": "cache_control",
+      "reason": "unmapped-field",
+      "detail": "anthropic-native cache breakpoint; the target face has no cache_control representation"
+    }
+  ],
+  "tags": [
+    "cross",
+    "request",
+    "native",
+    "cache",
+    "loss"
+  ]
+}

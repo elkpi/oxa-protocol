@@ -1,0 +1,49 @@
+{
+  "name": "responses.nonstream.logprobs-request-from-ir-boolean-only",
+  "description": "A bare Params.Logprobs true has no Responses boolean field; it records one unmapped-field loss and emits nothing (N-R-24).",
+  "spec_version": "0.3.0",
+  "mode": "nonstream",
+  "conversion": "from-ir",
+  "source": {
+    "protocol": "responses"
+  },
+  "target": {
+    "protocol": "responses"
+  },
+  "input": {
+    "specVersion": "0.3.0",
+    "model": "m",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "go"
+          }
+        ]
+      }
+    ],
+    "params": {
+      "logprobs": true
+    }
+  },
+  "expected_output": {
+    "model": "m",
+    "input": "go"
+  },
+  "expected_losses": [
+    {
+      "path": "params.logprobs",
+      "field": "logprobs",
+      "reason": "unmapped-field",
+      "detail": "Responses has no logprobs boolean; top_logprobs is the sampling switch"
+    }
+  ],
+  "tags": [
+    "request",
+    "logprobs",
+    "n-r-24",
+    "loss"
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "name": "responses.nonstream.logprobs-request-to-ir",
+  "description": "A Responses request top_logprobs maps 1:1 to Params.TopLogprobs (N-R-24).",
+  "spec_version": "0.3.0",
+  "mode": "nonstream",
+  "conversion": "to-ir",
+  "source": {
+    "protocol": "responses"
+  },
+  "input": {
+    "model": "m",
+    "input": "go",
+    "top_logprobs": 5
+  },
+  "expected_ir": {
+    "specVersion": "0.3.0",
+    "model": "m",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "go"
+          }
+        ]
+      }
+    ],
+    "params": {
+      "top_logprobs": 5
+    }
+  },
+  "expected_losses": [],
+  "tags": [
+    "request",
+    "logprobs",
+    "n-r-24"
+  ]
+}

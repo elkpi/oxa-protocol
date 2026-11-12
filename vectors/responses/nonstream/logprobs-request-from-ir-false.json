@@ -1,0 +1,50 @@
+{
+  "name": "responses.nonstream.logprobs-request-from-ir-false",
+  "description": "Params.Logprobs false suppresses the top_logprobs field and records one unmapped-field loss (N-R-24).",
+  "spec_version": "0.3.0",
+  "mode": "nonstream",
+  "conversion": "from-ir",
+  "source": {
+    "protocol": "responses"
+  },
+  "target": {
+    "protocol": "responses"
+  },
+  "input": {
+    "specVersion": "0.3.0",
+    "model": "m",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "go"
+          }
+        ]
+      }
+    ],
+    "params": {
+      "logprobs": false,
+      "top_logprobs": 5
+    }
+  },
+  "expected_output": {
+    "model": "m",
+    "input": "go"
+  },
+  "expected_losses": [
+    {
+      "path": "params.logprobs",
+      "field": "logprobs",
+      "reason": "unmapped-field",
+      "detail": "Responses has no logprobs boolean; explicit false is dropped"
+    }
+  ],
+  "tags": [
+    "request",
+    "logprobs",
+    "n-r-24",
+    "loss"
+  ]
+}

@@ -1,0 +1,115 @@
+{
+  "name": "cross.stream.responses-to-anthropic-compaction-item",
+  "description": "A Responses compaction item has no Anthropic streaming representation; the block is omitted with an unsupported-semantic loss and the wire block indexes stay contiguous.",
+  "spec_version": "0.3.0",
+  "mode": "stream",
+  "conversion": "protocol-to-protocol",
+  "source": {
+    "protocol": "responses"
+  },
+  "target": {
+    "protocol": "anthropic"
+  },
+  "input": {
+    "events": [
+      {
+        "type": "response.created",
+        "response": {
+          "id": "resp_cmp_s",
+          "object": "response",
+          "status": "in_progress",
+          "model": "gpt-5.4",
+          "output": []
+        }
+      },
+      {
+        "type": "response.output_item.added",
+        "output_index": 0,
+        "item": {
+          "type": "compaction",
+          "id": "cmp_1",
+          "encrypted_content": "cipher",
+          "created_by": "system"
+        }
+      },
+      {
+        "type": "response.output_item.done",
+        "output_index": 0,
+        "item": {
+          "type": "compaction",
+          "id": "cmp_1",
+          "encrypted_content": "cipher",
+          "created_by": "system"
+        }
+      },
+      {
+        "type": "response.completed",
+        "response": {
+          "id": "resp_cmp_s",
+          "object": "response",
+          "status": "completed",
+          "model": "gpt-5.4",
+          "output": [
+            {
+              "type": "compaction",
+              "id": "cmp_1",
+              "encrypted_content": "cipher",
+              "created_by": "system"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 3,
+            "total_tokens": 5
+          }
+        }
+      }
+    ]
+  },
+  "expected_output": {
+    "events": [
+      {
+        "type": "message_start",
+        "message": {
+          "id": "resp_cmp_s",
+          "type": "message",
+          "role": "assistant",
+          "model": "gpt-5.4",
+          "content": [],
+          "stop_reason": null,
+          "usage": {
+            "input_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      },
+      {
+        "type": "message_delta",
+        "delta": {
+          "stop_reason": "end_turn"
+        },
+        "usage": {
+          "input_tokens": 2,
+          "output_tokens": 3
+        }
+      },
+      {
+        "type": "message_stop"
+      }
+    ]
+  },
+  "expected_losses": [
+    {
+      "path": "events[0].block",
+      "field": "type",
+      "reason": "unsupported-semantic",
+      "detail": "Responses compaction item cannot be represented on the target face"
+    }
+  ],
+  "tags": [
+    "stream",
+    "cross-face",
+    "compaction",
+    "loss"
+  ]
+}
