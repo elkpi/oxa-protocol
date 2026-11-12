@@ -33,6 +33,9 @@ pub const NATIVE_SOURCE_OPENAI: &str = "openai";
 pub const CACHE_CONTROL_LOSS_DETAIL: &str =
     "anthropic-native cache breakpoint; the target face has no cache_control representation";
 
+pub const RESPONSES_CONTEXT_MANAGEMENT_LOSS_DETAIL: &str =
+    "Responses context_management has no equivalent on the target face";
+
 pub const PROMPT_CACHE_KEY_LOSS_DETAIL: &str =
     "Anthropic Messages has no prompt_cache_key parameter; prompt cache key is dropped";
 

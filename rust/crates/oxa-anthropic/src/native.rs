@@ -296,6 +296,78 @@ fn parse_context_management(cm: &ContextManagementWire, path: &str) -> (Option<S
                     valid_edits.push(Value::Object(canon_edit));
                 }
             }
+            "compact_20260112" => {
+                for k in edit.keys() {
+                    if k != "type" && k != "trigger" && k != "pause_after_compaction" {
+                        losses.push(Loss {
+                            path: format!("{edit_path}.{k}"),
+                            field: k.clone(),
+                            reason: LossReason::UnmappedField,
+                            detail: String::new(),
+                        });
+                    }
+                }
+                let mut valid = true;
+                let mut canon_edit = serde_json::Map::new();
+                canon_edit.insert("type".into(), Value::String("compact_20260112".into()));
+
+                if let Some(trig_val) = edit.get("trigger") {
+                    if let Some(trig) = trig_val.as_object() {
+                        for k in trig.keys() {
+                            if k != "type" && k != "value" {
+                                losses.push(Loss {
+                                    path: format!("{edit_path}.trigger.{k}"),
+                                    field: k.clone(),
+                                    reason: LossReason::UnmappedField,
+                                    detail: String::new(),
+                                });
+                            }
+                        }
+                        if trig.get("type").and_then(|v| v.as_str()) != Some("input_tokens") {
+                            losses.push(Loss {
+                                path: format!("{edit_path}.trigger"),
+                                field: "trigger".into(),
+                                reason: LossReason::UnmappedValue,
+                                detail: String::new(),
+                            });
+                            valid = false;
+                        } else {
+                            let mut trig_obj = serde_json::Map::new();
+                            trig_obj.insert("type".into(), Value::String("input_tokens".into()));
+                            if let Some(v) = trig.get("value") {
+                                trig_obj.insert("value".into(), v.clone());
+                            }
+                            canon_edit.insert("trigger".into(), Value::Object(trig_obj));
+                        }
+                    } else {
+                        losses.push(Loss {
+                            path: format!("{edit_path}.trigger"),
+                            field: "trigger".into(),
+                            reason: LossReason::UnmappedValue,
+                            detail: String::new(),
+                        });
+                        valid = false;
+                    }
+                }
+
+                if let Some(pause) = edit.get("pause_after_compaction") {
+                    if !pause.is_boolean() {
+                        losses.push(Loss {
+                            path: format!("{edit_path}.pause_after_compaction"),
+                            field: "pause_after_compaction".into(),
+                            reason: LossReason::UnmappedValue,
+                            detail: String::new(),
+                        });
+                        valid = false;
+                    } else {
+                        canon_edit.insert("pause_after_compaction".into(), pause.clone());
+                    }
+                }
+
+                if valid {
+                    valid_edits.push(Value::Object(canon_edit));
+                }
+            }
             _ => {
                 losses.push(Loss {
                     path: edit_path,

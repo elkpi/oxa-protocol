@@ -178,6 +178,60 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
     request.tool_choice = choice;
     losses.extend(choice_losses);
 
+    if !wire.context_management.is_empty() {
+        let mut kept: Vec<Value> = Vec::new();
+        for (i, entry) in wire.context_management.iter().enumerate() {
+            let path = format!("context_management[{i}]");
+            let Some(obj) = entry.as_object() else {
+                return Err(Error::new(format!("responses: {path} must be an object")));
+            };
+            let Some(kind) = obj.get("type").and_then(Value::as_str) else {
+                return Err(Error::new(format!("responses: {path}.type is required")));
+            };
+            if kind.is_empty() {
+                return Err(Error::new(format!("responses: {path}.type is required")));
+            }
+            if kind != "compaction" {
+                losses.push(loss(
+                    format!("{path}.type"),
+                    "type",
+                    LossReason::UnmappedValue,
+                    format!("unknown context_management type {kind:?}"),
+                ));
+                continue;
+            }
+            let mut canonical = serde_json::Map::new();
+            canonical.insert("type".into(), Value::String("compaction".into()));
+            if let Some(threshold) = obj.get("compact_threshold") {
+                let Some(value) = threshold.as_i64() else {
+                    return Err(Error::new(format!(
+                        "responses: {path}.compact_threshold must be an integer"
+                    )));
+                };
+                if value < 1000 {
+                    return Err(Error::new(format!(
+                        "responses: {path}.compact_threshold must be at least 1000"
+                    )));
+                }
+                canonical.insert("compact_threshold".into(), Value::from(value));
+            }
+            kept.push(Value::Object(canonical));
+        }
+        if !kept.is_empty() {
+            request.native.push(oxa_ir::NativeAnnotation {
+                source: oxa_ir::NATIVE_SOURCE_OPENAI.into(),
+                kind: oxa_ir::NATIVE_KIND_CONTEXT_MANAGEMENT.into(),
+                value: Value::Array(kept).to_string(),
+                omission: Some(oxa_ir::NativeOmission {
+                    field: "context_management".into(),
+                    reason: LossReason::UnmappedField,
+                    detail: Some(oxa_ir::RESPONSES_CONTEXT_MANAGEMENT_LOSS_DETAIL.into()),
+                }),
+                projection: None,
+            });
+        }
+    }
+
     match &wire.input {
         Input::Text(text) => request.messages.push(oxa_ir::Message {
             role: Role::User,

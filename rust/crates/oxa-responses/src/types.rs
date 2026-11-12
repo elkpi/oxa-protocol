@@ -142,6 +142,12 @@ pub struct Request {
         skip_serializing_if = "Option::is_none"
     )]
     pub prompt_cache_options: Option<Value>,
+    #[serde(
+        rename = "context_management",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub context_management: Vec<Value>,
 }
 
 /// Responses accepts a string shorthand or an ordered item array as input.
