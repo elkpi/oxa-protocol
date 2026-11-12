@@ -306,12 +306,12 @@ pub fn encode_request(req: &IrRequest, config: &Config) -> Result<(Request, Vec<
             } else if let Ok(val) = serde_json::from_str::<serde_json::Value>(&n.value) {
                 out.prompt_cache_options = Some(val);
             }
-        } else if n.source == "openai" && n.kind == oxa_ir::NATIVE_KIND_CONTEXT_MANAGEMENT {
-            if let Ok(serde_json::Value::Array(entries)) =
+        } else if n.source == "openai"
+            && n.kind == oxa_ir::NATIVE_KIND_CONTEXT_MANAGEMENT
+            && let Ok(serde_json::Value::Array(entries)) =
                 serde_json::from_str::<serde_json::Value>(&n.value)
-            {
-                out.context_management = entries;
-            }
+        {
+            out.context_management = entries;
         }
     }
     let omission_losses = oxa_ir::omitted_native_request_losses(req, "responses")

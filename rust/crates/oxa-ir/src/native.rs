@@ -1282,15 +1282,15 @@ fn cache_control_translation_losses(value: &str, path: &str) -> Vec<Loss> {
         reason: LossReason::UnmappedField,
         detail: "cache_control.type is not represented by prompt_cache_breakpoint".into(),
     }];
-    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(value) {
-        if parsed.get("ttl").is_some() {
-            losses.push(Loss {
-                path: path.into(),
-                field: "ttl".into(),
-                reason: LossReason::UnmappedField,
-                detail: "cache_control.ttl has no equivalent prompt cache ttl".into(),
-            });
-        }
+    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(value)
+        && parsed.get("ttl").is_some()
+    {
+        losses.push(Loss {
+            path: path.into(),
+            field: "ttl".into(),
+            reason: LossReason::UnmappedField,
+            detail: "cache_control.ttl has no equivalent prompt cache ttl".into(),
+        });
     }
     losses
 }

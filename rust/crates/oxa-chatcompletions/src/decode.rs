@@ -537,7 +537,7 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         reasoning_effort: decode_reasoning_effort(wire.reasoning_effort.as_deref(), &mut losses),
         verbosity,
         response_format,
-        logprobs: wire.logprobs.as_ref().map(|v| v.as_bool()).flatten(),
+        logprobs: wire.logprobs.as_ref().and_then(|v| v.as_bool()),
         top_logprobs: wire
             .top_logprobs
             .as_ref()
