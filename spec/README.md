@@ -9,7 +9,7 @@ is the contract every implementation (Go first, then TypeScript, Rust, Python,
 and C++) MUST satisfy.
 
 The specification versions itself independently of the implementations.
-Current spec version: **3.2.0**. The IR contract is **0.3.0**.
+Current spec version: **3.3.0**. The IR contract is **0.3.0**.
 Custom Tools 扩展见 [13](13-custom-tools.md)，专用 Apply Patch 见 [14](14-apply-patch.md)，原生请求配置保真见 [15](15-native-request-options.md)，原生工具声明保真见 [16](16-native-tool-declarations.md)，SystemOne Jev face 映射见 [17](17-systemone-jev.md)，控制面保真度矩阵见 [21](21-capability-matrix.md)。
 
 Go, TypeScript, Rust, Python, and C++ share

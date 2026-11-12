@@ -30,7 +30,8 @@
 package oxa
 
 // Version is the current release version of the oxa Go reference implementation.
-// v3.2.0 adds the control-plane fidelity matrix (spec/21), locks it with
-// ten cross-stream vectors, and publishes once every language wave passes
-// the shared 646-vector suite (spec/README).
-const Version = "3.2.0"
+// v3.3.0 adds explicit cache breakpoints, request log-probability sampling,
+// Responses compaction checkpoints and triggers, and Anthropic web_search
+// history. Every language wave passes the shared 646-vector suite
+// (spec/README).
+const Version = "3.3.0"
