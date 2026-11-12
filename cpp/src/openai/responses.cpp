@@ -1064,6 +1064,49 @@ static StatusOr<Conversion<ir::Request>> decode_request_unchecked(const json::Va
         });
     }
 
+    if (const auto* cm = wire.find("context_management"); cm) {
+        if (!cm->is_array()) return invalid_argument("responses: context_management must be an array");
+        json::Value kept = json::Value::array();
+        std::size_t cm_index = 0;
+        for (const auto& entry : cm->as_array()) {
+            const std::string path = "context_management[" + std::to_string(cm_index) + "]";
+            if (!entry.is_object()) return invalid_argument("responses: " + path + " must be an object");
+            const auto* kind = entry.find("type");
+            if (!kind || !kind->is_string() || kind->as_string().empty()) {
+                return invalid_argument("responses: " + path + ".type is required");
+            }
+            if (kind->as_string() != "compaction") {
+                losses.push_back(make_resp_loss(
+                    path + ".type", "type", ir::LOSS_UNMAPPED_VALUE,
+                    "unknown context_management type \"" + kind->as_string() + "\""));
+                ++cm_index;
+                continue;
+            }
+            json::Value canonical = json::Value::object();
+            canonical.set("type", json::Value::string("compaction"));
+            if (const auto* threshold = entry.find("compact_threshold")) {
+                if (!threshold->is_int()) return invalid_argument("responses: " + path + ".compact_threshold must be an integer");
+                if (threshold->as_int() < 1000) return invalid_argument("responses: " + path + ".compact_threshold must be at least 1000");
+                canonical.set("compact_threshold", json::Value::integer(threshold->as_int()));
+            }
+            kept.push_back(std::move(canonical));
+            ++cm_index;
+        }
+        if (!kept.as_array().empty()) {
+            req.native.push_back(ir::NativeAnnotation{
+                std::string(ir::NATIVE_SOURCE_OPENAI),
+                std::string(ir::NATIVE_KIND_CONTEXT_MANAGEMENT),
+                json::serialize(kept),
+                ir::NativeOmission{
+                    "context_management",
+                    std::string(ir::LOSS_UNMAPPED_FIELD),
+                    std::string(ir::RESPONSES_CONTEXT_MANAGEMENT_LOSS_DETAIL),
+                },
+                std::nullopt,
+            });
+        }
+    }
+
     const auto* inp = wire.find("input");
     if (!inp) return invalid_argument("responses: request missing input");
 
@@ -2403,6 +2446,11 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                 auto parsed = json::parse(n.value);
                 if (parsed.ok() && parsed->is_string()) {
                     out.set("prompt_cache_key", json::Value::string(parsed->as_string()));
+                }
+            } else if (n.kind == ir::NATIVE_KIND_CONTEXT_MANAGEMENT) {
+                auto parsed = json::parse(n.value);
+                if (parsed.ok() && parsed->is_array()) {
+                    out.set("context_management", std::move(*parsed));
                 }
             } else if (n.kind == ir::NATIVE_KIND_PROMPT_CACHE_OPTIONS) {
                 if (n.value == "null") {

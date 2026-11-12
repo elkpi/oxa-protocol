@@ -5,8 +5,9 @@
 namespace oxa::openai::responses {
 inline const detail::AuditProfile& wire_profile() {
     static const detail::AuditProfile profile{
-        {{"request", {{"model", ""}, {"input", "input_item[]"}, {"instructions", ""}, {"temperature", ""}, {"top_p", ""}, {"max_output_tokens", ""}, {"tools", "tool[]"}, {"tool_choice", "tool_choice"}, {"parallel_tool_calls", ""}, {"prompt_cache_key", ""}, {"prompt_cache_options", "prompt_cache_options_def"}, {"text", "text_params"}, {"reasoning", "reasoning"}, {"top_logprobs", ""}, {"metadata", ""}}},
+        {{"request", {{"model", ""}, {"input", "input_item[]"}, {"instructions", ""}, {"temperature", ""}, {"top_p", ""}, {"max_output_tokens", ""}, {"tools", "tool[]"}, {"tool_choice", "tool_choice"}, {"parallel_tool_calls", ""}, {"prompt_cache_key", ""}, {"prompt_cache_options", "prompt_cache_options_def"}, {"context_management", "context_management_entry[]"}, {"text", "text_params"}, {"reasoning", "reasoning"}, {"top_logprobs", ""}, {"metadata", ""}}},
          {"prompt_cache_options_def", {{"mode", ""}, {"ttl", ""}}},
+         {"context_management_compaction", {{"type", ""}, {"compact_threshold", ""}}},
          {"prompt_cache_breakpoint_def", {{"mode", ""}, {"ttl", ""}}},
          {"response", {{"id", ""}, {"object", ""}, {"status", ""}, {"model", ""}, {"output", "output_item[]"}, {"usage", "usage"}, {"incomplete_details", "incomplete"}, {"error", ""}}},
          {"input_message", {{"type", ""}, {"id", ""}, {"status", ""}, {"role", ""}, {"content", "input_part[]"}}},
@@ -76,6 +77,7 @@ inline const detail::AuditProfile& wire_profile() {
                                     {PART_TYPE_OUTPUT_TEXT, "plain_part"}}, ""}},
          {"output_part", {"type", {{PART_TYPE_OUTPUT_TEXT, "plain_part"},
                                    {"refusal", "refusal_part"}}, ""}},
+         {"context_management_entry", {"type", {{"compaction", "context_management_compaction"}}, ""}},
          {"output_item", {"type", {{ITEM_TYPE_MESSAGE, "output_message"},
                                    {ITEM_TYPE_FUNCTION_CALL, "function_call"},
                                   {ITEM_TYPE_CUSTOM_TOOL_CALL, "custom_call"},

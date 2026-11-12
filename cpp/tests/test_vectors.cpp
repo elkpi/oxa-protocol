@@ -128,7 +128,7 @@ int main() {
             }
         }
         CHECK(r->failures.empty());
-        CHECK(r->executed == 139);
+        CHECK(r->executed == 142);
     }
 
     // 3. Responses nonstream
@@ -141,7 +141,7 @@ int main() {
             }
         }
         CHECK(r->failures.empty());
-        CHECK(r->executed == 196);
+        CHECK(r->executed == 199);
     }
 
     // 4. SystemOne Jev nonstream
@@ -168,7 +168,7 @@ int main() {
             }
         }
         CHECK(r->failures.empty());
-        CHECK(r->executed == 126);
+        CHECK(r->executed == 128);
         std::printf("test_cross: all %zu vectors passed\n", r->executed);
     }
 

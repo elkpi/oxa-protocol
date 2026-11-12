@@ -60,6 +60,9 @@ inline constexpr std::string_view NATIVE_KIND_PROMPT_CACHE_BREAKPOINT = "prompt_
 inline constexpr std::string_view CACHE_CONTROL_LOSS_DETAIL =
     "anthropic-native cache breakpoint; the target face has no cache_control representation";
 
+inline constexpr std::string_view RESPONSES_CONTEXT_MANAGEMENT_LOSS_DETAIL =
+    "Responses context_management has no equivalent on the target face";
+
 inline constexpr std::string_view PROMPT_CACHE_KEY_LOSS_DETAIL =
     "Anthropic Messages has no prompt_cache_key parameter; prompt cache key is dropped";
 
