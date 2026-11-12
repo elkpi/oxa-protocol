@@ -29,6 +29,7 @@ import {
   PROMPT_CACHE_KEY_LOSS_DETAIL,
   PROMPT_CACHE_OPTIONS_LOSS_DETAIL,
   PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL,
+  RESPONSES_CONTEXT_MANAGEMENT_LOSS_DETAIL,
   NATIVE_KIND_PROMPT_CACHE_OPTIONS,
   NATIVE_KIND_PROMPT_CACHE_BREAKPOINT,
   type NativeAnnotation,
@@ -51,6 +52,20 @@ import type {
   TextCitation,
   WebSearchCallBlock,
 } from "../../ir/index.js";
+
+function canonicalizeContextManagement(value: JsonValue): JsonValue {
+  if (Array.isArray(value)) return value.map(canonicalizeContextManagement);
+  if (value !== null && typeof value === "object") {
+    const sorted: Record<string, JsonValue> = Object.create(null);
+    for (const key of Object.keys(value).sort()) {
+      sorted[key] = canonicalizeContextManagement(
+        (value as Record<string, JsonValue>)[key]!,
+      );
+    }
+    return sorted;
+  }
+  return value;
+}
 
 function isAdditionalTools(value: unknown): boolean {
   if (
@@ -601,6 +616,55 @@ function decodeRequestObject(
         detail: PROMPT_CACHE_OPTIONS_LOSS_DETAIL,
       },
     });
+  }
+  if (wire.context_management !== undefined) {
+    if (!Array.isArray(wire.context_management)) {
+      throw new TypeError("responses: context_management must be an array");
+    }
+    const kept: JsonObject[] = [];
+    wire.context_management.forEach((entry, i) => {
+      const path = `context_management[${i}]`;
+      const obj = object(entry, path);
+      const entryType = object(entry, path).type;
+      if (typeof entryType !== "string" || entryType === "")
+        throw new TypeError(`responses: ${path}.type is required`);
+      if (entryType !== "compaction") {
+        losses.push({
+          path: `${path}.type`,
+          field: "type",
+          reason: "unmapped-value",
+          detail: `unknown context_management type "${entryType}"`,
+        });
+        return;
+      }
+      const threshold = obj.compact_threshold;
+      if (threshold !== undefined) {
+        if (!isJsonNumber(threshold) || !threshold.isInteger)
+          throw new TypeError(
+            `responses: ${path}.compact_threshold must be an integer`,
+          );
+        if (Number(threshold.token) < 1000)
+          throw new TypeError(
+            `responses: ${path}.compact_threshold must be at least 1000`,
+          );
+      }
+      kept.push({
+        type: "compaction",
+        ...(threshold === undefined ? {} : { compact_threshold: threshold }),
+      });
+    });
+    if (kept.length > 0) {
+      native.push({
+        source: "openai",
+        kind: "context_management",
+        value: stringifyJson(canonicalizeContextManagement(kept)),
+        omission: {
+          field: "context_management",
+          reason: "unmapped-field",
+          detail: RESPONSES_CONTEXT_MANAGEMENT_LOSS_DETAIL,
+        },
+      });
+    }
   }
   const request: Request = {
     model: mapModel(options.modelMapper, string(wire.model, "model")),
@@ -1704,6 +1768,16 @@ export function encodeRequest(
       promptCacheOptionsVal = JSON.parse(promptCacheOptionsAnn.value);
     } catch {}
   }
+  const contextManagementAnn = request.native?.find(
+    (n) => n.source === "openai" && n.kind === "context_management",
+  );
+  let contextManagementVal: JsonValue | undefined = undefined;
+  if (contextManagementAnn) {
+    try {
+      const parsed = JSON.parse(contextManagementAnn.value);
+      if (Array.isArray(parsed)) contextManagementVal = fromValue(parsed);
+    } catch {}
+  }
   let promptCacheKeyVal: string | undefined = undefined;
   if (promptCacheKeyAnn) {
     try {
@@ -1726,6 +1800,9 @@ export function encodeRequest(
         : {}),
       ...(promptCacheOptionsVal !== undefined
         ? { prompt_cache_options: promptCacheOptionsVal }
+        : {}),
+      ...(contextManagementVal !== undefined
+        ? { context_management: contextManagementVal }
         : {}),
       ...(parallelToolCalls !== undefined
         ? { parallel_tool_calls: parallelToolCalls }

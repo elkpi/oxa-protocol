@@ -28,6 +28,13 @@ const PROMPT_CACHE_OPTIONS: WireAuditSpec = {
   },
 };
 
+const CONTEXT_MANAGEMENT_ENTRY: WireAuditSpec = {
+  variant: (entry) => {
+    if (entry.type !== "compaction") return undefined;
+    return { fields: { type: undefined, compact_threshold: undefined } };
+  },
+};
+
 const INPUT_PART: WireAuditSpec = {
   variant: (part) => {
     if (part.type === "input_text")
@@ -468,6 +475,7 @@ export const RESPONSES_REQUEST: WireAuditSpec = {
     parallel_tool_calls: undefined,
     prompt_cache_key: undefined,
     prompt_cache_options: PROMPT_CACHE_OPTIONS,
+    context_management: { items: CONTEXT_MANAGEMENT_ENTRY },
     text: { fields: { format: FORMAT, verbosity: undefined } },
     reasoning: { fields: { effort: undefined, summary: undefined } },
     metadata: undefined,
