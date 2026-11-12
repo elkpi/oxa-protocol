@@ -552,7 +552,10 @@ test("cache_control omission loss detail is populated for cross encoding, includ
   const resp = encodeResponses(decoded.value);
   assert.equal(resp.losses.length, 3);
   assert.equal(resp.losses.filter((l) => l.field === "type").length, 2);
-  assert.equal(resp.losses.filter((l) => l.field === "cache_control").length, 1);
+  assert.equal(
+    resp.losses.filter((l) => l.field === "cache_control").length,
+    1,
+  );
 
   // Directly constructed IR with omission omitted
   const reqNoOmission: Request = {
