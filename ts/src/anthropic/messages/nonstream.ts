@@ -69,6 +69,20 @@ import type {
   ToolChangePart,
 } from "../../ir/index.js";
 
+function canonicalizeWebJson(value: JsonValue): JsonValue {
+  if (Array.isArray(value)) return value.map(canonicalizeWebJson);
+  if (value !== null && typeof value === "object") {
+    const sorted: Record<string, JsonValue> = Object.create(null);
+    for (const key of Object.keys(value).sort()) {
+      sorted[key] = canonicalizeWebJson(
+        (value as Record<string, JsonValue>)[key]!,
+      );
+    }
+    return sorted;
+  }
+  return value;
+}
+
 function decodeToolChange(
   block: JsonObject,
   path: string,
@@ -1697,6 +1711,58 @@ function decodeContent(
           ...(native ? { native } : {}),
         });
       }
+    } else if (type === "server_tool_use") {
+      const id = nonEmptyString(block.id, `${path}[${index}].id`);
+      const name = nonEmptyString(block.name, `${path}[${index}].name`);
+      if (name !== "web_search") {
+        losses.push({
+          path: `${path}[${index}]`,
+          field: "type",
+          reason: "unsupported-semantic",
+          detail: `Anthropic server tool "${name}" has no IR equivalent`,
+        });
+        continue;
+      }
+      const input = object(block.input, `${path}[${index}].input`);
+      const caller =
+        block.caller === undefined
+          ? undefined
+          : object(block.caller, `${path}[${index}].caller`);
+      blocks.push({
+        type: "server_tool_use",
+        id,
+        name: "web_search",
+        input: stringifyJson(canonicalizeWebJson(input)),
+        ...(caller === undefined
+          ? {}
+          : { caller: stringifyJson(canonicalizeWebJson(caller)) }),
+        ...(native ? { native } : {}),
+      });
+    } else if (type === "web_search_tool_result") {
+      const toolUseId = nonEmptyString(
+        block.tool_use_id,
+        `${path}[${index}].tool_use_id`,
+      );
+      const content = block.content;
+      if (
+        content === undefined ||
+        content === null ||
+        typeof content !== "object"
+      )
+        fail(`${path}[${index}].content must be a JSON array or object`);
+      const caller =
+        block.caller === undefined
+          ? undefined
+          : object(block.caller, `${path}[${index}].caller`);
+      blocks.push({
+        type: "web_search_tool_result",
+        tool_use_id: toolUseId,
+        content: stringifyJson(canonicalizeWebJson(content as JsonValue)),
+        ...(caller === undefined
+          ? {}
+          : { caller: stringifyJson(canonicalizeWebJson(caller)) }),
+        ...(native ? { native } : {}),
+      });
     } else if (type === "tool_reference") {
       const toolName =
         (block.tool_name !== undefined
@@ -2028,6 +2094,27 @@ function encodeContent(
         });
       }
       continue;
+    } else if (block.type === "server_tool_use") {
+      output.push({
+        type: "server_tool_use",
+        id: block.id,
+        name: "web_search",
+        input: parseJson(block.input),
+        ...(block.caller === undefined
+          ? {}
+          : { caller: parseJson(block.caller) }),
+        ...(cc ? { cache_control: cc } : {}),
+      });
+    } else if (block.type === "web_search_tool_result") {
+      output.push({
+        type: "web_search_tool_result",
+        tool_use_id: block.tool_use_id,
+        content: parseJson(block.content),
+        ...(block.caller === undefined
+          ? {}
+          : { caller: parseJson(block.caller) }),
+        ...(cc ? { cache_control: cc } : {}),
+      });
     } else if (block.type === "tool_reference") {
       if (!(block as ToolReferenceBlock).tool_name) {
         fail(`${path}[${index}].tool_name is required`);

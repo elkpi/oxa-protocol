@@ -119,6 +119,7 @@ export {
   type EncryptedContentBlock,
   ENCRYPTED_CONTENT_LOSS_DETAIL,
   COMPACTION_ITEM_LOSS_DETAIL,
+  WEB_SEARCH_HISTORY_LOSS_DETAIL,
   type RefusalBlock,
   type ToolReferenceBlock,
   type CompactionBlock,

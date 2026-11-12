@@ -30,6 +30,7 @@ import {
   PROMPT_CACHE_OPTIONS_LOSS_DETAIL,
   PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL,
   RESPONSES_CONTEXT_MANAGEMENT_LOSS_DETAIL,
+  WEB_SEARCH_HISTORY_LOSS_DETAIL,
   NATIVE_KIND_PROMPT_CACHE_OPTIONS,
   NATIVE_KIND_PROMPT_CACHE_BREAKPOINT,
   type NativeAnnotation,
@@ -1520,6 +1521,16 @@ export function encodeRequest(
           } else if (block.type === "encrypted_content") {
             if (block.data === "") fail("encrypted_content data is required");
             reasoning.addCipher(block.data);
+          } else if (
+            block.type === "server_tool_use" ||
+            block.type === "web_search_tool_result"
+          ) {
+            losses.push({
+              path: `messages[${index}].content[${child}]`,
+              field: "type",
+              reason: "unsupported-semantic",
+              detail: WEB_SEARCH_HISTORY_LOSS_DETAIL,
+            });
           } else if (block.type === "tool_reference") {
             losses.push(
               loss(
@@ -1906,6 +1917,16 @@ export function encodeResponse(
     } else if (block.type === "encrypted_content") {
       if (block.data === "") fail("encrypted_content data is required");
       reasoning.addCipher(block.data);
+    } else if (
+      block.type === "server_tool_use" ||
+      block.type === "web_search_tool_result"
+    ) {
+      losses.push({
+        path: `content[${index}]`,
+        field: "type",
+        reason: "unsupported-semantic",
+        detail: WEB_SEARCH_HISTORY_LOSS_DETAIL,
+      });
     } else if (block.type === "tool_reference") {
       losses.push(loss(`content[${index}]`, "type", "unsupported-semantic"));
     } else if (block.type === "thinking") {
@@ -2522,6 +2543,17 @@ function encodeUserContent(
         field: "type",
         reason: "unsupported-semantic",
         detail: ENCRYPTED_CONTENT_LOSS_DETAIL,
+      });
+    } else if (
+      block.type === "server_tool_use" ||
+      block.type === "web_search_tool_result"
+    ) {
+      otherBlocks += 1;
+      losses.push({
+        path: `${path}[${index}]`,
+        field: "type",
+        reason: "unsupported-semantic",
+        detail: WEB_SEARCH_HISTORY_LOSS_DETAIL,
       });
     } else if (block.type === "tool_reference") {
       otherBlocks += 1;

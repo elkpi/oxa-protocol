@@ -22,6 +22,7 @@ import {
   PROMPT_CACHE_OPTIONS_LOSS_DETAIL,
   PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL,
   COMPACTION_ITEM_LOSS_DETAIL,
+  WEB_SEARCH_HISTORY_LOSS_DETAIL,
   NATIVE_KIND_PROMPT_CACHE_OPTIONS,
   NATIVE_KIND_PROMPT_CACHE_BREAKPOINT,
   type NativeAnnotation,
@@ -1343,6 +1344,16 @@ function encodeUserContent(
       });
     } else if (block.type === "tool_reference") {
       losses.push(loss(`${path}[${index}]`, "type", "unsupported-semantic"));
+    } else if (
+      block.type === "server_tool_use" ||
+      block.type === "web_search_tool_result"
+    ) {
+      losses.push({
+        path: `${path}[${index}]`,
+        field: "type",
+        reason: "unsupported-semantic",
+        detail: WEB_SEARCH_HISTORY_LOSS_DETAIL,
+      });
     } else if (block.type === "redacted_thinking") {
       losses.push({
         path: `${path}[${index}]`,
@@ -1506,6 +1517,16 @@ function encodeAssistant(
       });
     } else if (block.type === "tool_reference") {
       losses.push(loss(`${path}[${index}]`, "type", "unsupported-semantic"));
+    } else if (
+      block.type === "server_tool_use" ||
+      block.type === "web_search_tool_result"
+    ) {
+      losses.push({
+        path: `${path}[${index}]`,
+        field: "type",
+        reason: "unsupported-semantic",
+        detail: WEB_SEARCH_HISTORY_LOSS_DETAIL,
+      });
     } else if (block.type === "redacted_thinking") {
       losses.push({
         path: `${path}[${index}]`,

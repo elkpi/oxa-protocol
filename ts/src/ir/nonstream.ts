@@ -810,6 +810,21 @@ function encodeBlockBase(
   switch (block.type) {
     case "compaction":
       fail("compaction is only permitted in requests");
+    case "server_tool_use":
+      return {
+        type: "server_tool_use",
+        id: block.id,
+        name: "web_search",
+        input: block.input,
+        ...(block.caller === undefined ? {} : { caller: block.caller }),
+      };
+    case "web_search_tool_result":
+      return {
+        type: "web_search_tool_result",
+        tool_use_id: block.tool_use_id,
+        content: block.content,
+        ...(block.caller === undefined ? {} : { caller: block.caller }),
+      };
     case "compaction_item":
       if (block.encrypted_content === "")
         fail("ir: compaction_item encrypted_content is required");
@@ -1197,6 +1212,25 @@ function decodeBlockBase(
         ...(block.category === undefined
           ? {}
           : { category: string(block.category, "block.category") }),
+      };
+    case "server_tool_use":
+      return {
+        type: "server_tool_use",
+        id: nonEmptyString(block.id, "block.id"),
+        name: "web_search",
+        input: nonEmptyString(block.input, "block.input"),
+        ...(block.caller === undefined
+          ? {}
+          : { caller: nonEmptyString(block.caller, "block.caller") }),
+      };
+    case "web_search_tool_result":
+      return {
+        type: "web_search_tool_result",
+        tool_use_id: nonEmptyString(block.tool_use_id, "block.tool_use_id"),
+        content: nonEmptyString(block.content, "block.content"),
+        ...(block.caller === undefined
+          ? {}
+          : { caller: nonEmptyString(block.caller, "block.caller") }),
       };
     case "compaction_item":
       return {

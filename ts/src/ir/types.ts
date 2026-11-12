@@ -74,6 +74,10 @@ export interface ThinkingBlock {
 export const ENCRYPTED_CONTENT_LOSS_DETAIL =
   "responses encrypted reasoning replay state; the target face cannot preserve this block";
 
+/** Cross-face omission text for Anthropic provider-hosted web_search history (spec/12 N-AN-23). */
+export const WEB_SEARCH_HISTORY_LOSS_DETAIL =
+  "Anthropic web_search history cannot be represented on the target face";
+
 /** Cross-face omission text for a Responses compaction checkpoint (spec/11 N-R-22). */
 export const COMPACTION_ITEM_LOSS_DETAIL =
   "Responses compaction item cannot be represented on the target face";
@@ -188,6 +192,25 @@ export interface ToolReferenceBlock {
   readonly native?: readonly NativeAnnotation[];
 }
 
+export interface ServerToolUseBlock {
+  readonly type: "server_tool_use";
+  readonly id: string;
+  readonly name: "web_search";
+  /** Canonical compact JSON object text (spec/12 N-AN-23). */
+  readonly input: string;
+  /** Canonical compact JSON object text. */
+  readonly caller?: string;
+  readonly native?: readonly NativeAnnotation[];
+}
+export interface WebSearchToolResultBlock {
+  readonly type: "web_search_tool_result";
+  readonly tool_use_id: string;
+  /** Canonical compact JSON array or error object text; opaque. */
+  readonly content: string;
+  /** Canonical compact JSON object text. */
+  readonly caller?: string;
+  readonly native?: readonly NativeAnnotation[];
+}
 export interface CompactionItemBlock {
   readonly type: "compaction_item";
   readonly encrypted_content: string;
@@ -229,7 +252,9 @@ export type Block =
   | ApplyPatchToolResultBlock
   | WebSearchCallBlock
   | RefusalBlock
-  | CompactionItemBlock;
+  | CompactionItemBlock
+  | ServerToolUseBlock
+  | WebSearchToolResultBlock;
 export interface TextDelta {
   readonly type: "text_delta";
   readonly text: string;
