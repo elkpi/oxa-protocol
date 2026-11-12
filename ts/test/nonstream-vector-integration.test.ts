@@ -39,7 +39,7 @@ test("runs Chat Completions cross request vectors across faces", () => {
       anthropic,
       responses,
     }),
-    22,
+    23,
   );
 });
 
@@ -50,7 +50,7 @@ test("runs Anthropic cross request vectors across faces including native roundtr
       chatcompletions,
       responses,
     }),
-    40,
+    42,
   );
 });
 

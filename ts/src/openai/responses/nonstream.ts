@@ -54,12 +54,12 @@ import type {
   WebSearchCallBlock,
 } from "../../ir/index.js";
 
-function canonicalizeContextManagement(value: JsonValue): JsonValue {
-  if (Array.isArray(value)) return value.map(canonicalizeContextManagement);
+function canonicalizeJsonValue(value: JsonValue): JsonValue {
+  if (Array.isArray(value)) return value.map(canonicalizeJsonValue);
   if (value !== null && typeof value === "object") {
     const sorted: Record<string, JsonValue> = Object.create(null);
     for (const key of Object.keys(value).sort()) {
-      sorted[key] = canonicalizeContextManagement(
+      sorted[key] = canonicalizeJsonValue(
         (value as Record<string, JsonValue>)[key]!,
       );
     }
@@ -571,6 +571,11 @@ function decodeRequestObject(
       : {
           max_tokens: whole(wire.max_output_tokens, "max_output_tokens"),
         }),
+    ...(wire.top_logprobs === undefined
+      ? {}
+      : {
+          top_logprobs: whole(wire.top_logprobs, "top_logprobs"),
+        }),
     ...(effortValue === undefined ? {} : { reasoning_effort: effortValue }),
     ...(verbosityValue === undefined ? {} : { verbosity: verbosityValue }),
     ...(formatValue === undefined ? {} : { response_format: formatValue }),
@@ -658,7 +663,7 @@ function decodeRequestObject(
       native.push({
         source: "openai",
         kind: "context_management",
-        value: stringifyJson(canonicalizeContextManagement(kept)),
+        value: stringifyJson(canonicalizeJsonValue(kept)),
         omission: {
           field: "context_management",
           reason: "unmapped-field",
@@ -1082,6 +1087,11 @@ function decodeResponseObject(
           type: "text",
           text: string(part.text, `output[${index}].content[${child}].text`),
           ...(citations && citations.length > 0 ? { citations } : {}),
+          ...(part.logprobs === undefined || part.logprobs === null
+            ? {}
+            : {
+                logprobs: stringifyJson(canonicalizeJsonValue(part.logprobs)),
+              }),
         });
       }
     } else if (item.type === "reasoning") {
@@ -1482,6 +1492,9 @@ export function encodeRequest(
             parts.push({
               type: "output_text",
               text: block.text,
+              ...(block.logprobs === undefined || block.logprobs === ""
+                ? {}
+                : { logprobs: parseJson(block.logprobs) }),
             });
             if (block.citations && block.citations.length > 0) {
               let hasAnthropic = false;
@@ -1798,6 +1811,27 @@ export function encodeRequest(
       }
     } catch {}
   }
+  let sendTop = request.params?.top_logprobs;
+  if (request.params?.logprobs !== undefined) {
+    if (request.params.logprobs) {
+      if (sendTop === undefined)
+        losses.push({
+          path: "params.logprobs",
+          field: "logprobs",
+          reason: "unmapped-field",
+          detail:
+            "Responses has no logprobs boolean; top_logprobs is the sampling switch",
+        });
+    } else {
+      sendTop = undefined;
+      losses.push({
+        path: "params.logprobs",
+        field: "logprobs",
+        reason: "unmapped-field",
+        detail: "Responses has no logprobs boolean; explicit false is dropped",
+      });
+    }
+  }
   return {
     value: {
       model: mapModel(options.modelMapper, request.model),
@@ -1827,6 +1861,7 @@ export function encodeRequest(
       ...(params?.max_tokens === undefined
         ? {}
         : { max_output_tokens: integer(params.max_tokens) }),
+      ...(sendTop === undefined ? {} : { top_logprobs: integer(sendTop) }),
       ...(params?.reasoning_effort === undefined
         ? {}
         : { reasoning: { effort: params.reasoning_effort } }),

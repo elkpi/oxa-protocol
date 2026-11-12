@@ -142,7 +142,7 @@ test("finds and loads repository vectors without native JSON coercion", () => {
   const vectors = loadVectors(root);
   // SystemOne Jev vectors are Go-only until that face joins the TypeScript
   // wave (spec/17); the loader walks the whole vectors/ tree.
-  assert.equal(vectors.length, 634);
+  assert.equal(vectors.length, 646);
   assert.equal(
     vectors.filter((vector) => vector.document.spec_version === "0.2.0").length,
     420,

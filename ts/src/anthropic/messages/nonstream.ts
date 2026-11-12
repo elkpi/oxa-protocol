@@ -1181,6 +1181,20 @@ export function encodeRequest(
   encodeRequestNative(request, outValue, losses);
   if (request.params?.verbosity !== undefined)
     losses.push(loss("params.verbosity", "verbosity", "unmapped-field"));
+  if (request.params?.logprobs !== undefined)
+    losses.push({
+      path: "params.logprobs",
+      field: "logprobs",
+      reason: "unmapped-field",
+      detail: "Anthropic Messages has no log-probability sampling parameter",
+    });
+  if (request.params?.top_logprobs !== undefined)
+    losses.push({
+      path: "params.top_logprobs",
+      field: "top_logprobs",
+      reason: "unmapped-field",
+      detail: "Anthropic Messages has no log-probability sampling parameter",
+    });
   const format = request.params?.response_format;
   let outputConfig: JsonObject | undefined;
   if (format?.type === "json_schema") {

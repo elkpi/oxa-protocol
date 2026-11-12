@@ -8,6 +8,7 @@ const SUMMARY_PART: WireAuditSpec = {
           type: undefined,
           text: undefined,
           annotations: { items: undefined },
+          logprobs: undefined,
         },
       };
     return undefined;
@@ -335,6 +336,7 @@ const RESPONSE_PART: WireAuditSpec = {
         type: undefined,
         text: undefined,
         annotations: { items: undefined },
+        logprobs: undefined,
       },
     };
   },
@@ -470,6 +472,7 @@ export const RESPONSES_REQUEST: WireAuditSpec = {
     temperature: undefined,
     top_p: undefined,
     max_output_tokens: undefined,
+    top_logprobs: undefined,
     tools: { items: TOOL },
     tool_choice: TOOL_CHOICE,
     parallel_tool_calls: undefined,

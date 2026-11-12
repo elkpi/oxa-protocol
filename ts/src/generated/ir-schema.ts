@@ -319,7 +319,6 @@ export interface IrSchemaResponse {
   readonly stop_reason: IrSchemaStopReason;
   readonly stop_sequence?: string;
   readonly usage: IrSchemaUsage;
-  readonly logprobs?: string;
 }
 
 export type IrSchemaStopReason = "end_turn" | "max_tokens" | "stop_sequence" | "tool_use" | "refusal" | "other";

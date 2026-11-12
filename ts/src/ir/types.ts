@@ -63,6 +63,7 @@ export interface TextBlock {
   readonly text: string;
   readonly role?: "developer";
   readonly citations?: readonly TextCitation[];
+  readonly logprobs?: string;
   readonly native?: readonly NativeAnnotation[];
 }
 export interface ThinkingBlock {

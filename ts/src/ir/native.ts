@@ -839,6 +839,7 @@ export function omittedNativeRequestLosses(
         blk,
         `messages[${mIdx}].content[${cIdx}]`,
         target,
+        msg.role === "user",
       );
     });
   });
@@ -864,6 +865,7 @@ function collectBlockOmissions(
   blk: Block,
   path: string,
   target: string,
+  breakpointHost: boolean,
 ): void {
   if (
     blk.type === "redacted_thinking" ||
@@ -880,7 +882,8 @@ function collectBlockOmissions(
     return;
   }
   const host =
-    blk.type === "text" || blk.type === "image" || blk.type === "document";
+    breakpointHost &&
+    (blk.type === "text" || blk.type === "image" || blk.type === "document");
   blk.native?.forEach((ann, i) => {
     appendOmissionLoss(
       losses,
@@ -895,7 +898,13 @@ function collectBlockOmissions(
   if (blk.type === "tool_result") {
     (blk as ToolResultBlock).content.forEach((child, k) => {
       if (child.type === "document") return;
-      collectBlockOmissions(losses, child, `${path}.content[${k}]`, target);
+      collectBlockOmissions(
+        losses,
+        child,
+        `${path}.content[${k}]`,
+        target,
+        false,
+      );
     });
   } else if (blk.type === "custom_tool_result") {
     const out = (blk as CustomToolResultBlock).output;
@@ -906,6 +915,7 @@ function collectBlockOmissions(
           child,
           `${path}.output.content[${k}]`,
           target,
+          false,
         );
       });
     }
