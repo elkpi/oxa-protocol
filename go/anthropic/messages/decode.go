@@ -563,6 +563,46 @@ func decodeBlock(w BlockWire, path string, customCallIDs map[string]bool, declar
 			block = ir.ToolResultBlock{ToolUseID: w.ToolUseID, Content: content, IsError: w.IsError}
 			losses = append(losses, contentLosses...)
 		}
+	case BlockTypeServerToolUse:
+		if w.ID == "" {
+			return nil, nil, false, fmt.Errorf("anthropic: %s.id is required", path)
+		}
+		if w.Name == "" {
+			return nil, nil, false, fmt.Errorf("anthropic: %s.name is required", path)
+		}
+		if w.Name != "web_search" {
+			return nil, []ir.Loss{{
+				Path:   path,
+				Field:  "type",
+				Reason: ir.LossUnsupportedSemantic,
+				Detail: fmt.Sprintf("Anthropic server tool %q has no IR equivalent", w.Name),
+			}}, false, nil
+		}
+		if err := requireJSONObject(w.Input, path+".input"); err != nil {
+			return nil, nil, false, err
+		}
+		input, err := canonicalIRText(w.Input, path+".input")
+		if err != nil {
+			return nil, nil, false, err
+		}
+		caller, err := canonicalOptionalObject(w.Caller, path+".caller")
+		if err != nil {
+			return nil, nil, false, err
+		}
+		block = ir.ServerToolUseBlock{ID: w.ID, Name: w.Name, Input: input, Caller: caller}
+	case BlockTypeWebSearchToolResult:
+		if w.ToolUseID == "" {
+			return nil, nil, false, fmt.Errorf("anthropic: %s.tool_use_id is required", path)
+		}
+		content, err := canonicalContentIR(w.Content, path+".content")
+		if err != nil {
+			return nil, nil, false, err
+		}
+		caller, err := canonicalOptionalObject(w.Caller, path+".caller")
+		if err != nil {
+			return nil, nil, false, err
+		}
+		block = ir.WebSearchToolResultBlock{ToolUseID: w.ToolUseID, Content: content, Caller: caller}
 	case BlockTypeToolReference:
 		// N-AN-21: a present tool_name key must carry a non-empty string
 		// (null/empty is a structural error even when name is present);

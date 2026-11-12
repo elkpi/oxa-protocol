@@ -369,6 +369,9 @@ func encodeUserContent(blocks []ir.Block, path string) (any, []ir.Loss) {
 		case ir.CompactionBlock:
 			otherBlocks++
 			losses = append(losses, loss(fmt.Sprintf("%s[%d]", path, i), "type", ir.LossUnsupportedSemantic, "Anthropic compaction block cannot be represented on the target face"))
+		case ir.ServerToolUseBlock, ir.WebSearchToolResultBlock:
+			otherBlocks++
+			losses = append(losses, loss(fmt.Sprintf("%s[%d]", path, i), "type", ir.LossUnsupportedSemantic, ir.WebSearchHistoryLossDetail))
 		case ir.TextBlock:
 			part := ContentPart{Type: PartTypeInputText, Text: value.Text}
 			if pcb := ir.OpenAIBreakpointWire(value.Native); len(pcb) > 0 {
@@ -594,6 +597,11 @@ func encodeAssistantMessage(items *[]InputItem, blocks []ir.Block, path string) 
 				return nil, err
 			}
 			calls = append(calls, item)
+		case ir.ServerToolUseBlock, ir.WebSearchToolResultBlock:
+			losses = append(losses, loss(
+				fmt.Sprintf("%s[%d]", path, i), "type", ir.LossUnsupportedSemantic,
+				ir.WebSearchHistoryLossDetail,
+			))
 		case ir.ImageBlock, ir.ToolResultBlock, ir.DocumentBlock:
 			losses = append(losses, loss(
 				fmt.Sprintf("%s[%d]", path, i), "content", ir.LossUnsupportedSemantic,
@@ -695,6 +703,11 @@ func EncodeResponse(resp *ir.Response, opts ...Option) (*Response, []ir.Loss, er
 			losses = append(losses, loss(
 				fmt.Sprintf("content[%d]", i), "type", ir.LossUnsupportedSemantic,
 				"anthropic encrypted thinking replay state; the target face cannot preserve this block",
+			))
+		case ir.ServerToolUseBlock, ir.WebSearchToolResultBlock:
+			losses = append(losses, loss(
+				fmt.Sprintf("content[%d]", i), "type", ir.LossUnsupportedSemantic,
+				ir.WebSearchHistoryLossDetail,
 			))
 		case ir.ThinkingBlock:
 			reasoning.addThinking(OutputContent{

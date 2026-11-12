@@ -831,6 +831,10 @@ func getBlockNative(item any) []ir.NativeAnnotation {
 		return b.Native
 	case ir.ApplyPatchToolResultBlock:
 		return b.Native
+	case ir.ServerToolUseBlock:
+		return b.Native
+	case ir.WebSearchToolResultBlock:
+		return b.Native
 	default:
 		return nil
 	}

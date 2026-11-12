@@ -569,6 +569,8 @@ func encodeUserContent(blocks []ir.Block, path string) (any, []ir.Loss) {
 		switch value := block.(type) {
 		case ir.CompactionBlock:
 			losses = append(losses, loss(fmt.Sprintf("%s[%d]", path, i), "type", ir.LossUnsupportedSemantic, "Anthropic compaction block cannot be represented on the target face"))
+		case ir.ServerToolUseBlock, ir.WebSearchToolResultBlock:
+			losses = append(losses, loss(fmt.Sprintf("%s[%d]", path, i), "type", ir.LossUnsupportedSemantic, ir.WebSearchHistoryLossDetail))
 		case ir.TextBlock:
 			part := ContentPart{Type: ContentPartTypeText, Text: value.Text}
 			if pcb := ir.OpenAIBreakpointWire(value.Native); len(pcb) > 0 {
@@ -777,6 +779,11 @@ func encodeAssistantMessage(blocks []ir.Block, path string) (Message, []ir.Loss,
 			losses = append(losses, loss(
 				fmt.Sprintf("%s[%d]", path, i), "type", ir.LossUnsupportedSemantic,
 				"Responses web_search_call has no Chat Completions equivalent",
+			))
+		case ir.ServerToolUseBlock, ir.WebSearchToolResultBlock:
+			losses = append(losses, loss(
+				fmt.Sprintf("%s[%d]", path, i), "type", ir.LossUnsupportedSemantic,
+				ir.WebSearchHistoryLossDetail,
 			))
 		case ir.CompactionItemBlock:
 			losses = append(losses, loss(
