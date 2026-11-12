@@ -568,6 +568,14 @@ pub fn encode_response(resp: &IrResponse, config: &Config) -> Result<(Response, 
                     ..OutputItem::default()
                 });
             }
+            Block::ServerToolUse { .. } | Block::WebSearchToolResult { .. } => {
+                losses.push(loss(
+                    format!("content[{index}]"),
+                    "type",
+                    LossReason::UnsupportedSemantic,
+                    oxa_ir::WEB_SEARCH_HISTORY_LOSS_DETAIL,
+                ));
+            }
             Block::CompactionItem {
                 encrypted_content,
                 id,

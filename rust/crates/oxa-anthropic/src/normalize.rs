@@ -60,6 +60,37 @@ pub(crate) fn input_from_ir_string(input: &str, path: &str) -> Result<Box<RawVal
 }
 
 /// Requires the raw JSON text to be one JSON object (Go `requireJSONObject`).
+fn canonical_json_text(value: &serde_json::Value, path: &str) -> Result<String, Error> {
+    match value {
+        serde_json::Value::Array(_) | serde_json::Value::Object(_) => {}
+        _ => {
+            return Err(Error::new(format!(
+                "anthropic: {path} must be a JSON array or object"
+            )));
+        }
+    }
+    serde_json::to_string(&sorted_json(value))
+        .map_err(|e| Error::new(format!("anthropic: {path}: {e}")))
+}
+
+fn sorted_json(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.iter().map(sorted_json).collect())
+        }
+        serde_json::Value::Object(map) if !map.contains_key("$serde_json::private::Number") => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            let mut sorted = serde_json::Map::new();
+            for key in keys {
+                sorted.insert(key.clone(), sorted_json(&map[key]));
+            }
+            serde_json::Value::Object(sorted)
+        }
+        other => other.clone(),
+    }
+}
+
 pub(crate) fn require_json_object(raw: &str, path: &str) -> Result<(), Error> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -615,6 +646,9 @@ pub(crate) fn decode_content(
             }],
             Vec::new(),
         )),
+        ContentValue::Json(_) => Err(Error::new(format!(
+            "anthropic: {path} must not be a bare JSON value"
+        ))),
         ContentValue::Blocks(blocks) => {
             let mut out = Vec::with_capacity(blocks.len());
             let mut losses = Vec::new();
@@ -1059,6 +1093,72 @@ pub(crate) fn decode_block(
                 native: Vec::new(),
             });
         }
+        "server_tool_use" => {
+            if wire.id.is_empty() {
+                return Err(Error::new(format!("anthropic: {path}.id is required")));
+            }
+            if wire.name.is_empty() {
+                return Err(Error::new(format!("anthropic: {path}.name is required")));
+            }
+            if wire.name != "web_search" {
+                losses.push(loss(
+                    path,
+                    "type",
+                    LossReason::UnsupportedSemantic,
+                    format!("Anthropic server tool {:?} has no IR equivalent", wire.name),
+                ));
+                return Ok((Vec::new(), losses, false));
+            }
+            let input = wire
+                .input
+                .as_ref()
+                .ok_or_else(|| Error::new(format!("anthropic: {path}.input is required")))?;
+            let input_value: serde_json::Value = serde_json::from_str(input.get())
+                .map_err(|e| Error::new(format!("anthropic: {path}.input: {e}")))?;
+            let input_text = canonical_json_text(&input_value, &format!("{path}.input"))?;
+            let caller_text = match &wire.caller {
+                None | Some(serde_json::Value::Null) => None,
+                Some(value) => Some(canonical_json_text(value, &format!("{path}.caller"))?),
+            };
+            block = Some(Block::ServerToolUse {
+                id: wire.id.clone(),
+                name: "web_search".to_string(),
+                input: input_text,
+                caller: caller_text,
+                native: Vec::new(),
+            });
+        }
+        "web_search_tool_result" => {
+            if wire.tool_use_id.is_empty() {
+                return Err(Error::new(format!(
+                    "anthropic: {path}.tool_use_id is required"
+                )));
+            }
+            let content_value = match &wire.content {
+                Some(ContentValue::Json(value)) => value.clone(),
+                Some(ContentValue::Null) | None => {
+                    return Err(Error::new(format!(
+                        "anthropic: {path}.content must be a JSON array or object"
+                    )));
+                }
+                Some(_) => {
+                    return Err(Error::new(format!(
+                        "anthropic: {path}.content must be a JSON array or object"
+                    )));
+                }
+            };
+            let content_text = canonical_json_text(&content_value, &format!("{path}.content"))?;
+            let caller_text = match &wire.caller {
+                None | Some(serde_json::Value::Null) => None,
+                Some(value) => Some(canonical_json_text(value, &format!("{path}.caller"))?),
+            };
+            block = Some(Block::WebSearchToolResult {
+                tool_use_id: wire.tool_use_id.clone(),
+                content: content_text,
+                caller: caller_text,
+                native: Vec::new(),
+            });
+        }
         other => {
             losses.push(loss(
                 path,
@@ -1091,7 +1191,10 @@ pub(crate) fn decode_block(
                     projection: None,
                 };
                 match b {
-                    Block::WebSearchCall { .. } | Block::CompactionItem { .. } => {}
+                    Block::WebSearchCall { .. }
+                    | Block::CompactionItem { .. }
+                    | Block::ServerToolUse { .. }
+                    | Block::WebSearchToolResult { .. } => {}
                     Block::Text { native, .. }
                     | Block::Thinking { native, .. }
                     | Block::RedactedThinking { native, .. }

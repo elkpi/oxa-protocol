@@ -1338,6 +1338,12 @@ pub(crate) fn encode_user_content(blocks: &[Block], path: &str) -> (ContentValue
                 LossReason::UnsupportedSemantic,
                 "Anthropic compaction block cannot be represented on the target face",
             )),
+            Block::ServerToolUse { .. } | Block::WebSearchToolResult { .. } => losses.push(loss(
+                format!("{path}[{index}]"),
+                "type",
+                LossReason::UnsupportedSemantic,
+                oxa_ir::WEB_SEARCH_HISTORY_LOSS_DETAIL,
+            )),
             Block::CompactionItem { .. } => losses.push(loss(
                 format!("{path}[{index}]"),
                 "type",
@@ -1551,6 +1557,12 @@ pub(crate) fn encode_user_message(message: &IrMessage, path: &str) -> (Vec<Input
                     ..InputItem::default()
                 });
             }
+            Block::ServerToolUse { .. } | Block::WebSearchToolResult { .. } => losses.push(loss(
+                format!("{path}.content[{i}]"),
+                "type",
+                LossReason::UnsupportedSemantic,
+                oxa_ir::WEB_SEARCH_HISTORY_LOSS_DETAIL,
+            )),
             Block::CompactionItem { .. } => losses.push(loss(
                 format!("{path}[{i}]"),
                 "type",
@@ -1740,6 +1752,12 @@ pub(crate) fn encode_assistant_message(
                 "type",
                 LossReason::UnsupportedSemantic,
                 "this IR block cannot be rendered in a Responses item",
+            )),
+            Block::ServerToolUse { .. } | Block::WebSearchToolResult { .. } => losses.push(loss(
+                format!("{path}[{index}]"),
+                "type",
+                LossReason::UnsupportedSemantic,
+                oxa_ir::WEB_SEARCH_HISTORY_LOSS_DETAIL,
             )),
             Block::Image { .. }
             | Block::Document { .. }

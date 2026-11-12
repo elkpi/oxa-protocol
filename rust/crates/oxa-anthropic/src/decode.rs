@@ -351,6 +351,11 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
                         native: Vec::new(),
                     });
                 }
+                crate::types::ContentValue::Json(_) => {
+                    return Err(Error::new(format!(
+                        "anthropic: messages[{index}].content must not be a JSON value"
+                    )));
+                }
                 crate::types::ContentValue::Blocks(blocks) => {
                     for (j, b) in blocks.iter().enumerate() {
                         if b.kind != crate::types::BLOCK_TYPE_TEXT {

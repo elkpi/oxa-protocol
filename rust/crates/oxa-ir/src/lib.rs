@@ -48,6 +48,6 @@ pub use request::{
     ENCRYPTED_CONTENT_LOSS_DETAIL, Message, NativeAnnotation, NativeOmission, NativeProjection,
     Params, ReasoningEffort, Request, ResponseFormat, Role, SystemBlock, TextCitation, Tool,
     ToolChange, ToolChangeGroup, ToolChangeOp, ToolChangePart, ToolChangeRef, ToolChoice,
-    ToolChoiceMode, ToolType,
+    ToolChoiceMode, ToolType, WEB_SEARCH_HISTORY_LOSS_DETAIL,
 };
 pub use response::{InputTokensDetails, OutputTokensDetails, Response, StopReason, Usage};

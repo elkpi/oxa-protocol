@@ -428,12 +428,29 @@ impl<'de> Deserialize<'de> for Message {
     }
 }
 
+const KNOWN_BLOCK_TYPES: &[&str] = &[
+    "text",
+    "thinking",
+    "redacted_thinking",
+    "tool_use",
+    "tool_result",
+    "tool_reference",
+    "image",
+    "document",
+    "server_tool_use",
+    "web_search_tool_result",
+    "compaction",
+    "tool_addition",
+    "tool_removal",
+];
+
 /// Message and tool-result content: a plain string or a block array.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ContentValue {
     Text(String),
     Blocks(Vec<BlockWire>),
+    Json(Value),
     Null,
 }
 
@@ -476,11 +493,67 @@ impl<'de> Deserialize<'de> for ContentValue {
             where
                 A: SeqAccess<'de>,
             {
-                let mut blocks = Vec::new();
-                while let Some(block) = sequence.next_element::<BlockWire>()? {
-                    blocks.push(block);
+                // Arrays are a block list only when every element is a
+                // recognized content block; web_search_tool_result results are
+                // opaque JSON objects and must stay untouched (N-AN-23). Each
+                // block is parsed from its raw text so tool_use.input keeps its
+                // exact source bytes (INV-1).
+                let mut raw: Vec<Box<RawValue>> = Vec::new();
+                while let Some(value) = sequence.next_element::<Box<RawValue>>()? {
+                    raw.push(value);
                 }
-                Ok(ContentValue::Blocks(blocks))
+                // An unknown (not `web_search_result`-shaped) object still
+                // travels the block path so the decoder can report it as a
+                // whole-block loss. Only opaque result shapes are JSON.
+                let mut all_blocks = !raw.is_empty();
+                for value in &raw {
+                    let parsed: Value =
+                        serde_json::from_str(value.get()).map_err(serde::de::Error::custom)?;
+                    let known = parsed
+                        .get("type")
+                        .and_then(Value::as_str)
+                        .is_some_and(|kind| KNOWN_BLOCK_TYPES.contains(&kind));
+                    let opaque_result = parsed
+                        .get("type")
+                        .and_then(Value::as_str)
+                        .is_some_and(|kind| kind.starts_with("web_search_result"));
+                    if !known && !opaque_result {
+                        continue;
+                    }
+                    if opaque_result {
+                        all_blocks = false;
+                        break;
+                    }
+                }
+                if all_blocks {
+                    let mut blocks = Vec::with_capacity(raw.len());
+                    for value in raw {
+                        blocks.push(
+                            serde_json::from_str::<BlockWire>(value.get())
+                                .map_err(serde::de::Error::custom)?,
+                        );
+                    }
+                    Ok(ContentValue::Blocks(blocks))
+                } else {
+                    let mut parsed = Vec::with_capacity(raw.len());
+                    for value in raw {
+                        parsed.push(
+                            serde_json::from_str::<Value>(value.get())
+                                .map_err(serde::de::Error::custom)?,
+                        );
+                    }
+                    Ok(ContentValue::Json(Value::Array(parsed)))
+                }
+            }
+
+            fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                let value = serde_json::Value::deserialize(
+                    serde::de::value::MapAccessDeserializer::new(map),
+                )?;
+                Ok(ContentValue::Json(value))
             }
         }
 
@@ -596,6 +669,14 @@ pub struct BlockWire {
     pub tool_name: Option<String>,
     #[serde(rename = "tool", skip_serializing_if = "Option::is_none")]
     pub tool: Option<Value>,
+    // server tool history (N-AN-23)
+    #[serde(
+        rename = "caller",
+        default,
+        deserialize_with = "deserialize_optional_value",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub caller: Option<Value>,
     #[serde(
         rename = "encrypted_content",
         default,

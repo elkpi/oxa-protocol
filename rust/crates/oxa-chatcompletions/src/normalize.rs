@@ -811,6 +811,12 @@ pub(crate) fn encode_user_content(blocks: &[Block], path: &str) -> (ContentValue
                 LossReason::UnsupportedSemantic,
                 "this IR block cannot be rendered in Chat Completions",
             )),
+            Block::ServerToolUse { .. } | Block::WebSearchToolResult { .. } => losses.push(loss(
+                format!("{path}[{index}]"),
+                "type",
+                LossReason::UnsupportedSemantic,
+                oxa_ir::WEB_SEARCH_HISTORY_LOSS_DETAIL,
+            )),
             _ => losses.push(loss(
                 format!("{path}[{index}]"),
                 "content",
@@ -954,6 +960,10 @@ pub(crate) fn encode_assistant_message(blocks: &[Block], path: &str) -> (Message
             Block::CompactionItem { .. } => losses.push(loss(
                 format!("{path}[{index}]"), "type", LossReason::UnsupportedSemantic,
                 oxa_ir::COMPACTION_ITEM_LOSS_DETAIL,
+            )),
+            Block::ServerToolUse { .. } | Block::WebSearchToolResult { .. } => losses.push(loss(
+                format!("{path}[{index}]"), "type", LossReason::UnsupportedSemantic,
+                oxa_ir::WEB_SEARCH_HISTORY_LOSS_DETAIL,
             )),
             Block::ApplyPatchToolUse { .. } => losses.push(loss(
                 format!("{path}[{index}]"),

@@ -1053,6 +1053,65 @@ fn encode_request_block(block: &Block, path: &str) -> Result<(BlockWire, Vec<Los
                 }
             }
         }
+        Block::ServerToolUse {
+            id,
+            name,
+            input,
+            caller,
+            ..
+        } => {
+            if id.is_empty() {
+                return Err(Error::new(format!("anthropic: {path}.id is required")));
+            }
+            if name != "web_search" {
+                return Err(Error::new(format!(
+                    "anthropic: {path}.name must be \"web_search\""
+                )));
+            }
+            let input_value = serde_json::value::RawValue::from_string(input.clone())
+                .map_err(|e| Error::new(format!("anthropic: {path}.input: {e}")))?;
+            let mut wire = BlockWire {
+                kind: "server_tool_use".to_string(),
+                id: id.clone(),
+                name: name.clone(),
+                input: Some(input_value),
+                ..BlockWire::default()
+            };
+            if let Some(caller) = caller {
+                wire.caller = Some(
+                    serde_json::from_str(caller)
+                        .map_err(|e| Error::new(format!("anthropic: {path}.caller: {e}")))?,
+                );
+            }
+            Ok((wire, Vec::new(), true))
+        }
+        Block::WebSearchToolResult {
+            tool_use_id,
+            content,
+            caller,
+            ..
+        } => {
+            if tool_use_id.is_empty() {
+                return Err(Error::new(format!(
+                    "anthropic: {path}.tool_use_id is required"
+                )));
+            }
+            let content_value: serde_json::Value = serde_json::from_str(content)
+                .map_err(|e| Error::new(format!("anthropic: {path}.content: {e}")))?;
+            let mut wire = BlockWire {
+                kind: "web_search_tool_result".to_string(),
+                tool_use_id: tool_use_id.clone(),
+                content: Some(ContentValue::Json(content_value)),
+                ..BlockWire::default()
+            };
+            if let Some(caller) = caller {
+                wire.caller = Some(
+                    serde_json::from_str(caller)
+                        .map_err(|e| Error::new(format!("anthropic: {path}.caller: {e}")))?,
+                );
+            }
+            Ok((wire, Vec::new(), true))
+        }
         Block::CompactionItem { .. } => Ok((
             BlockWire::default(),
             vec![loss(
@@ -1695,6 +1754,65 @@ fn encode_response_block(block: &Block, path: &str) -> Result<(BlockWire, Vec<Lo
             ))
         }
         Block::Refusal { .. } => Ok((BlockWire::default(), Vec::new(), false)),
+        Block::ServerToolUse {
+            id,
+            name,
+            input,
+            caller,
+            ..
+        } => {
+            if id.is_empty() {
+                return Err(Error::new(format!("anthropic: {path}.id is required")));
+            }
+            if name != "web_search" {
+                return Err(Error::new(format!(
+                    "anthropic: {path}.name must be \"web_search\""
+                )));
+            }
+            let input_value = RawValue::from_string(input.clone())
+                .map_err(|e| Error::new(format!("anthropic: {path}.input: {e}")))?;
+            let mut wire = BlockWire {
+                kind: "server_tool_use".to_string(),
+                id: id.clone(),
+                name: name.clone(),
+                input: Some(input_value),
+                ..BlockWire::default()
+            };
+            if let Some(caller) = caller {
+                wire.caller = Some(
+                    serde_json::from_str(caller)
+                        .map_err(|e| Error::new(format!("anthropic: {path}.caller: {e}")))?,
+                );
+            }
+            Ok((wire, Vec::new(), true))
+        }
+        Block::WebSearchToolResult {
+            tool_use_id,
+            content,
+            caller,
+            ..
+        } => {
+            if tool_use_id.is_empty() {
+                return Err(Error::new(format!(
+                    "anthropic: {path}.tool_use_id is required"
+                )));
+            }
+            let content_value: serde_json::Value = serde_json::from_str(content)
+                .map_err(|e| Error::new(format!("anthropic: {path}.content: {e}")))?;
+            let mut wire = BlockWire {
+                kind: "web_search_tool_result".to_string(),
+                tool_use_id: tool_use_id.clone(),
+                content: Some(ContentValue::Json(content_value)),
+                ..BlockWire::default()
+            };
+            if let Some(caller) = caller {
+                wire.caller = Some(
+                    serde_json::from_str(caller)
+                        .map_err(|e| Error::new(format!("anthropic: {path}.caller: {e}")))?,
+                );
+            }
+            Ok((wire, Vec::new(), true))
+        }
         _ => Ok((
             BlockWire::default(),
             vec![unsupported_block_loss(

@@ -113,6 +113,11 @@ pub const ENCRYPTED_CONTENT_LOSS_DETAIL: &str =
 pub const COMPACTION_ITEM_LOSS_DETAIL: &str =
     "Responses compaction item cannot be represented on the target face";
 
+/// Cross-face omission text for Anthropic provider-hosted web_search history
+/// (spec/12 N-AN-23). It MUST NOT contain result ciphertext.
+pub const WEB_SEARCH_HISTORY_LOSS_DETAIL: &str =
+    "Anthropic web_search history cannot be represented on the target face";
+
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Block {
@@ -252,6 +257,30 @@ pub enum Block {
             skip_serializing_if = "String::is_empty"
         )]
         created_by: String,
+    },
+    #[serde(rename = "server_tool_use")]
+    ServerToolUse {
+        #[serde(rename = "id")]
+        id: String,
+        #[serde(rename = "name")]
+        name: String,
+        #[serde(rename = "input")]
+        input: String,
+        #[serde(rename = "caller", default, skip_serializing_if = "Option::is_none")]
+        caller: Option<String>,
+        #[serde(rename = "native", default, skip_serializing_if = "Vec::is_empty")]
+        native: Vec<NativeAnnotation>,
+    },
+    #[serde(rename = "web_search_tool_result")]
+    WebSearchToolResult {
+        #[serde(rename = "tool_use_id")]
+        tool_use_id: String,
+        #[serde(rename = "content")]
+        content: String,
+        #[serde(rename = "caller", default, skip_serializing_if = "Option::is_none")]
+        caller: Option<String>,
+        #[serde(rename = "native", default, skip_serializing_if = "Vec::is_empty")]
+        native: Vec<NativeAnnotation>,
     },
     #[serde(rename = "web_search_call")]
     WebSearchCall {
@@ -417,7 +446,9 @@ impl Block {
             | Block::ApplyPatchToolResult { native, .. }
             | Block::Refusal { native, .. }
             | Block::ToolResult { native, .. }
-            | Block::Compaction { native, .. } => native,
+            | Block::Compaction { native, .. }
+            | Block::ServerToolUse { native, .. }
+            | Block::WebSearchToolResult { native, .. } => native,
             Block::WebSearchCall { .. } | Block::CompactionItem { .. } => &[],
         }
     }
@@ -594,6 +625,32 @@ impl std::fmt::Debug for Block {
                 .field("tool_changes", tool_changes)
                 .field("native", native)
                 .field("extra", extra)
+                .finish(),
+            Block::ServerToolUse {
+                id,
+                name,
+                input,
+                caller,
+                native,
+            } => f
+                .debug_struct("ServerToolUse")
+                .field("id", id)
+                .field("name", name)
+                .field("input", input)
+                .field("caller", caller)
+                .field("native", native)
+                .finish(),
+            Block::WebSearchToolResult {
+                tool_use_id,
+                content,
+                caller,
+                native,
+            } => f
+                .debug_struct("WebSearchToolResult")
+                .field("tool_use_id", tool_use_id)
+                .field("content", &format!("[REDACTED len={}]", content.len()))
+                .field("caller", caller)
+                .field("native", native)
                 .finish(),
             Block::CompactionItem {
                 encrypted_content,
