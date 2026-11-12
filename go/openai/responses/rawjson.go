@@ -321,6 +321,8 @@ func schemaForRawTypeSeen(t reflect.Type, seen map[reflect.Type]*rawJSONSchema) 
 				return rawObjectSchema(t, []string{"type", "summary", "encrypted_content"}, nil, seen)
 			case ItemTypeWebSearchCall:
 				return rawObjectSchema(t, []string{"type", "id", "status", "action"}, nil, seen)
+			case ItemTypeCompaction:
+				return rawObjectSchema(t, []string{"type", "id", "encrypted_content", "created_by"}, nil, seen)
 			case ItemTypeAdditionalTools:
 				// The item-level unknown fields are retained in Extra for
 				// same-face replay (spec/11 N-R-15); declarations inside
@@ -417,6 +419,8 @@ func schemaForRawTypeSeen(t reflect.Type, seen map[reflect.Type]*rawJSONSchema) 
 				return rawObjectSchema(t, []string{"type", "id", "status", "summary", "encrypted_content"}, nil, seen)
 			case ItemTypeWebSearchCall:
 				return rawObjectSchema(t, []string{"type", "id", "status", "action"}, nil, seen)
+			case ItemTypeCompaction:
+				return rawObjectSchema(t, []string{"type", "id", "encrypted_content", "created_by"}, nil, seen)
 			default:
 				return nil
 			}

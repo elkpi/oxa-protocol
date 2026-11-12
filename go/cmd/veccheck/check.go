@@ -210,6 +210,8 @@ func validateEventStream(es *ir.EventStream, allowSynthesizedToolInput bool) err
 				block.kind = "tool_reference"
 			case ir.WebSearchCallBlock:
 				block.kind = "web_search_call"
+			case ir.CompactionItemBlock:
+				block.kind = "compaction_item"
 			case ir.CustomToolUseBlock:
 				input, err := decodeEventString(b.Input)
 				if err != nil {

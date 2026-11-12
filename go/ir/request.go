@@ -31,10 +31,10 @@ type Request struct {
 // CompactionItem is one Responses compaction checkpoint in request history.
 // EncryptedContent is opaque and MUST NOT appear in a loss detail.
 type CompactionItem struct {
-	EncryptedContent string
-	ID               string
-	CreatedBy        string
-	AfterMessage     int
+	EncryptedContent string `json:"encrypted_content"`
+	ID               string `json:"id,omitempty"`
+	CreatedBy        string `json:"created_by,omitempty"`
+	AfterMessage     int    `json:"after_message"`
 }
 
 // Message is one conversational turn.

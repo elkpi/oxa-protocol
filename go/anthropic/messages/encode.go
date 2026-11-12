@@ -39,6 +39,9 @@ func EncodeRequest(req *ir.Request, opts ...Option) (*Request, []ir.Loss, error)
 		return nil, nil, err
 	}
 	var losses []ir.Loss
+	for i := range req.CompactionItems {
+		losses = append(losses, ir.Loss{Path: fmt.Sprintf("compaction_items[%d]", i), Field: "type", Reason: ir.LossUnsupportedSemantic, Detail: ir.CompactionItemLossDetail})
+	}
 	o := newOptions(opts...)
 	out := &Request{Model: o.models.Map(req.Model)}
 	encoded, metaLosses, err := encodeAnthropicMetadata(req.Metadata)
@@ -695,11 +698,15 @@ func invalidImageLoss(path, detail string) ir.Loss {
 }
 
 func unsupportedBlockLoss(path string, block ir.Block) ir.Loss {
+	detail := fmt.Sprintf("IR block type %T has no Anthropic equivalent in this position", block)
+	if _, ok := block.(ir.CompactionItemBlock); ok {
+		detail = ir.CompactionItemLossDetail
+	}
 	return ir.Loss{
 		Path:   path,
 		Field:  "type",
 		Reason: ir.LossUnsupportedSemantic,
-		Detail: fmt.Sprintf("IR block type %T has no Anthropic equivalent in this position", block),
+		Detail: detail,
 	}
 }
 

@@ -33,6 +33,9 @@ func EncodeRequest(req *ir.Request, opts ...Option) (*Request, []ir.Loss, error)
 		return nil, nil, err
 	}
 	var losses []ir.Loss
+	for i := range req.CompactionItems {
+		losses = append(losses, loss(fmt.Sprintf("compaction_items[%d]", i), "type", ir.LossUnsupportedSemantic, ir.CompactionItemLossDetail))
+	}
 	for i, group := range req.ToolChangeGroups {
 		if len(group.Parts) == 0 {
 			losses = append(losses, loss(fmt.Sprintf("tool_change_groups[%d]", i), "tools", ir.LossUnsupportedSemantic, "empty positional tool group cannot be represented on the target face"))

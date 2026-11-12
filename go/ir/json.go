@@ -1260,7 +1260,7 @@ func UnmarshalRequest(data []byte) (*Request, error) {
 		if item.EncryptedContent == "" {
 			return nil, fmt.Errorf("ir: compaction_items[%d].encrypted_content is required", i)
 		}
-		if item.AfterMessage < -1 {
+		if item.AfterMessage < -1 || item.AfterMessage >= len(req.Messages) {
 			return nil, fmt.Errorf("ir: compaction_items[%d].after_message is out of range", i)
 		}
 	}

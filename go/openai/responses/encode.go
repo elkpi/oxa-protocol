@@ -91,6 +91,9 @@ func EncodeRequest(req *ir.Request, opts ...Option) (*Request, []ir.Loss, error)
 		out.ParallelToolCalls = &ptc
 	}
 
+	if err := validateCompactionItemPlacement(req.CompactionItems, len(req.Messages)); err != nil {
+		return nil, nil, err
+	}
 	items := append([]InputItem{}, leadingSystemItems...)
 	if err := appendCompactionItems(&items, req.CompactionItems, -1); err != nil {
 		return nil, nil, err
@@ -784,15 +787,15 @@ func EncodeResponse(resp *ir.Response, opts ...Option) (*Response, []ir.Loss, er
 			Content: textParts,
 		}}, output...)
 	}
-	if len(compactionItems) > 0 {
-		output = append(compactionItems, output...)
-	}
 	for n := len(reasoning.items) - 1; n >= 0; n-- {
 		part := reasoning.items[n]
 		output = append([]OutputItem{{
 			Type: ItemTypeReasoning, ID: fmt.Sprintf("rs_abc%d", 123+n),
 			Summary: part.summary, EncryptedContent: part.cipher,
 		}}, output...)
+	}
+	if len(compactionItems) > 0 {
+		output = append(compactionItems, output...)
 	}
 
 	var incomplete *IncompleteWire
@@ -952,6 +955,18 @@ func (b *reasoningBuilder) addCipher(cipher string) {
 	}
 	b.cur.cipher = cipher
 	b.cur = nil
+}
+
+func validateCompactionItemPlacement(items []ir.CompactionItem, messageCount int) error {
+	for i, item := range items {
+		if item.EncryptedContent == "" {
+			return fmt.Errorf("responses: compaction item encrypted_content is required")
+		}
+		if item.AfterMessage < -1 || item.AfterMessage >= messageCount {
+			return fmt.Errorf("responses: compaction_items[%d].after_message is out of range", i)
+		}
+	}
+	return nil
 }
 
 func appendCompactionItems(items *[]InputItem, all []ir.CompactionItem, after int) error {
