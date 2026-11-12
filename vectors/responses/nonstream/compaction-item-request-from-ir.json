@@ -1,0 +1,32 @@
+{
+  "name": "responses.nonstream.compaction-item-request-from-ir",
+  "description": "Request compaction checkpoints render back as Responses compaction input items at their message boundaries (N-R-22).",
+  "spec_version": "0.2.0",
+  "mode": "nonstream",
+  "conversion": "from-ir",
+  "source": {"protocol": "responses"},
+  "target": {"protocol": "responses"},
+  "input": {
+    "specVersion": "0.3.0",
+    "model": "gpt-5.4",
+    "messages": [
+      {"role": "user", "content": [{"type": "text", "text": "before"}]},
+      {"role": "user", "content": [{"type": "text", "text": "after"}]}
+    ],
+    "compaction_items": [
+      {"encrypted_content": "early", "id": "cmp_0", "after_message": -1},
+      {"encrypted_content": "cipher", "id": "cmp_1", "created_by": "system", "after_message": 0}
+    ]
+  },
+  "expected_output": {
+    "model": "gpt-5.4",
+    "input": [
+      {"type": "compaction", "id": "cmp_0", "encrypted_content": "early"},
+      {"role": "user", "content": "before"},
+      {"type": "compaction", "id": "cmp_1", "encrypted_content": "cipher", "created_by": "system"},
+      {"role": "user", "content": "after"}
+    ]
+  },
+  "expected_losses": [],
+  "tags": ["request", "compaction", "n-r-22"]
+}

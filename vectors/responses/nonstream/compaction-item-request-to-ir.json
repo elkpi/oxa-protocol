@@ -1,0 +1,31 @@
+{
+  "name": "responses.nonstream.compaction-item-request-to-ir",
+  "description": "Responses compaction input items stay on the request as checkpoints relative to the messages they follow (N-R-22).",
+  "spec_version": "0.2.0",
+  "mode": "nonstream",
+  "conversion": "to-ir",
+  "source": {"protocol": "responses"},
+  "input": {
+    "model": "gpt-5.4",
+    "input": [
+      {"type": "compaction", "id": "cmp_0", "encrypted_content": "early"},
+      {"type": "message", "role": "user", "content": "before"},
+      {"type": "compaction", "id": "cmp_1", "encrypted_content": "cipher", "created_by": "system"},
+      {"type": "message", "role": "user", "content": "after"}
+    ]
+  },
+  "expected_ir": {
+    "specVersion": "0.3.0",
+    "model": "gpt-5.4",
+    "messages": [
+      {"role": "user", "content": [{"type": "text", "text": "before"}]},
+      {"role": "user", "content": [{"type": "text", "text": "after"}]}
+    ],
+    "compaction_items": [
+      {"encrypted_content": "early", "id": "cmp_0", "after_message": -1},
+      {"encrypted_content": "cipher", "id": "cmp_1", "created_by": "system", "after_message": 0}
+    ]
+  },
+  "expected_losses": [],
+  "tags": ["request", "compaction", "n-r-22"]
+}

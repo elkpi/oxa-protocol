@@ -1,0 +1,32 @@
+{
+  "name": "responses.nonstream.compaction-item-response-to-ir",
+  "description": "A response compaction item becomes a CompactionItemBlock ahead of the text and does not select tool_use (N-R-22).",
+  "spec_version": "0.2.0",
+  "mode": "nonstream",
+  "conversion": "to-ir",
+  "source": {"protocol": "responses"},
+  "input": {
+    "id": "resp_cmp",
+    "object": "response",
+    "status": "completed",
+    "model": "gpt-5.4",
+    "output": [
+      {"type": "compaction", "id": "cmp_1", "encrypted_content": "cipher", "created_by": "system"},
+      {"type": "message", "id": "msg_1", "status": "completed", "role": "assistant", "content": [{"type": "output_text", "text": "hi", "annotations": []}]}
+    ],
+    "usage": {"input_tokens": 3, "output_tokens": 4, "total_tokens": 7}
+  },
+  "expected_ir": {
+    "specVersion": "0.3.0",
+    "id": "resp_cmp",
+    "model": "gpt-5.4",
+    "content": [
+      {"type": "compaction_item", "encrypted_content": "cipher", "id": "cmp_1", "created_by": "system"},
+      {"type": "text", "text": "hi"}
+    ],
+    "stop_reason": "end_turn",
+    "usage": {"input_tokens": 3, "output_tokens": 4}
+  },
+  "expected_losses": [],
+  "tags": ["response", "compaction", "n-r-22"]
+}

@@ -29,7 +29,7 @@ test("preserves Responses instructions and composed losses across faces", () => 
       chatcompletions,
       responses,
     }),
-    36,
+    38,
   );
 });
 
@@ -61,7 +61,7 @@ test("runs Responses cross response vectors across faces", () => {
       chatcompletions,
       responses,
     }),
-    10,
+    12,
   );
 });
 

@@ -1,0 +1,33 @@
+{
+  "name": "cross.nonstream.responses-to-chatcompletions-compaction-item-request",
+  "description": "A Responses compaction checkpoint is omitted on Chat Completions with one loss and is not rewritten as a message (N-R-22).",
+  "spec_version": "0.2.0",
+  "mode": "nonstream",
+  "conversion": "protocol-to-protocol",
+  "source": {"protocol": "responses"},
+  "target": {"protocol": "chatcompletions"},
+  "input": {
+    "model": "gpt-5.4",
+    "input": [
+      {"type": "message", "role": "user", "content": "before"},
+      {"type": "compaction", "id": "cmp_1", "encrypted_content": "cipher"},
+      {"type": "message", "role": "user", "content": "after"}
+    ]
+  },
+  "expected_output": {
+    "model": "gpt-5.4",
+    "messages": [
+      {"role": "user", "content": "before"},
+      {"role": "user", "content": "after"}
+    ]
+  },
+  "expected_losses": [
+    {
+      "path": "compaction_items[0]",
+      "field": "type",
+      "reason": "unsupported-semantic",
+      "detail": "Responses compaction item cannot be represented on the target face"
+    }
+  ],
+  "tags": ["cross", "request", "compaction", "loss", "n-r-22"]
+}

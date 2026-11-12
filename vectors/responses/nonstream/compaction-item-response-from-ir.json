@@ -1,0 +1,33 @@
+{
+  "name": "responses.nonstream.compaction-item-response-from-ir",
+  "description": "A CompactionItemBlock renders as a Responses compaction output item before the message, without a synthesized id (N-R-22).",
+  "spec_version": "0.2.0",
+  "mode": "nonstream",
+  "conversion": "from-ir",
+  "source": {"protocol": "responses"},
+  "target": {"protocol": "responses"},
+  "input": {
+    "specVersion": "0.3.0",
+    "id": "resp_cmp",
+    "model": "gpt-5.4",
+    "content": [
+      {"type": "compaction_item", "encrypted_content": "cipher", "id": "cmp_1", "created_by": "system"},
+      {"type": "text", "text": "hi"}
+    ],
+    "stop_reason": "end_turn",
+    "usage": {"input_tokens": 3, "output_tokens": 4}
+  },
+  "expected_output": {
+    "id": "resp_cmp",
+    "object": "response",
+    "status": "completed",
+    "model": "gpt-5.4",
+    "output": [
+      {"type": "compaction", "id": "cmp_1", "encrypted_content": "cipher", "created_by": "system"},
+      {"type": "message", "id": "msg_abc123", "status": "completed", "role": "assistant", "content": [{"type": "output_text", "text": "hi", "annotations": []}]}
+    ],
+    "usage": {"input_tokens": 3, "output_tokens": 4, "total_tokens": 7}
+  },
+  "expected_losses": [],
+  "tags": ["response", "compaction", "n-r-22"]
+}
