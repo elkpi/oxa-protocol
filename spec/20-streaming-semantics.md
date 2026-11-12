@@ -343,6 +343,8 @@ Each rule has a stable ID usable as a streaming vector tag.
 | non-function tool call | CC → IR | one `unsupported-semantic` loss; descendants absorbed |
 | RE `function_call_output` item | RE → IR | one `unsupported-semantic` loss; descendants absorbed |
 | RE `web_search_call` item | RE → IR | since 2.5.2, `output_item.done` emits the non-streaming `WebSearchCallBlock` as start/stop with no deltas (N-R-16). The item's progress events (`response.web_search_call.in_progress`, `.searching`, `.completed`) are not decoded: each records one `unsupported-semantic` loss and leaves valid state unchanged |
+| RE `compaction` item | RE → IR | since 3.3.0, `output_item.done` emits the non-streaming `CompactionItemBlock` as start/stop with no deltas (N-R-22). `output_item.added` emits nothing. A delta on the block is a structural error. The ciphertext MUST NOT appear in a loss detail |
+| IR `compaction_item` block | IR → RE | emit `output_item.added` and `output_item.done` for the same item; an empty `id` renders as `cmp_abc123` |
 | IR `web_search_call` block | IR → RE | emit the `web_search_call` item |
 | IR `web_search_call` block | IR → CC or AN | omit block with one `unsupported-semantic` loss, consume its stop and preserve lifecycle/index ordering |
 | IR `encrypted_content` block | IR → RE | since 2.5.2, attach to the still-open reasoning item and emit it on that item's `output_item.done` (N-R-13); a standalone ciphertext opens a new reasoning item with an empty summary. Deltas on the block are a structural error |

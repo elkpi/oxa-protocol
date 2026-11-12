@@ -87,6 +87,7 @@ The wire objects in scope are:
 | `tools[type=web_search/...]` | `Tools[]` (`type: "native"`) | source="openai", definition verbatim (N-R-15, spec/16) |
 | `tools[].defer_loading` | `Tools[].Native` (`kind: "defer_loading"`) | 1:1 round-trip loss-free (N-R-15, spec/15) |
 | `input[type=additional_tools]` | `ToolChangeGroups[]` | positional tool addition at message/content boundary (N-R-15, since 3.0.0) |
+| `input[type=compaction]` | `Request.CompactionItems[]` | N-R-22; not a message and not an Anthropic compaction block |
 | `tool_choice` | `ToolChoice` (`required` ⇄ mode `any`; `{type:"function",name}` ⇄ mode `tool`) | N-R-9; namespace split/join (N-R-15) |
 | `temperature` | `Params.Temperature` | 1:1 |
 | `top_p` | `Params.TopP` | 1:1 |
@@ -127,6 +128,7 @@ always renders as a string.
 | `output[type=reasoning].summary[]` | `ThinkingBlock.Thinking` | N-R-13 (since 2.0); one block per summary text part. Non-empty `encrypted_content` is an `EncryptedContentBlock` (since 2.5.2) |
 | `output[type=function_call]` | `ToolUseBlock`s after the text blocks | N-R-5 |
 | `output[type=web_search_call]` | `WebSearchCallBlock` after the text blocks | N-R-16; `id` and `status` are semantic for this item, not envelope defaults |
+| `output[type=compaction]` | `CompactionItemBlock` before thinking and text | N-R-22; ciphertext stays opaque; does not change `stop_reason` |
 | `status` + `incomplete_details.reason` + `error` | `Response.StopReason` | N-R-11 |
 | `id` | `Response.ID` | |
 | `model` | `Response.Model` | via model map |
@@ -449,11 +451,18 @@ Each rule has a stable ID usable as a vector tag.
     When `DisableParallel` is absent, `parallel_tool_calls` is omitted.
     0 encode loss.
 
+- **N-R-22 (Responses compaction item, since 3.3.0).** An `input[]` or `output[]` item with `type: "compaction"` is a same-face checkpoint. It is not an Anthropic `CompactionBlock` and MUST NOT reuse that block's `messages[0].content[0]` position rule. `encrypted_content` MUST be a non-empty string. It is opaque ciphertext and MUST NOT be parsed or copied into a loss detail. `id` and `created_by`, when present, MUST be strings and are omitted when empty. A missing or empty `encrypted_content`, or a non-string `id` or `created_by`, is a structural error.
+  - **Request.** The item is not a message. Decode appends one `Request.CompactionItems` entry whose `after_message` is the index of the conversation message already decoded, or `-1` when the item precedes every message. Encode emits it at that boundary, after leading system items and before the next message, in entry order. `after_message` outside `-1..len(messages)-1` is a structural error. Chat Completions and Anthropic omit each entry and record one `unsupported-semantic` loss at `compaction_items[i]`, field `type`, detail `Responses compaction item cannot be represented on the target face`.
+  - **Response.** Each item becomes a `CompactionItemBlock`. Canonical content order is those blocks in encounter order, then thinking, then text, then tool calls. Encode emits the compaction output items before other output items, in encounter order, and does not synthesize `id` or `status`. The block does not select `tool_use`. Other faces omit each block and record one `unsupported-semantic` loss at `content[i]`, field `type`, with the same detail.
+  - **Stream.** `response.output_item.added` for `compaction` opens the item and emits no IR event. `response.output_item.done` emits `ContentBlockStart` and `ContentBlockStop` for that block and no deltas. A delta on the block is a structural error. Encode emits `output_item.added` then `output_item.done` carrying the same item. An empty block `id` renders as `cmp_abc123` (envelope default, no loss). Non-streaming encode does not synthesize an id. Other faces omit the block, record the same loss, and still consume its stop.
+
 ## 8. Loss Catalog
 
 | `tool_change_groups[i].parts[j]` (text part) | unsupported-semantic | IR → request | positional system text has no equivalent on the target face |
 | `tool_change_groups[i].parts[j]` (removal or ref) | unsupported-semantic | IR → request | positional tool availability change cannot be represented on the target face |
 | `messages[i].content[j]` (compaction) | unsupported-semantic | IR → request | Anthropic compaction block cannot be represented on the target face |
+| `compaction_items[i]` | unsupported-semantic | IR → CC or AN request | Responses compaction item cannot be represented on the target face |
+| `content[i]` (`compaction_item`) | unsupported-semantic | IR → CC or AN | Responses compaction item cannot be represented on the target face |
 
 Buckets follow [spec/02 §9](02-loss-policy.md#9-loss-conventions--derived-and-envelope-fields): DERIVED and
 ENVELOPE fields are exempt; everything else MUST record a loss.

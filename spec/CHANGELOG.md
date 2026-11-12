@@ -5,6 +5,10 @@ implementations. The spec follows [Semantic Versioning](https://semver.org/);
 precedence between spec, vectors, and schemas is defined in
 [README.md](README.md#source-of-truth-precedence).
 
+## Unreleased
+
+- Responses compaction checkpoints (N-R-22): same-face `type: "compaction"` items round-trip as `Request.CompactionItems` on input and as `CompactionItemBlock` on output, including the atomic streaming item. The ciphertext stays opaque. Anthropic `CompactionBlock` placement rules do not apply. Other faces omit the checkpoint and record one `unsupported-semantic` loss whose detail does not contain the ciphertext.
+
 ## 3.2.0 - 2026-11-08
 
 - Add the control-plane fidelity matrix ([21](21-capability-matrix.md)): a
