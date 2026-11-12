@@ -7,6 +7,9 @@ precedence between spec, vectors, and schemas is defined in
 
 ## Unreleased
 
+- Log-probability sampling is preserved on the OpenAI family: Chat Completions request `logprobs`/`top_logprobs` map to `Params`, Responses request `top_logprobs` maps 1:1 with the documented boolean-loss rule (N-R-24), and Responses output_text `logprobs` payloads travel as canonical opaque JSON text on text blocks. Anthropic omits them with one `unmapped-field` loss each.
+- Cache breakpoints are explicit cross-face markers on every host that can carry them (system blocks and non-tool_result user content). Hosts that cannot carry one (assistant text, tool_result children, tool declarations, top-level request) report the whole-annotation capability-gap loss instead of a `type`/`ttl` spelling loss.
+
 - Same-face Anthropic web_search history (N-AN-23): `server_tool_use` (`name: "web_search"`) and `web_search_tool_result` map to `ServerToolUseBlock` and `WebSearchToolResultBlock` with canonical JSON text for `input`, `content`, and `caller`. They are never rewritten as Responses `web_search_call` or function calls, and the result ciphertext stays out of loss details. Chat Completions and Responses omit each block with one `unsupported-semantic` loss. Streaming still reports the blocks as unsupported.
 
 - Same-face compaction triggers: Anthropic `context_management.edits[].type = "compact_20260112"` (with `trigger` and `pause_after_compaction`) joins the recognized edit whitelist, and Responses `context_management[]` (`type: "compaction"`, optional `compact_threshold` ≥ 1000) is preserved as an OpenAI native annotation (N-R-23). Both shapes are source-tagged and never cross-mapped. Chat Completions and Anthropic omit the Responses annotation with one `unmapped-field` loss.

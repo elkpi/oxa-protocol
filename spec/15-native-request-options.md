@@ -84,7 +84,10 @@ Status: normative. 扩展 spec/01、spec/02、spec/10、spec/11、spec/12；IR c
 - 可选 `ttl` 仅支持 `"5m"` 与 `"1h"`。
 - 未知 `type` 或未知 `ttl` 取值：放弃该断点（不生成 `cache_control` 附加项），产生一条定位到该未知 leaf 的 `unmapped-value` loss；MUST NOT 删除未知 TTL 后采用默认五分钟 TTL。
 
-- 跨面遗漏 `detail`：当携带 `cache_control` 附加项的 IR 编码至无 cache 断点表示的目标面（OpenAI Chat Completions、OpenAI Responses）时，该 `unmapped-field` 遗漏的 `detail` 必须为 `anthropic-native cache breakpoint; the target face has no cache_control representation`，跨实现逐字节一致。该 detail 表达的是能力缺口（capability gap，目标面不可表达），而非实现缺失；调用方可据此按意图放行该类遗漏。
+- 显式断点跨面（规范 3.3.0）：Anthropic 的 `cache_control` 与 OpenAI 的 `prompt_cache_breakpoint` 都表示“该宿主上存在一个显式缓存断点”，两者可在同一宿主上互相映射。
+  - 可承载宿主：`SystemBlock`；非 `tool_result` 的 user 内容块（`TextBlock`、`ImageBlock`、`DocumentBlock`）。目标面在对应 wire 位置能表达断点时，映射为对端标记（Anthropic `{"type":"ephemeral"}`，OpenAI `{"mode":"explicit"}`）。`type`、`ttl` 与 `mode` 的拼写差异逐项记 `unmapped-field`（`opaque-argument` 见 spec/02），MUST NOT 把 `ttl`/`mode` 折算成对端取值。
+  - 不可承载宿主：assistant 消息的文本内容（两个 OpenAI 面的 assistant 内容都是字符串）、`tool_result.content` 内的块、工具声明与顶层 request。这些位置的断点整项省略，记一条 `unmapped-field`，`field` 使用该注解的 omission field，`detail` 必须为 `anthropic-native cache breakpoint; the target face has no cache_control representation`，跨实现逐字节一致。该 detail 表达的是能力缺口，而非实现缺失。
+  - 反向（OpenAI → Anthropic）同理：`prompt_cache_breakpoint` 只在上述可承载宿主出现；映射为 `cache_control` 时 `mode` 与 `ttl` 记 `unmapped-field`。
 
 ### 3.3 Context Management
 - `edits` 数组项的 `type` 目前仅识别：

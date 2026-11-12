@@ -51,7 +51,11 @@ Tool/ToolChoice。两类新块都可作为零 Delta 原子响应块；INV-3/4 �
   opaque strings (INV-1). A `ThinkingBlock`'s `signature` is carried
   verbatim with the same discipline: never validated or rewritten. By contrast,
   `tool.input_schema` is carried as a JSON object, verbatim; implementations
-  MUST NOT analyze or rewrite it.
+  MUST NOT analyze or rewrite it. Since 3.3.0 the same opaque-string discipline
+  applies to `text.logprobs` (a per-token array): it is canonical compact
+  JSON text (object keys in lexicographic order, no insignificant
+  whitespace), compared by exact string equality, never parsed for meaning
+  or copied into a loss detail.
   (Rationale: tool arguments arrive from all three faces as text fragments
   or strings and must concatenate without parsing; signatures are provider-specific
   opaque tokens; tool schemas arrive from all three faces as objects.)
@@ -134,6 +138,7 @@ Adding `DocumentBlock` (2.4.8), `RedactedThinkingBlock` (2.4.11), `WebSearchCall
 |----------|---------------|------|----------|-------|
 | `Text` | `text` | string | yes | text content |
 | `Citations` | `citations` | `[]TextCitation` | no | optional text citations (since 2.4.11); omitted when empty |
+| `Logprobs` | `logprobs` | string — canonical compact JSON text | no | per-token log-probability array for this output text, carried opaque (since 3.3.0; spec/11); output-side only |
 
 #### TextCitation
 
@@ -260,6 +265,8 @@ The exactly-one-of-three rule is enforced by the schema: a document carrying non
 | `ReasoningEffort` | `reasoning_effort` | enum `minimal` \| `low` \| `medium` \| `high` \| `xhigh` \| `max` | no | absent means unset; unknown inbound values are dropped with unmapped-value (since 2.0; xhigh and max since 2.4) |
 | `ResponseFormat` | `response_format` | `*ResponseFormat` | no | structured output formatting preference (since 2.1) |
 | `Verbosity` | `verbosity` | enum `low` \| `medium` \| `high` | no | output verbosity preference (since 2.5.0); absence means unset |
+| `Logprobs` | `logprobs` | `*bool` / boolean | no | request log-probability sampling switch (since 3.3.0); negative values are not applicable |
+| `TopLogprobs` | `top_logprobs` | `*int64` / integer ≥ 0 | no | number of alternatives per token (since 3.3.0); negative values are a structural error |
 
 ### 3.7.1 ResponseFormat
 

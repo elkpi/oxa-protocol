@@ -80,6 +80,7 @@ The wire objects in scope are:
 | `output_config.format` | `Params.ResponseFormat` | JSON Schema mapping (N-AN-12) |
 | `cache_control` (top-level, system, content, tools, tool_result) | `NativeAnnotation` | retained on respective IR host; no loss on decode (N-AN-14) |
 | `context_management` | `NativeAnnotation` | retained on IR Request; no loss on decode (N-AN-14) |
+| `params.logprobs`, `params.top_logprobs` (IR side) | — | Anthropic has no log-probability sampling parameter; on encode one `unmapped-field` loss each at `params.logprobs` / `params.top_logprobs` |
 | `tools[].{name,description,input_schema,strict}` | `Tools[].{Name,Description,InputSchema,Strict}` | 普通 function 工具双向映射；strict 区分缺省、false、true；schema bytes carried verbatim (INV-1); MUST be a JSON object |
 | `tools[].defer_loading` | `Tools[].Native` (`kind: "defer_loading"`) | true 保留为 NativeAnnotation，无 decode loss；跨面降级为 degraded 损失（N-NAT-2/3） |
 | `tools[].eager_input_streaming` | `Tools[].Native` (`kind: "eager_input_streaming"`) | true/false 保留为 NativeAnnotation，无 decode loss；跨面 true 降级为 degraded 损失，false 零损（N-NAT-2/3，规范 2.4.10） |
@@ -461,8 +462,8 @@ Each rule has a stable ID usable as a vector tag.
     one `unmapped-field` loss each and is not stored. Tool changes in that message are still decoded.
 
 - **N-AN-23 (provider-hosted web_search history, since 3.3.0).** Anthropic `server_tool_use` and `web_search_tool_result` content blocks map to `ServerToolUseBlock` and `WebSearchToolResultBlock` on the same face. They are not an IR representation of Responses `web_search_call` and MUST NOT be converted to or from `WebSearchCallBlock`, `tool_use`, or `function_call`.
-  - **Decode.** `server_tool_use` requires non-empty string `id` and string `name`, and `input` MUST be a JSON object. Only `name: "web_search"` is mapped; any other name records one `unsupported-semantic` loss at the block with field `type` and is omitted. `web_search_tool_result` requires non-empty string `tool_use_id`, and `content` MUST be a JSON array of results or a JSON error object. An optional `caller` on either block MUST be a JSON object. Missing or wrong-typed required fields, an absent `input`, and a non-object `caller` are structural errors.
-  - **IR text.** `input`, `content`, and `caller` are stored as canonical compact JSON text (object keys in lexicographic order, no insignificant whitespace) in an IR string field (INV-1): the text is never parsed for meaning or copied into a loss detail. Source whitespace and key order are not preserved.
+  - **Decode.** `server_tool_use` requires non-empty string `id` and string `name`, and `input` MUST be a JSON object. Only `name: "web_search"` is mapped; any other name records one `unsupported-semantic` loss at the block with field `type` and is omitted. `web_search_tool_result` requires non-empty string `tool_use_id`, and `content` MUST be a JSON array of results or a JSON error object. Inside that array, every object whose `type` ends with `_search_result` (including result kinds a future server revision may add) is opaque result content, never a content block; the result shape therefore does not depend on enumerating known result types. An optional `caller` on either block MUST be a JSON object. Missing or wrong-typed required fields, an absent `input`, and a non-object `caller` are structural errors.
+  - **IR text.** `input`, `content`, and `caller` are stored as canonical compact JSON text (object keys in lexicographic order, no insignificant whitespace) in an IR string field (INV-1): the text is never parsed for meaning or copied into a loss detail. Source whitespace and key order are not preserved. Numbers inside the canonical text keep their literal value, including integers beyond 2^53.
   - **Encode.** Each block renders back with the same `id` / `tool_use_id`, `name`, and canonical JSON text decoded into the wire object. The result ciphertext inside `content` MUST NOT be logged or placed in a loss detail.
   - **Cross-face.** Chat Completions and OpenAI Responses omit each block and record one `unsupported-semantic` loss at that block, field `type`, detail `Anthropic web_search history cannot be represented on the target face`.
 
@@ -509,6 +510,7 @@ ENVELOPE fields are exempt; everything else MUST record a loss.
 | `unknown citation type` | unsupported-semantic | request/response → IR | unsupported citation type; dropped at leaf index (N-AN-18) |
 | `max_tokens` default on encode | degraded | IR → request | N-AN-2: default 4096 applied when IR lacks `Params.MaxTokens` |
 | IR image with both/neither of data and URL, data without `media_type`, URL with `media_type` | unsupported-semantic | IR → request | §4 |
+| `params.logprobs` / `params.top_logprobs` | unmapped-field | IR → request | Anthropic Messages has no log-probability sampling parameter |
 | IR block type with no Messages equivalent in its position | unsupported-semantic | IR → request | N-AN-5 |
 | IR tool-choice mode with no Messages equivalent | unsupported-semantic | IR → request | N-AN-6 |
 | unknown `stop_reason` value | unmapped-value | response → IR | maps to IR `other` |

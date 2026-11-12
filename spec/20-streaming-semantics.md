@@ -347,6 +347,8 @@ Each rule has a stable ID usable as a streaming vector tag.
 | IR `compaction_item` block | IR → RE | emit `output_item.added` and `output_item.done` for the same item; an empty `id` renders as `cmp_abc123` |
 | IR `web_search_call` block | IR → RE | emit the `web_search_call` item |
 | IR `web_search_call` block | IR → CC or AN | omit block with one `unsupported-semantic` loss, consume its stop and preserve lifecycle/index ordering |
+| IR `compaction_item` block | IR → CC or AN | omit block with one `unsupported-semantic` loss at the block, field `type`, detail `Responses compaction item cannot be represented on the target face`; consume its stop, keep Anthropic wire indexes contiguous, and never place the ciphertext in the loss |
+| IR `server_tool_use`, `web_search_tool_result` blocks | IR → CC or AN | omit each block with one `unsupported-semantic` loss at the block, field `type`, detail `Anthropic web_search history cannot be represented on the target face`; consume the stop, keep Anthropic wire indexes contiguous, and never place result ciphertext in the loss |
 | IR `encrypted_content` block | IR → RE | since 2.5.2, attach to the still-open reasoning item and emit it on that item's `output_item.done` (N-R-13); a standalone ciphertext opens a new reasoning item with an empty summary. Deltas on the block are a structural error |
 | IR `encrypted_content` block | IR → CC or AN | omit block with one `unsupported-semantic` loss, consume its stop and preserve lifecycle/index ordering; the ciphertext MUST NOT appear in the loss detail |
 | AN `server_tool_use`, provider-hosted tool | AN → IR | one `unsupported-semantic` loss per unit; descendants absorbed. The non-streaming same-face history is defined by spec/12 N-AN-23 |

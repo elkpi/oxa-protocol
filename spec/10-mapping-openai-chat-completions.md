@@ -81,7 +81,8 @@ The wire objects in scope are:
 | `parallel_tool_calls` | `ToolChoice.DisableParallel` | boolean; inverted polarity: `parallel_tool_calls = !disable_parallel` (N-CC-16, since 2.5.0) |
 | `functions`, `function_call` | — | unmapped-field loss |
 | `response_format` | `Params.ResponseFormat` | N-CC-13 (since 2.1); 1:1 unwrapped json_schema |
-| `logprobs`, `top_logprobs` | — | unmapped-field loss |
+| `logprobs` | `Params.Logprobs` | 1:1 boolean (since 3.3.0); non-boolean is a structural error |
+| `top_logprobs` | `Params.TopLogprobs` | 1:1 non-negative integer (since 3.3.0); negative or non-integer is a structural error |
 
 For a function declaration, wire `function.strict: null` is normalized to an
 absent `Tool.Strict` without loss, just like an omitted field. A present
@@ -325,7 +326,7 @@ ENVELOPE fields are exempt; everything else MUST record a loss.
 |---|---|---|---|
 | `usage.total_tokens` | exempt (derived) | both | recomputed as prompt + completion on encode |
 | `object`, `created`, `choices[].index`, `message.role`, regenerated response `id` | exempt (envelope) | both | rendering defaults / transport structure |
-| `logprobs`, `top_logprobs` | unmapped-field | request → IR | log-probability sampling has no IR equivalent |
+| `params.logprobs`, `params.top_logprobs` (IR → Anthropic) | unmapped-field | IR → request | Anthropic Messages has no log-probability sampling parameter |
 | `functions`, `function_call` | unmapped-field | request → IR (also per-message `function_call`) | legacy shapes have no IR equivalent |
 | `response_format.type` unknown value | unmapped-value | request → IR | unknown response_format type dropped (N-CC-13) |
 | `content[i].signature` | unmapped-field | IR → response/request | Chat Completions carries no signature field on reasoning_content (N-CC-12) |

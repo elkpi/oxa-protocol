@@ -1838,10 +1838,6 @@
         },
         "usage": {
           "$ref": "#/$defs/usage"
-        },
-        "logprobs": {
-          "type": "string",
-          "description": "Raw Chat Completions choice.logprobs object (since 3.3.0)."
         }
       },
       "required": [
