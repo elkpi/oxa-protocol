@@ -22,8 +22,6 @@ type Response struct {
 	StopReason   StopReason
 	StopSequence string // set only when StopReason == stop_sequence, then non-empty
 	Usage        Usage
-	// Logprobs is the raw Chat Completions choice.logprobs object (since 3.3.0).
-	Logprobs string
 }
 
 // Usage carries token counts and optional granularity details (spec/01 s4.2).

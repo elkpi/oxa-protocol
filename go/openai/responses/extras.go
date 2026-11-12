@@ -1,11 +1,29 @@
 package responses
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 
 	"github.com/elkpi/oxa-protocol/go/v3/ir"
 )
+
+// canonicalizeOpaqueJSON renders opaque JSON as canonical compact text:
+// object keys in lexicographic order, no insignificant whitespace, and
+// numbers kept at their literal value (json.Number).
+func canonicalizeOpaqueJSON(raw json.RawMessage) (string, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return "", err
+	}
+	canonical, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	return string(canonical), nil
+}
 
 const contextManagementLossDetail = "Responses context_management has no equivalent on the target face"
 

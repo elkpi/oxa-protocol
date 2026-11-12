@@ -133,6 +133,9 @@ func EncodeRequest(req *ir.Request, opts ...Option) (*Request, []ir.Loss, error)
 				}
 				losses = append(losses, partLosses...)
 			}
+			if err := appendCompactionItems(&items, req.CompactionItems, i); err != nil {
+				return nil, nil, err
+			}
 			continue
 		}
 		switch message.Role {

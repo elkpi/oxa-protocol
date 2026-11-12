@@ -6,6 +6,7 @@
 package messages
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -378,6 +379,15 @@ func (w *BlockWire) UnmarshalJSON(data []byte) error {
 			}
 		}
 	}
+	if decoded.Type == BlockTypeWebSearchToolResult {
+		if raw, ok := fields["content"]; ok {
+			value, err := decodeCanonicalJSON(raw)
+			if err != nil {
+				return fmt.Errorf("anthropic: web_search_tool_result content must be valid JSON")
+			}
+			decoded.Content = value
+		}
+	}
 	if decoded.Type == BlockTypeRedactedThinking {
 		if raw, ok := fields["data"]; ok {
 			if string(raw) == "null" {
@@ -626,8 +636,8 @@ func canonicalIRText(raw json.RawMessage, path string) (json.RawMessage, error) 
 	if len(raw) == 0 {
 		return nil, fmt.Errorf("anthropic: %s is required", path)
 	}
-	var value any
-	if err := json.Unmarshal(raw, &value); err != nil {
+	value, err := decodeCanonicalJSON(raw)
+	if err != nil {
 		return nil, fmt.Errorf("anthropic: %s must be valid JSON", path)
 	}
 	if _, ok := value.(map[string]any); !ok {
@@ -640,13 +650,25 @@ func canonicalIRText(raw json.RawMessage, path string) (json.RawMessage, error) 
 	return json.Marshal(string(canonical))
 }
 
+// decodeCanonicalJSON parses JSON without losing integer precision; numbers
+// stay as json.Number and marshal back with their original token text.
+func decodeCanonicalJSON(raw json.RawMessage) (any, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
 // canonicalOptionalObject is canonicalIRText for an optional caller object.
 func canonicalOptionalObject(raw json.RawMessage, path string) (json.RawMessage, error) {
 	if len(raw) == 0 {
 		return nil, nil
 	}
-	var value any
-	if err := json.Unmarshal(raw, &value); err != nil {
+	value, err := decodeCanonicalJSON(raw)
+	if err != nil {
 		return nil, fmt.Errorf("anthropic: %s must be valid JSON", path)
 	}
 	if _, ok := value.(map[string]any); !ok {

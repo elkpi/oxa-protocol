@@ -1283,7 +1283,6 @@ type wireResponse struct {
 	StopReason   StopReason        `json:"stop_reason"`
 	StopSequence string            `json:"stop_sequence,omitempty"`
 	Usage        wireUsage         `json:"usage"`
-	Logprobs     string            `json:"logprobs,omitempty"`
 }
 
 type wireUsage struct {
@@ -1353,7 +1352,6 @@ func MarshalResponse(resp *Response) ([]byte, error) {
 		StopReason:   resp.StopReason,
 		StopSequence: resp.StopSequence,
 		Usage:        makeWireUsage(resp.Usage),
-		Logprobs:     resp.Logprobs,
 	})
 }
 
@@ -1378,7 +1376,6 @@ func UnmarshalResponse(data []byte) (*Response, error) {
 		StopReason:   w.StopReason,
 		StopSequence: w.StopSequence,
 		Usage:        parseWireUsage(w.Usage),
-		Logprobs:     w.Logprobs,
 	}, nil
 }
 

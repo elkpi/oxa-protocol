@@ -933,7 +933,11 @@ func DecodeResponse(wire *Response, opts ...Option) (*ir.Response, []ir.Loss, er
 				}
 				block := ir.TextBlock{Text: part.Text, Citations: cites}
 				if len(part.Logprobs) > 0 && string(part.Logprobs) != "null" {
-					block.Logprobs = string(part.Logprobs)
+					canonical, err := canonicalizeOpaqueJSON(part.Logprobs)
+					if err != nil {
+						return nil, nil, fmt.Errorf("responses: output[%d].content[%d].logprobs: %w", i, j, err)
+					}
+					block.Logprobs = canonical
 				}
 				texts = append(texts, block)
 			}

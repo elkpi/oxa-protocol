@@ -764,3 +764,24 @@ func TestWithModelMap(t *testing.T) {
 		t.Fatalf("decode response model not mapped: %q", respIn.Model)
 	}
 }
+
+func TestDecodeRequestJSONPreservesWebSearchResultIntegers(t *testing.T) {
+	raw := []byte(`{"model":"m","max_tokens":32,"messages":[` +
+		`{"role":"assistant","content":[{"type":"server_tool_use","id":"s1","name":"web_search","input":{"query":"q"}}]},` +
+		`{"role":"user","content":[{"type":"web_search_tool_result","tool_use_id":"s1","content":[{"type":"web_search_result","url":"https://example.com","title":"t","page_age":9007199254740993}]}]}]}`)
+	req, losses, err := DecodeRequestJSON(raw)
+	if err != nil || len(losses) != 0 {
+		t.Fatalf("DecodeRequestJSON: err=%v losses=%+v", err, losses)
+	}
+	result, ok := req.Messages[1].Content[0].(ir.WebSearchToolResultBlock)
+	if !ok {
+		t.Fatalf("content = %#v, want WebSearchToolResultBlock", req.Messages[1].Content)
+	}
+	var text string
+	if err := json.Unmarshal(result.Content, &text); err != nil {
+		t.Fatalf("content is not a string token: %v", err)
+	}
+	if !strings.Contains(text, "9007199254740993") {
+		t.Fatalf("content lost integer precision: %s", text)
+	}
+}

@@ -723,7 +723,7 @@ func OmittedNativeRequestLosses(req *Request, target string) ([]Loss, error) {
 			if _, ok := blk.(DocumentBlock); ok && msg.Role != RoleUser {
 				continue
 			}
-			losses = collectBlockOmissionLosses(losses, blk, basePath, target)
+			losses = collectBlockOmissionLosses(losses, blk, basePath, target, msg.Role == RoleUser)
 		}
 	}
 
@@ -738,7 +738,7 @@ func OmittedNativeRequestLosses(req *Request, target string) ([]Loss, error) {
 	return losses, nil
 }
 
-func collectBlockOmissionLosses(losses []Loss, b Block, path string, target string) []Loss {
+func collectBlockOmissionLosses(losses []Loss, b Block, path string, target string, breakpointHost bool) []Loss {
 	var nat []NativeAnnotation
 	var children []Block
 	switch blk := b.(type) {
@@ -789,9 +789,11 @@ func collectBlockOmissionLosses(losses []Loss, b Block, path string, target stri
 	for i, ann := range nat {
 		p := fmt.Sprintf("%s.native[%d]", path, i)
 		host := false
-		switch b.(type) {
-		case TextBlock, ImageBlock, DocumentBlock:
-			host = true
+		if breakpointHost {
+			switch b.(type) {
+			case TextBlock, ImageBlock, DocumentBlock:
+				host = true
+			}
 		}
 		losses = appendAnnotationLoss(losses, ann, p, false, "", target, host)
 	}
@@ -801,7 +803,7 @@ func collectBlockOmissionLosses(losses []Loss, b Block, path string, target stri
 			continue
 		}
 		childPath := fmt.Sprintf("%s.content[%d]", path, k)
-		losses = collectBlockOmissionLosses(losses, child, childPath, target)
+		losses = collectBlockOmissionLosses(losses, child, childPath, target, false)
 	}
 	return losses
 }

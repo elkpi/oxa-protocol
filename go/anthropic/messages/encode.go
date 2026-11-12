@@ -260,6 +260,22 @@ func EncodeRequest(req *ir.Request, opts ...Option) (*Request, []ir.Loss, error)
 	}
 	out.Temperature = req.Params.Temperature
 	out.TopP = req.Params.TopP
+	if req.Params.Logprobs != nil {
+		losses = append(losses, ir.Loss{
+			Path:   "params.logprobs",
+			Field:  "logprobs",
+			Reason: ir.LossUnmappedField,
+			Detail: "Anthropic Messages has no log-probability sampling parameter",
+		})
+	}
+	if req.Params.TopLogprobs != nil {
+		losses = append(losses, ir.Loss{
+			Path:   "params.top_logprobs",
+			Field:  "top_logprobs",
+			Reason: ir.LossUnmappedField,
+			Detail: "Anthropic Messages has no log-probability sampling parameter",
+		})
+	}
 	if req.Params.Verbosity != "" {
 		losses = append(losses, ir.Loss{Path: "params.verbosity", Field: "verbosity", Reason: ir.LossUnmappedField})
 	}
@@ -521,53 +537,83 @@ func encodeRequestBlock(block ir.Block, path string) (BlockWire, []ir.Loss, bool
 		}
 		return bw, nil, true, nil
 	case ir.ServerToolUseBlock:
-		if b.ID == "" {
-			return BlockWire{}, nil, false, fmt.Errorf("anthropic: %s.id is required", path)
-		}
-		if b.Name == "" {
-			return BlockWire{}, nil, false, fmt.Errorf("anthropic: %s.name is required", path)
-		}
-		if b.Name != "web_search" {
-			return BlockWire{}, nil, false, fmt.Errorf("anthropic: %s.name must be \"web_search\"", path)
-		}
-		input, err := irTextFromIRString(b.Input, path+".input")
-		if err != nil {
-			return BlockWire{}, nil, false, err
-		}
-		if err := requireJSONObject(input, path+".input"); err != nil {
-			return BlockWire{}, nil, false, err
-		}
-		var caller json.RawMessage
-		if len(b.Caller) > 0 {
-			caller, err = irTextFromIRString(b.Caller, path+".caller")
-			if err != nil {
-				return BlockWire{}, nil, false, err
-			}
-		}
-		return BlockWire{Type: BlockTypeServerToolUse, ID: b.ID, Name: b.Name, Input: input, Caller: caller}, nil, true, nil
+		bw, err := encodeServerToolUseBlock(b, path)
+		return bw, nil, err == nil, err
 	case ir.WebSearchToolResultBlock:
-		if b.ToolUseID == "" {
-			return BlockWire{}, nil, false, fmt.Errorf("anthropic: %s.tool_use_id is required", path)
-		}
-		contentText, err := irTextFromIRString(b.Content, path+".content")
-		if err != nil {
-			return BlockWire{}, nil, false, err
-		}
-		var content any
-		if err := json.Unmarshal(contentText, &content); err != nil {
-			return BlockWire{}, nil, false, fmt.Errorf("anthropic: %s.content must be valid JSON", path)
-		}
-		var caller json.RawMessage
-		if len(b.Caller) > 0 {
-			caller, err = irTextFromIRString(b.Caller, path+".caller")
-			if err != nil {
-				return BlockWire{}, nil, false, err
-			}
-		}
-		return BlockWire{Type: BlockTypeWebSearchToolResult, ToolUseID: b.ToolUseID, Content: content, Caller: caller}, nil, true, nil
+		bw, err := encodeWebSearchToolResultBlock(b, path)
+		return bw, nil, err == nil, err
 	default:
 		return BlockWire{}, []ir.Loss{unsupportedBlockLoss(path, block)}, false, nil
 	}
+}
+
+// encodeServerToolUseBlock renders an IR server_tool_use history block. The
+// Anthropic face only carries the web_search server tool; input is opaque
+// canonical JSON text (INV-1) and caller is an optional opaque object.
+func encodeServerToolUseBlock(b ir.ServerToolUseBlock, path string) (BlockWire, error) {
+	if b.ID == "" {
+		return BlockWire{}, fmt.Errorf("anthropic: %s.id is required", path)
+	}
+	if b.Name == "" {
+		return BlockWire{}, fmt.Errorf("anthropic: %s.name is required", path)
+	}
+	if b.Name != "web_search" {
+		return BlockWire{}, fmt.Errorf("anthropic: %s.name must be \"web_search\"", path)
+	}
+	input, err := irTextFromIRString(b.Input, path+".input")
+	if err != nil {
+		return BlockWire{}, err
+	}
+	if err := requireJSONObject(input, path+".input"); err != nil {
+		return BlockWire{}, err
+	}
+	caller, err := callerFromIRText(b.Caller, path+".caller")
+	if err != nil {
+		return BlockWire{}, err
+	}
+	return BlockWire{Type: BlockTypeServerToolUse, ID: b.ID, Name: b.Name, Input: input, Caller: caller}, nil
+}
+
+// encodeWebSearchToolResultBlock renders an IR web_search_tool_result history
+// block. The content payload is opaque JSON text (INV-1) and is carried
+// without interpretation; it must however remain a JSON array or object.
+func encodeWebSearchToolResultBlock(b ir.WebSearchToolResultBlock, path string) (BlockWire, error) {
+	if b.ToolUseID == "" {
+		return BlockWire{}, fmt.Errorf("anthropic: %s.tool_use_id is required", path)
+	}
+	contentText, err := irTextFromIRString(b.Content, path+".content")
+	if err != nil {
+		return BlockWire{}, err
+	}
+	content, err := decodeCanonicalJSON(contentText)
+	if err != nil {
+		return BlockWire{}, fmt.Errorf("anthropic: %s.content must be valid JSON", path)
+	}
+	switch content.(type) {
+	case []any, map[string]any:
+	default:
+		return BlockWire{}, fmt.Errorf("anthropic: %s.content must be a JSON array or object", path)
+	}
+	caller, err := callerFromIRText(b.Caller, path+".caller")
+	if err != nil {
+		return BlockWire{}, err
+	}
+	return BlockWire{Type: BlockTypeWebSearchToolResult, ToolUseID: b.ToolUseID, Content: content, Caller: caller}, nil
+}
+
+// callerFromIRText decodes an optional caller object carried as IR text.
+func callerFromIRText(tok json.RawMessage, path string) (json.RawMessage, error) {
+	if len(tok) == 0 {
+		return nil, nil
+	}
+	text, err := irTextFromIRString(tok, path)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireJSONObject(text, path); err != nil {
+		return nil, err
+	}
+	return json.RawMessage(text), nil
 }
 
 func encodeImageBlock(image ir.ImageBlock, path string) (BlockWire, []ir.Loss, bool, error) {
@@ -920,44 +966,11 @@ func encodeResponseBlock(block ir.Block, path string) (BlockWire, []ir.Loss, boo
 		wrapped, _ := json.Marshal(map[string]string{"input": inputStr})
 		return BlockWire{Type: BlockTypeToolUse, ID: b.ID, Name: b.Name, Input: wrapped}, nil, true, nil
 	case ir.ServerToolUseBlock:
-		if b.ID == "" {
-			return BlockWire{}, nil, false, fmt.Errorf("anthropic: %s.id is required", path)
-		}
-		if b.Name != "web_search" {
-			return BlockWire{}, nil, false, fmt.Errorf("anthropic: %s.name must be \"web_search\"", path)
-		}
-		input, err := irTextFromIRString(b.Input, path+".input")
-		if err != nil {
-			return BlockWire{}, nil, false, err
-		}
-		var caller json.RawMessage
-		if len(b.Caller) > 0 {
-			caller, err = irTextFromIRString(b.Caller, path+".caller")
-			if err != nil {
-				return BlockWire{}, nil, false, err
-			}
-		}
-		return BlockWire{Type: BlockTypeServerToolUse, ID: b.ID, Name: b.Name, Input: input, Caller: caller}, nil, true, nil
+		bw, err := encodeServerToolUseBlock(b, path)
+		return bw, nil, err == nil, err
 	case ir.WebSearchToolResultBlock:
-		if b.ToolUseID == "" {
-			return BlockWire{}, nil, false, fmt.Errorf("anthropic: %s.tool_use_id is required", path)
-		}
-		contentText, err := irTextFromIRString(b.Content, path+".content")
-		if err != nil {
-			return BlockWire{}, nil, false, err
-		}
-		var content any
-		if err := json.Unmarshal(contentText, &content); err != nil {
-			return BlockWire{}, nil, false, fmt.Errorf("anthropic: %s.content must be valid JSON", path)
-		}
-		var caller json.RawMessage
-		if len(b.Caller) > 0 {
-			caller, err = irTextFromIRString(b.Caller, path+".caller")
-			if err != nil {
-				return BlockWire{}, nil, false, err
-			}
-		}
-		return BlockWire{Type: BlockTypeWebSearchToolResult, ToolUseID: b.ToolUseID, Content: content, Caller: caller}, nil, true, nil
+		bw, err := encodeWebSearchToolResultBlock(b, path)
+		return bw, nil, err == nil, err
 	default:
 		return BlockWire{}, []ir.Loss{unsupportedBlockLoss(path, block)}, false, nil
 	}
