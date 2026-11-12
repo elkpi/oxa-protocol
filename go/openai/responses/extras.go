@@ -21,7 +21,7 @@ func decodeRequestExtras(req *ir.Request, wire *Request) ([]ir.Loss, error) {
 	if len(wire.ContextManagement) == 0 {
 		return losses, nil
 	}
-	var kept []ContextManagementEntry
+	var kept []map[string]any
 	for i, entry := range wire.ContextManagement {
 		if entry.Type == "" {
 			return nil, fmt.Errorf("responses: context_management[%d].type is required", i)
@@ -36,7 +36,11 @@ func decodeRequestExtras(req *ir.Request, wire *Request) ([]ir.Loss, error) {
 		if entry.CompactThreshold != nil && *entry.CompactThreshold < 1000 {
 			return nil, fmt.Errorf("responses: context_management[%d].compact_threshold must be at least 1000", i)
 		}
-		kept = append(kept, entry)
+		canonical := map[string]any{"type": "compaction"}
+		if entry.CompactThreshold != nil {
+			canonical["compact_threshold"] = *entry.CompactThreshold
+		}
+		kept = append(kept, canonical)
 	}
 	if len(kept) == 0 {
 		return losses, nil
