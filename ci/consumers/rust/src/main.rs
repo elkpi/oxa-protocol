@@ -95,6 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             content: vec![oxa::ir::Block::Text {
                 text: "hi".to_string(),
                 citations: None,
+                logprobs: None,
                 native: Vec::new(),
             }],
         }],
