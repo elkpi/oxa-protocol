@@ -32,5 +32,5 @@ package oxa
 // Version is the current release version of the oxa Go reference implementation.
 // v3.2.0 adds the control-plane fidelity matrix (spec/21), locks it with
 // ten cross-stream vectors, and publishes once every language wave passes
-// the shared 628-vector suite (spec/README).
+// the shared 634-vector suite (spec/README).
 const Version = "3.2.0"

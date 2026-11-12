@@ -117,8 +117,8 @@ fn nonstream_cross_vectors() {
         config: jev::Config::default(),
     };
 
-    assert_cross(&anthropic, &chatcompletions, 23);
-    assert_cross(&anthropic, &responses, 21);
+    assert_cross(&anthropic, &chatcompletions, 24);
+    assert_cross(&anthropic, &responses, 22);
     assert_cross(&anthropic, &anthropic, 2);
     assert_cross(&chatcompletions, &anthropic, 14);
     assert_cross(&chatcompletions, &responses, 12);

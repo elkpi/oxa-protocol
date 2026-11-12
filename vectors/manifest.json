@@ -1083,6 +1083,26 @@
       "sha256": "b29a813301def8c4bd63f040314eaf25d305a9668f101a36c03245af4b2282d8"
     },
     {
+      "name": "anthropic.nonstream.server-tool-use-history-request-from-ir",
+      "file": "anthropic/nonstream/server-tool-use-history-request-from-ir.json",
+      "tags": [
+        "request",
+        "web-search-history",
+        "n-an-23"
+      ],
+      "sha256": "3d00d3f44ee79220430741116ec75f709bcae46b9090b594dd9328d2eb354427"
+    },
+    {
+      "name": "anthropic.nonstream.server-tool-use-history-request-to-ir",
+      "file": "anthropic/nonstream/server-tool-use-history-request-to-ir.json",
+      "tags": [
+        "request",
+        "web-search-history",
+        "n-an-23"
+      ],
+      "sha256": "89d8082605e3a34b2c6b5fcd31d0626798399a89bf433cc7faf9e6d0062fb7dc"
+    },
+    {
       "name": "anthropic.nonstream.system-message-fields-text-to-ir",
       "file": "anthropic/nonstream/system-message-fields-text-to-ir.json",
       "tags": [
@@ -1553,6 +1573,26 @@
         "cache"
       ],
       "sha256": "8dea8ed40add19442ee85c06390c244ed712acf90c85ad824c201a72105e1c9f"
+    },
+    {
+      "name": "anthropic.nonstream.web-search-tool-result-response-from-ir",
+      "file": "anthropic/nonstream/web-search-tool-result-response-from-ir.json",
+      "tags": [
+        "response",
+        "web-search-history",
+        "n-an-23"
+      ],
+      "sha256": "6669a95fc6e971d20efe718ab73171d4e8bfb3908bd16e1d62941ea4c31bea20"
+    },
+    {
+      "name": "anthropic.nonstream.web-search-tool-result-response-to-ir",
+      "file": "anthropic/nonstream/web-search-tool-result-response-to-ir.json",
+      "tags": [
+        "response",
+        "web-search-history",
+        "n-an-23"
+      ],
+      "sha256": "458347d89f8f0e903bea144e2bcdd2714ae0ae5563a6ac2a948cbe4e5b7a3555"
     },
     {
       "name": "anthropic.stream.citations-delta-from-ir",
@@ -2933,6 +2973,18 @@
       "sha256": "6f78f91143d8eaac83baac59eb5512938bbd9edfdcb56fe6dcec0f3cb7b8eddd"
     },
     {
+      "name": "cross.nonstream.anthropic-to-chatcompletions-web-search-history",
+      "file": "cross/nonstream/anthropic-to-chatcompletions-web-search-history.json",
+      "tags": [
+        "cross",
+        "request",
+        "web-search-history",
+        "loss",
+        "n-an-23"
+      ],
+      "sha256": "71d2afe66153de35b04042166c96edb0f1c835eeb755f41972ae81f2cd94029d"
+    },
+    {
       "name": "cross.nonstream.anthropic-to-responses-budget-request",
       "file": "cross/nonstream/anthropic-to-responses-budget-request.json",
       "tags": [
@@ -3174,6 +3226,18 @@
         "loss"
       ],
       "sha256": "305ffab8f29e51f9dd250b0280fb872d597338ba634b766dcadb3e11e6ce5216"
+    },
+    {
+      "name": "cross.nonstream.anthropic-to-responses-web-search-history",
+      "file": "cross/nonstream/anthropic-to-responses-web-search-history.json",
+      "tags": [
+        "cross",
+        "request",
+        "web-search-history",
+        "loss",
+        "n-an-23"
+      ],
+      "sha256": "2ae793f0dbe5f8e5453d3a66177f9024969993358d22383f0df2f7ea851f3660"
     },
     {
       "name": "cross.nonstream.chatcompletions-to-anthropic-developer-json-schema-request",
