@@ -341,9 +341,6 @@ json::Value dump_block_impl(const Block& b, F&& recurse) {
         return out;
     }
     if (const auto* st = std::get_if<ServerToolUseBlock>(&b)) {
-        if (st->id.empty()) throw std::invalid_argument("ir: server_tool_use requires id");
-        if (st->name != "web_search") throw std::invalid_argument("ir: server_tool_use name must be \"web_search\"");
-        if (st->input.empty()) throw std::invalid_argument("ir: server_tool_use requires input");
         out.set("type", json::Value::string(std::string(BLOCK_TYPE_SERVER_TOOL_USE)));
         out.set("id", json::Value::string(st->id));
         out.set("name", json::Value::string(st->name));
@@ -352,8 +349,6 @@ json::Value dump_block_impl(const Block& b, F&& recurse) {
         return out;
     }
     if (const auto* wr = std::get_if<WebSearchToolResultBlock>(&b)) {
-        if (wr->tool_use_id.empty()) throw std::invalid_argument("ir: web_search_tool_result requires tool_use_id");
-        if (wr->content.empty()) throw std::invalid_argument("ir: web_search_tool_result requires content");
         out.set("type", json::Value::string(std::string(BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT)));
         out.set("tool_use_id", json::Value::string(wr->tool_use_id));
         out.set("content", json::Value::string(wr->content));
@@ -361,7 +356,6 @@ json::Value dump_block_impl(const Block& b, F&& recurse) {
         return out;
     }
     if (const auto* ci = std::get_if<CompactionItemBlock>(&b)) {
-        if (ci->encrypted_content.empty()) throw std::invalid_argument("ir: compaction_item encrypted_content is required");
         out.set("type", json::Value::string(std::string(BLOCK_TYPE_COMPACTION_ITEM)));
         out.set("encrypted_content", json::Value::string(ci->encrypted_content));
         if (!ci->id.empty()) out.set("id", json::Value::string(ci->id));
@@ -892,10 +886,6 @@ json::Value dump_request(const Request& r) {
     if (!r.compaction_items.empty()) {
         json::Value items = json::Value::array();
         for (const auto& item : r.compaction_items) {
-            if (item.encrypted_content.empty()) throw std::invalid_argument("ir: compaction_items encrypted_content is required");
-            if (item.after_message < -1 || item.after_message >= static_cast<std::int64_t>(r.messages.size())) {
-                throw std::invalid_argument("ir: compaction_items after_message is out of range");
-            }
             json::Value value = json::Value::object();
             value.set("encrypted_content", json::Value::string(item.encrypted_content));
             if (!item.id.empty()) value.set("id", json::Value::string(item.id));
