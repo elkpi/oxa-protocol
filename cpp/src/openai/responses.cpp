@@ -1064,6 +1064,49 @@ static StatusOr<Conversion<ir::Request>> decode_request_unchecked(const json::Va
         });
     }
 
+    if (const auto* cm = wire.find("context_management"); cm) {
+        if (!cm->is_array()) return invalid_argument("responses: context_management must be an array");
+        json::Value kept = json::Value::array();
+        std::size_t cm_index = 0;
+        for (const auto& entry : cm->as_array()) {
+            const std::string path = "context_management[" + std::to_string(cm_index) + "]";
+            if (!entry.is_object()) return invalid_argument("responses: " + path + " must be an object");
+            const auto* kind = entry.find("type");
+            if (!kind || !kind->is_string() || kind->as_string().empty()) {
+                return invalid_argument("responses: " + path + ".type is required");
+            }
+            if (kind->as_string() != "compaction") {
+                losses.push_back(make_resp_loss(
+                    path + ".type", "type", ir::LOSS_UNMAPPED_VALUE,
+                    "unknown context_management type \"" + kind->as_string() + "\""));
+                ++cm_index;
+                continue;
+            }
+            json::Value canonical = json::Value::object();
+            canonical.set("type", json::Value::string("compaction"));
+            if (const auto* threshold = entry.find("compact_threshold")) {
+                if (!threshold->is_int()) return invalid_argument("responses: " + path + ".compact_threshold must be an integer");
+                if (threshold->as_int() < 1000) return invalid_argument("responses: " + path + ".compact_threshold must be at least 1000");
+                canonical.set("compact_threshold", json::Value::integer(threshold->as_int()));
+            }
+            kept.push_back(std::move(canonical));
+            ++cm_index;
+        }
+        if (!kept.as_array().empty()) {
+            req.native.push_back(ir::NativeAnnotation{
+                std::string(ir::NATIVE_SOURCE_OPENAI),
+                std::string(ir::NATIVE_KIND_CONTEXT_MANAGEMENT),
+                json::serialize(kept),
+                ir::NativeOmission{
+                    "context_management",
+                    std::string(ir::LOSS_UNMAPPED_FIELD),
+                    std::string(ir::RESPONSES_CONTEXT_MANAGEMENT_LOSS_DETAIL),
+                },
+                std::nullopt,
+            });
+        }
+    }
+
     const auto* inp = wire.find("input");
     if (!inp) return invalid_argument("responses: request missing input");
 
@@ -1347,6 +1390,25 @@ static StatusOr<Conversion<ir::Request>> decode_request_unchecked(const json::Va
                 if (!tr_blocks.empty()) {
                     req.messages.push_back(ir::Message{std::string(ir::ROLE_USER), std::move(tr_blocks)});
                 }
+            } else if (kind == "compaction") {
+                const std::string path = "input[" + std::to_string(index) + "]";
+                const auto* cipher = item.find("encrypted_content");
+                if (!cipher || !cipher->is_string() || cipher->as_string().empty()) {
+                    return invalid_argument("responses: " + path + ".encrypted_content is required");
+                }
+                ir::CompactionItem checkpoint;
+                checkpoint.encrypted_content = cipher->as_string();
+                checkpoint.after_message = static_cast<std::int64_t>(req.messages.size()) - 1;
+                if (const auto* id = item.find("id")) {
+                    if (!id->is_string()) return invalid_argument("responses: " + path + ".id must be a string");
+                    checkpoint.id = id->as_string();
+                }
+                if (const auto* created = item.find("created_by")) {
+                    if (!created->is_string()) return invalid_argument("responses: " + path + ".created_by must be a string");
+                    checkpoint.created_by = created->as_string();
+                }
+                req.compaction_items.push_back(std::move(checkpoint));
+                ++index;
             } else if (kind == "additional_tools") {
                 OXA_RETURN_IF_ERROR(decode_group(index, req.messages.size(), -1));
                 ++index;
@@ -1444,6 +1506,12 @@ static StatusOr<Conversion<ir::Request>> decode_request_unchecked(const json::Va
                 has_params = true;
             }
         }
+    }
+    if (const auto* tl = wire.find("top_logprobs"); tl && !tl->is_null()) {
+        if (!tl->is_int()) return invalid_argument("responses: top_logprobs must be an integer");
+        if (tl->as_int() < 0) return invalid_argument("responses: top_logprobs must be a non-negative integer");
+        params.top_logprobs = tl->as_int();
+        has_params = true;
     }
     if (has_params) req.params = std::move(params);
 
@@ -1712,28 +1780,20 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
         for (const auto& s : req.system) if (s.role == "developer") has_developer = true;
         bool has_breakpoint = false;
         for (const auto& s : req.system) {
-            for (const auto& ann : s.native) {
-                if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                    has_breakpoint = true;
-                    break;
-                }
+            if (ir::openai_breakpoint_wire(s.native).has_value()) {
+                has_breakpoint = true;
+                break;
             }
-            if (has_breakpoint) break;
         }
         auto system_item_content = [](const ir::SystemBlock& s) -> json::Value {
-            for (const auto& ann : s.native) {
-                if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                    auto parsed = json::parse(ann.value);
-                    if (parsed.ok()) {
-                        json::Value parts = json::Value::array();
-                        json::Value part = json::Value::object();
-                        part.set("type", json::Value::string("input_text"));
-                        part.set("text", json::Value::string(s.text));
-                        part.set("prompt_cache_breakpoint", std::move(*parsed));
-                        parts.push_back(std::move(part));
-                        return parts;
-                    }
-                }
+            if (auto pcb = ir::openai_breakpoint_wire(s.native)) {
+                json::Value parts = json::Value::array();
+                json::Value part = json::Value::object();
+                part.set("type", json::Value::string("input_text"));
+                part.set("text", json::Value::string(s.text));
+                part.set("prompt_cache_breakpoint", std::move(*pcb));
+                parts.push_back(std::move(part));
+                return parts;
             }
             return json::Value::string(s.text);
         };
@@ -1867,7 +1927,27 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
     for (std::size_t mi = 0; mi < req.messages.size(); ++mi) for (std::size_t bi = 0; bi < req.messages[mi].content.size(); ++bi) {
         if (std::holds_alternative<ir::CompactionBlock>(req.messages[mi].content[bi])) losses.push_back(make_resp_loss("messages[" + std::to_string(mi) + "].content[" + std::to_string(bi) + "]", "type", ir::LOSS_UNSUPPORTED_SEMANTIC, "Anthropic compaction block cannot be represented on the target face"));
     }
+    for (const auto& checkpoint : req.compaction_items) {
+        if (checkpoint.encrypted_content.empty()) {
+            return invalid_argument("responses: compaction item encrypted_content is required");
+        }
+        if (checkpoint.after_message < -1 || checkpoint.after_message >= static_cast<std::int64_t>(req.messages.size())) {
+            return invalid_argument("responses: compaction_items after_message is out of range");
+        }
+    }
     std::vector<json::Value> items = std::move(leading_system_items);
+    auto append_compaction = [&](std::int64_t after) {
+        for (const auto& checkpoint : req.compaction_items) {
+            if (checkpoint.after_message != after) continue;
+            json::Value item = json::Value::object();
+            item.set("type", json::Value::string(std::string(ITEM_TYPE_COMPACTION)));
+            item.set("encrypted_content", json::Value::string(checkpoint.encrypted_content));
+            if (!checkpoint.id.empty()) item.set("id", json::Value::string(checkpoint.id));
+            if (!checkpoint.created_by.empty()) item.set("created_by", json::Value::string(checkpoint.created_by));
+            items.push_back(std::move(item));
+        }
+    };
+    append_compaction(-1);
     for (const auto& group : req.tool_change_groups) {
         if (group.message_index > req.messages.size() || group.content_index < -1 ||
             (group.content_index >= 0 && (group.message_index >= req.messages.size() || static_cast<std::size_t>(group.content_index) > req.messages[group.message_index].content.size()))) return invalid_argument("responses: invalid tool change group position");
@@ -1974,6 +2054,11 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                         "type", ir::LOSS_UNSUPPORTED_SEMANTIC,
                         "this IR block cannot be rendered in a Responses item"));
                     normal.push_back(&b);
+                } else if (std::holds_alternative<ir::ServerToolUseBlock>(b) || std::holds_alternative<ir::WebSearchToolResultBlock>(b)) {
+                    losses.push_back(make_resp_loss(
+                        "messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "]",
+                        "type", ir::LOSS_UNSUPPORTED_SEMANTIC,
+                        std::string(ir::WEB_SEARCH_HISTORY_LOSS_DETAIL)));
                 } else {
                     if (const auto* utb = std::get_if<ir::TextBlock>(&b);
                         utb && utb->citations.has_value() && !utb->citations->empty()) {
@@ -2068,29 +2153,14 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                 mi.set("role", json::Value::string("user"));
                 bool has_pcb = false;
                 for (const auto* b : normal) {
-                    if (const auto* tb = std::get_if<ir::TextBlock>(b)) {
-                        for (const auto& ann : tb->native) {
-                            if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                                has_pcb = true;
-                                break;
-                            }
-                        }
-                    } else if (const auto* img = std::get_if<ir::ImageBlock>(b)) {
-                        for (const auto& ann : img->native) {
-                            if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                                has_pcb = true;
-                                break;
-                            }
-                        }
-                    } else if (const auto* doc = std::get_if<ir::DocumentBlock>(b)) {
-                        for (const auto& ann : doc->native) {
-                            if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                                has_pcb = true;
-                                break;
-                            }
-                        }
+                    const std::vector<ir::NativeAnnotation>* native = nullptr;
+                    if (const auto* tb = std::get_if<ir::TextBlock>(b)) native = &tb->native;
+                    else if (const auto* img = std::get_if<ir::ImageBlock>(b)) native = &img->native;
+                    else if (const auto* doc = std::get_if<ir::DocumentBlock>(b)) native = &doc->native;
+                    if (native && ir::openai_breakpoint_wire(*native).has_value()) {
+                        has_pcb = true;
+                        break;
                     }
-                    if (has_pcb) break;
                 }
                 if (!has_pcb && normal.size() == 1 && std::holds_alternative<ir::TextBlock>(*normal[0])) {
                     const auto& tb = std::get<ir::TextBlock>(*normal[0]);
@@ -2102,12 +2172,8 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                             json::Value part = json::Value::object();
                             part.set("type", json::Value::string("input_text"));
                             part.set("text", json::Value::string(tb->text));
-                            for (const auto& ann : tb->native) {
-                                if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                                    auto parsed = json::parse(ann.value);
-                                    if (parsed.ok()) part.set("prompt_cache_breakpoint", std::move(*parsed));
-                                    break;
-                                }
+                            if (auto pcb = ir::openai_breakpoint_wire(tb->native)) {
+                                part.set("prompt_cache_breakpoint", std::move(*pcb));
                             }
                             parts.push_back(std::move(part));
                         } else if (const auto* img = std::get_if<ir::ImageBlock>(b)) {
@@ -2119,12 +2185,8 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                             } else if (img->url.has_value()) {
                                 part.set("image_url", json::Value::string(*img->url));
                             }
-                            for (const auto& ann : img->native) {
-                                if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                                    auto parsed = json::parse(ann.value);
-                                    if (parsed.ok()) part.set("prompt_cache_breakpoint", std::move(*parsed));
-                                    break;
-                                }
+                            if (auto pcb = ir::openai_breakpoint_wire(img->native)) {
+                                part.set("prompt_cache_breakpoint", std::move(*pcb));
                             }
                             parts.push_back(std::move(part));
                         } else if (const auto* doc = std::get_if<ir::DocumentBlock>(b)) {
@@ -2137,12 +2199,8 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                             } else if (doc->data.has_value() && !doc->data->empty()) {
                                 part.set("file_data", json::Value::string(*doc->data));
                             }
-                            for (const auto& ann : doc->native) {
-                                if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                                    auto parsed = json::parse(ann.value);
-                                    if (parsed.ok()) part.set("prompt_cache_breakpoint", std::move(*parsed));
-                                    break;
-                                }
+                            if (auto pcb = ir::openai_breakpoint_wire(doc->native)) {
+                                part.set("prompt_cache_breakpoint", std::move(*pcb));
                             }
                             parts.push_back(std::move(part));
                         }
@@ -2225,6 +2283,16 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                         "messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "]",
                         "type", ir::LOSS_UNSUPPORTED_SEMANTIC,
                         "anthropic encrypted thinking replay state; the target face cannot preserve this block"));
+                } else if (std::holds_alternative<ir::CompactionItemBlock>(b)) {
+                    losses.push_back(make_resp_loss(
+                        "messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "]",
+                        "type", ir::LOSS_UNSUPPORTED_SEMANTIC,
+                        std::string(ir::COMPACTION_ITEM_LOSS_DETAIL)));
+                } else if (std::holds_alternative<ir::ServerToolUseBlock>(b) || std::holds_alternative<ir::WebSearchToolResultBlock>(b)) {
+                    losses.push_back(make_resp_loss(
+                        "messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "]",
+                        "type", ir::LOSS_UNSUPPORTED_SEMANTIC,
+                        std::string(ir::WEB_SEARCH_HISTORY_LOSS_DETAIL)));
                 } else if (const auto* ws = std::get_if<ir::WebSearchCallBlock>(&b)) {
                     OXA_ASSIGN_OR_RETURN(auto item, encode_web_search_item(*ws, "messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "]"));
                     fc_items.push_back(std::move(item));
@@ -2288,7 +2356,7 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                 mi.set("role", json::Value::string("assistant"));
                 mi.set("content", std::move(assistant_parts));
                 items.push_back(std::move(mi));
-            } else if (has_text || (!has_reasoning && fc_items.empty())) {
+            } else if (has_text || (m.content.empty() && !has_reasoning && fc_items.empty())) {
                 json::Value mi = json::Value::object();
                 mi.set("role", json::Value::string("assistant"));
                 mi.set("content", json::Value::string(std::move(a_txt)));
@@ -2299,6 +2367,7 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
             }
         }
         }
+        append_compaction(static_cast<std::int64_t>(i));
     }
     OXA_RETURN_IF_ERROR(emit_groups(req.messages.size(), -1));
 
@@ -2351,6 +2420,24 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
         if (has_text_val) {
             out.set("text", std::move(text_val));
         }
+        bool send_top = p.top_logprobs.has_value();
+        if (p.logprobs.has_value()) {
+            if (*p.logprobs) {
+                if (!p.top_logprobs.has_value()) {
+                    losses.push_back(make_resp_loss(
+                        "params.logprobs", "logprobs", ir::LOSS_UNMAPPED_FIELD,
+                        "Responses has no logprobs boolean; top_logprobs is the sampling switch"));
+                }
+            } else {
+                send_top = false;
+                losses.push_back(make_resp_loss(
+                    "params.logprobs", "logprobs", ir::LOSS_UNMAPPED_FIELD,
+                    "Responses has no logprobs boolean; explicit false is dropped"));
+            }
+        }
+        if (send_top) {
+            out.set("top_logprobs", json::Value::integer(*p.top_logprobs));
+        }
         if (p.stop_sequences.has_value() && !p.stop_sequences->empty()) {
             losses.push_back(make_resp_loss(
                 "params.stop_sequences", "stop_sequences", ir::LOSS_UNMAPPED_FIELD,
@@ -2369,6 +2456,11 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                 auto parsed = json::parse(n.value);
                 if (parsed.ok() && parsed->is_string()) {
                     out.set("prompt_cache_key", json::Value::string(parsed->as_string()));
+                }
+            } else if (n.kind == ir::NATIVE_KIND_CONTEXT_MANAGEMENT) {
+                auto parsed = json::parse(n.value);
+                if (parsed.ok() && parsed->is_array()) {
+                    out.set("context_management", std::move(*parsed));
                 }
             } else if (n.kind == ir::NATIVE_KIND_PROMPT_CACHE_OPTIONS) {
                 if (n.value == "null") {
@@ -2459,6 +2551,9 @@ static StatusOr<Conversion<ir::Response>> decode_response_unchecked(const json::
                         if (const auto* txt = part.find("text"); txt && txt->is_string()) {
                             ir::TextBlock tb{txt->as_string()};
                             tb.citations = std::move(citations);
+                            if (const auto* lp = part.find("logprobs"); lp != nullptr && !lp->is_null()) {
+                                tb.logprobs = json::serialize(*lp);
+                            }
                             resp.content.push_back(std::move(tb));
                         }
                     }
@@ -2499,6 +2594,21 @@ static StatusOr<Conversion<ir::Response>> decode_response_unchecked(const json::
                 if (has_encrypted) {
                     resp.content.push_back(ir::EncryptedContentBlock{encrypted->as_string()});
                 }
+            } else if (kind == "compaction") {
+                const auto* cipher = item.find("encrypted_content");
+                if (!cipher || !cipher->is_string() || cipher->as_string().empty()) {
+                    return invalid_argument("responses: " + item_path + ".encrypted_content is required");
+                }
+                ir::CompactionItemBlock block{cipher->as_string(), {}, {}};
+                if (const auto* id = item.find("id")) {
+                    if (!id->is_string()) return invalid_argument("responses: " + item_path + ".id must be a string");
+                    block.id = id->as_string();
+                }
+                if (const auto* created = item.find("created_by")) {
+                    if (!created->is_string()) return invalid_argument("responses: " + item_path + ".created_by must be a string");
+                    block.created_by = created->as_string();
+                }
+                resp.content.push_back(std::move(block));
             } else if (kind == "web_search_call") {
                 OXA_ASSIGN_OR_RETURN(auto block, decode_web_search_item(item, item_path, losses));
                 resp.content.push_back(std::move(block));
@@ -2560,9 +2670,10 @@ static StatusOr<Conversion<ir::Response>> decode_response_unchecked(const json::
     }
 
     const auto rank = [](const ir::Block& block) {
-        if (std::holds_alternative<ir::ThinkingBlock>(block) || std::holds_alternative<ir::EncryptedContentBlock>(block)) return 0;
-        if (std::holds_alternative<ir::TextBlock>(block) || std::holds_alternative<ir::RefusalBlock>(block)) return 1;
-        return 2;
+        if (std::holds_alternative<ir::CompactionItemBlock>(block)) return 0;
+        if (std::holds_alternative<ir::ThinkingBlock>(block) || std::holds_alternative<ir::EncryptedContentBlock>(block)) return 1;
+        if (std::holds_alternative<ir::TextBlock>(block) || std::holds_alternative<ir::RefusalBlock>(block)) return 2;
+        return 3;
     };
     std::stable_sort(resp.content.begin(), resp.content.end(), [&](const ir::Block& a, const ir::Block& b) { return rank(a) < rank(b); });
     auto [stop_reason, status_losses] = decode_status(wire, has_tool_use);
@@ -2629,6 +2740,7 @@ StatusOr<Conversion<json::Value>> encode_response(const ir::Response& resp,
     ReasoningBuilder reasoning;
     std::vector<json::Value> text_parts;
     std::vector<json::Value> calls;
+    std::vector<json::Value> compaction_items;
 
     for (std::size_t i = 0; i < resp.content.size(); ++i) {
         const auto& b = resp.content[i];
@@ -2672,6 +2784,10 @@ StatusOr<Conversion<json::Value>> encode_response(const ir::Response& resp,
             op.set("type", json::Value::string("output_text"));
             op.set("text", json::Value::string(tb->text));
             op.set("annotations", std::move(part_annotations));
+            if (tb->logprobs.has_value()) {
+                OXA_ASSIGN_OR_RETURN(json::Value lp, json::parse(*tb->logprobs));
+                op.set("logprobs", std::move(lp));
+            }
             text_parts.push_back(std::move(op));
         } else if (const auto* ec = std::get_if<ir::EncryptedContentBlock>(&b)) {
             if (ec->data.empty()) {
@@ -2747,6 +2863,20 @@ StatusOr<Conversion<json::Value>> encode_response(const ir::Response& resp,
                 result.set("output", std::move(parts));
             }
             calls.push_back(std::move(result));
+        } else if (const auto* ci = std::get_if<ir::CompactionItemBlock>(&b)) {
+            if (ci->encrypted_content.empty()) {
+                return invalid_argument("responses: content encrypted_content is required");
+            }
+            json::Value item = json::Value::object();
+            item.set("type", json::Value::string(std::string(ITEM_TYPE_COMPACTION)));
+            item.set("encrypted_content", json::Value::string(ci->encrypted_content));
+            if (!ci->id.empty()) item.set("id", json::Value::string(ci->id));
+            if (!ci->created_by.empty()) item.set("created_by", json::Value::string(ci->created_by));
+            compaction_items.push_back(std::move(item));
+        } else if (std::holds_alternative<ir::ServerToolUseBlock>(b) || std::holds_alternative<ir::WebSearchToolResultBlock>(b)) {
+            losses.push_back(make_resp_loss(
+                "content[" + std::to_string(i) + "]", "type", ir::LOSS_UNSUPPORTED_SEMANTIC,
+                std::string(ir::WEB_SEARCH_HISTORY_LOSS_DETAIL)));
         } else if (const auto* ws = std::get_if<ir::WebSearchCallBlock>(&b)) {
             OXA_ASSIGN_OR_RETURN(auto item, encode_web_search_item(*ws, "content[" + std::to_string(i) + "]"));
             calls.push_back(std::move(item));
@@ -2780,6 +2910,9 @@ StatusOr<Conversion<json::Value>> encode_response(const ir::Response& resp,
     }
 
     json::Value output_arr = json::Value::array();
+    for (auto& item : compaction_items) {
+        output_arr.push_back(std::move(item));
+    }
     for (std::size_t n = 0; n < reasoning.items.size(); ++n) {
         auto& item = reasoning.items[n];
         json::Value r = json::Value::object();
@@ -3018,7 +3151,7 @@ StatusOr<std::vector<ir::Event>> StreamDecoder::feed_unchecked(const json::Value
         if (ikind == "message" && role == "assistant") {
             return events;
         }
-        if (ikind == ITEM_TYPE_REASONING || ikind == "web_search_call") {
+        if (ikind == ITEM_TYPE_REASONING || ikind == "web_search_call" || ikind == ITEM_TYPE_COMPACTION) {
             return events;
         }
         if (ikind == "function_call") {
@@ -3505,6 +3638,24 @@ StatusOr<std::vector<ir::Event>> StreamDecoder::feed_unchecked(const json::Value
         }
         if (item_type_ == "web_search_call") {
             OXA_ASSIGN_OR_RETURN(auto block, decode_web_search_item(*item, "output[" + std::to_string(output_index_) + "]", losses_));
+            std::int64_t b_idx = next_block_index_++;
+            events.push_back(ir::ContentBlockStart{b_idx, std::move(block)});
+            events.push_back(ir::ContentBlockStop{b_idx});
+        }
+        if (item_type_ == ITEM_TYPE_COMPACTION) {
+            const auto* cipher = item->find("encrypted_content");
+            if (!cipher || !cipher->is_string() || cipher->as_string().empty()) {
+                return invalid_argument("responses: compaction item encrypted_content is required");
+            }
+            ir::CompactionItemBlock block{cipher->as_string(), {}, {}};
+            if (const auto* id = item->find("id")) {
+                if (!id->is_string()) return invalid_argument("responses: compaction id must be a string");
+                block.id = id->as_string();
+            }
+            if (const auto* created = item->find("created_by")) {
+                if (!created->is_string()) return invalid_argument("responses: compaction created_by must be a string");
+                block.created_by = created->as_string();
+            }
             std::int64_t b_idx = next_block_index_++;
             events.push_back(ir::ContentBlockStart{b_idx, std::move(block)});
             events.push_back(ir::ContentBlockStop{b_idx});
@@ -4365,6 +4516,10 @@ StatusOr<Conversion<std::vector<json::Value>>> StreamEncoder::apply(const ir::Ev
             OXA_ASSIGN_OR_RETURN(auto res, start_web_search_block(cbs->index, *ws));
             return Conversion<std::vector<json::Value>>{std::move(res.first), std::move(res.second)};
         }
+        if (const auto* ci = std::get_if<ir::CompactionItemBlock>(&cbs->block)) {
+            OXA_ASSIGN_OR_RETURN(auto res, start_compaction_block(cbs->index, *ci));
+            return Conversion<std::vector<json::Value>>{std::move(res.first), std::move(res.second)};
+        }
         if (const auto* ec = std::get_if<ir::EncryptedContentBlock>(&cbs->block)) {
             OXA_ASSIGN_OR_RETURN(auto res, start_encrypted_content_block(cbs->index, *ec));
             return Conversion<std::vector<json::Value>>{std::move(res.first), std::move(res.second)};
@@ -4403,7 +4558,7 @@ StatusOr<Conversion<std::vector<json::Value>>> StreamEncoder::apply(const ir::Ev
         if (active_block_->kind == OutputItemKind::ApplyPatchCall || active_block_->kind == OutputItemKind::ApplyPatchResult) {
             return invalid_argument("responses: apply patch item does not accept deltas");
         }
-        if (active_block_->kind == OutputItemKind::Redacted || active_block_->kind == OutputItemKind::EncryptedContent || active_block_->kind == OutputItemKind::WebSearchCall) {
+        if (active_block_->kind == OutputItemKind::Redacted || active_block_->kind == OutputItemKind::EncryptedContent || active_block_->kind == OutputItemKind::WebSearchCall || active_block_->kind == OutputItemKind::Compaction) {
             return invalid_argument("responses: block received unexpected delta");
         }
         if (active_block_->kind == OutputItemKind::Message) {
@@ -4486,6 +4641,10 @@ StatusOr<Conversion<std::vector<json::Value>>> StreamEncoder::apply(const ir::Ev
         }
         if (active_block_->kind == OutputItemKind::WebSearchCall) {
             OXA_ASSIGN_OR_RETURN(auto res, stop_web_search_block());
+            return Conversion<std::vector<json::Value>>{std::move(res.first), std::move(res.second)};
+        }
+        if (active_block_->kind == OutputItemKind::Compaction) {
+            OXA_ASSIGN_OR_RETURN(auto res, stop_compaction_block());
             return Conversion<std::vector<json::Value>>{std::move(res.first), std::move(res.second)};
         }
         if (active_block_->kind == OutputItemKind::Message) {
@@ -4608,6 +4767,61 @@ StatusOr<std::pair<std::vector<json::Value>, std::vector<ir::Loss>>> StreamEncod
     active_block_ = std::nullopt;
 
     json::Value completed = std::move(*item.web_search_item);
+    json::Value event = json::Value::object();
+    event.set("type", json::Value::string("response.output_item.done"));
+    event.set("output_index", json::Value::integer(item.output_index));
+    event.set("item", completed);
+    completed_.push_back(std::move(completed));
+
+    std::vector<json::Value> out;
+    out.push_back(std::move(event));
+    return std::make_pair(std::move(out), std::vector<ir::Loss>{});
+}
+
+StatusOr<std::pair<std::vector<json::Value>, std::vector<ir::Loss>>> StreamEncoder::start_compaction_block(std::int64_t index, const ir::CompactionItemBlock& block) {
+    if (block.encrypted_content.empty()) return invalid_argument("responses: compaction item encrypted_content is required");
+    std::vector<json::Value> out;
+    if (active_item_.has_value()) {
+        if (active_item_->kind == OutputItemKind::Message) out.push_back(close_message_item());
+        else if (active_item_->kind == OutputItemKind::Reasoning) out.push_back(close_reasoning_item());
+        else return invalid_argument("responses: compaction cannot open before the active item completes");
+    }
+    const auto output_index = next_output_index_++;
+    json::Value item_wire = json::Value::object();
+    item_wire.set("type", json::Value::string(std::string(ITEM_TYPE_COMPACTION)));
+    item_wire.set("id", json::Value::string(block.id.empty() ? "cmp_abc123" : block.id));
+    item_wire.set("encrypted_content", json::Value::string(block.encrypted_content));
+    if (!block.created_by.empty()) item_wire.set("created_by", json::Value::string(block.created_by));
+
+    StreamOutputItem item;
+    item.kind = OutputItemKind::Compaction;
+    item.id = block.id.empty() ? "cmp_abc123" : block.id;
+    item.output_index = output_index;
+    item.compaction_item = item_wire;
+    active_item_ = std::move(item);
+
+    StreamEncodeBlock eb;
+    eb.index = index;
+    eb.kind = OutputItemKind::Compaction;
+    active_block_ = std::move(eb);
+
+    json::Value added = json::Value::object();
+    added.set("type", json::Value::string("response.output_item.added"));
+    added.set("output_index", json::Value::integer(output_index));
+    added.set("item", item_wire);
+    out.push_back(std::move(added));
+    return std::make_pair(std::move(out), std::vector<ir::Loss>{});
+}
+
+StatusOr<std::pair<std::vector<json::Value>, std::vector<ir::Loss>>> StreamEncoder::stop_compaction_block() {
+    if (!active_item_.has_value() || active_item_->kind != OutputItemKind::Compaction || !active_item_->compaction_item.has_value()) {
+        return invalid_argument("responses: compaction stop without active item");
+    }
+    auto item = std::move(*active_item_);
+    active_item_ = std::nullopt;
+    active_block_ = std::nullopt;
+
+    json::Value completed = std::move(*item.compaction_item);
     json::Value event = json::Value::object();
     event.set("type", json::Value::string("response.output_item.done"));
     event.set("output_index", json::Value::integer(item.output_index));

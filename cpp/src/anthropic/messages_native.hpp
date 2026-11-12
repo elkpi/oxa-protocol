@@ -284,6 +284,75 @@ inline std::optional<std::string> parse_context_management(
             if (valid) {
                 valid_edits.push_back(std::move(canon_edit));
             }
+        } else if (type_str == "compact_20260112") {
+            for (const auto& kv : edit.as_object()) {
+                if (kv.first != "type" && kv.first != "trigger" && kv.first != "pause_after_compaction") {
+                    losses.push_back(ir::Loss{
+                        edit_path + "." + kv.first,
+                        kv.first,
+                        std::string(ir::LOSS_UNMAPPED_FIELD),
+                        "",
+                    });
+                }
+            }
+            bool valid = true;
+            auto canon_edit = json::Value::object();
+            canon_edit.set("type", json::Value::string("compact_20260112"));
+            if (const auto* trig_val = edit.find("trigger")) {
+                if (trig_val->is_object()) {
+                    for (const auto& kv : trig_val->as_object()) {
+                        if (kv.first != "type" && kv.first != "value") {
+                            losses.push_back(ir::Loss{
+                                edit_path + ".trigger." + kv.first,
+                                kv.first,
+                                std::string(ir::LOSS_UNMAPPED_FIELD),
+                                "",
+                            });
+                        }
+                    }
+                    const auto* t_type = trig_val->find("type");
+                    if (t_type == nullptr || !t_type->is_string() || t_type->as_string() != "input_tokens") {
+                        losses.push_back(ir::Loss{
+                            edit_path + ".trigger",
+                            "trigger",
+                            std::string(ir::LOSS_UNMAPPED_VALUE),
+                            "",
+                        });
+                        valid = false;
+                    } else {
+                        auto trig_obj = json::Value::object();
+                        trig_obj.set("type", json::Value::string("input_tokens"));
+                        if (const auto* v = trig_val->find("value")) {
+                            trig_obj.set("value", *v);
+                        }
+                        canon_edit.set("trigger", std::move(trig_obj));
+                    }
+                } else {
+                    losses.push_back(ir::Loss{
+                        edit_path + ".trigger",
+                        "trigger",
+                        std::string(ir::LOSS_UNMAPPED_VALUE),
+                        "",
+                    });
+                    valid = false;
+                }
+            }
+            if (const auto* pause = edit.find("pause_after_compaction")) {
+                if (!pause->is_bool()) {
+                    losses.push_back(ir::Loss{
+                        edit_path + ".pause_after_compaction",
+                        "pause_after_compaction",
+                        std::string(ir::LOSS_UNMAPPED_VALUE),
+                        "",
+                    });
+                    valid = false;
+                } else {
+                    canon_edit.set("pause_after_compaction", *pause);
+                }
+            }
+            if (valid) {
+                valid_edits.push_back(std::move(canon_edit));
+            }
         } else {
             losses.push_back(ir::Loss{
                 edit_path,
@@ -315,6 +384,13 @@ inline std::optional<json::Value> get_block_cache_control(
             if (parsed.ok()) {
                 return std::move(*parsed);
             }
+        }
+    }
+    for (const auto& n : native) {
+        if (n.source == ir::NATIVE_SOURCE_OPENAI && n.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
+            json::Value cc = json::Value::object();
+            cc.set("type", json::Value::string("ephemeral"));
+            return cc;
         }
     }
     return std::nullopt;

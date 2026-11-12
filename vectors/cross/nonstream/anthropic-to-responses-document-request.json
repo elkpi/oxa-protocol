@@ -50,7 +50,10 @@
         "content": [
           {
             "type": "input_file",
-            "file_data": "JVBERi0xLjcK"
+            "file_data": "JVBERi0xLjcK",
+            "prompt_cache_breakpoint": {
+              "mode": "explicit"
+            }
           },
           {
             "type": "input_text",
@@ -81,9 +84,9 @@
     },
     {
       "path": "messages[0].content[0].native[3]",
-      "field": "cache_control",
+      "field": "type",
       "reason": "unmapped-field",
-      "detail": "anthropic-native cache breakpoint; the target face has no cache_control representation"
+      "detail": "cache_control.type is not represented by prompt_cache_breakpoint"
     }
   ],
   "tags": [

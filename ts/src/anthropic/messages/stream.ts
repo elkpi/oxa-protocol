@@ -3,6 +3,8 @@ import {
   encodeUsageInteger,
   parseUsageInteger,
   ENCRYPTED_CONTENT_LOSS_DETAIL,
+  COMPACTION_ITEM_LOSS_DETAIL,
+  WEB_SEARCH_HISTORY_LOSS_DETAIL,
   type Event,
   type StopReason,
   type TextCitation,
@@ -600,7 +602,10 @@ type EncoderBlock =
         | "apply_patch_tool_use"
         | "apply_patch_tool_result"
         | "web_search_call"
-        | "encrypted_content";
+        | "encrypted_content"
+        | "compaction_item"
+        | "server_tool_use"
+        | "web_search_tool_result";
     }
   | {
       readonly kind: "thinking";
@@ -831,7 +836,10 @@ export class AnthropicStreamEncoder {
       event.block.type === "apply_patch_tool_use" ||
       event.block.type === "apply_patch_tool_result" ||
       event.block.type === "web_search_call" ||
-      event.block.type === "encrypted_content"
+      event.block.type === "encrypted_content" ||
+      event.block.type === "compaction_item" ||
+      event.block.type === "server_tool_use" ||
+      event.block.type === "web_search_tool_result"
     ) {
       if (
         event.block.type === "custom_tool_result" &&
@@ -848,7 +856,12 @@ export class AnthropicStreamEncoder {
       const detail =
         event.block.type === "encrypted_content"
           ? ENCRYPTED_CONTENT_LOSS_DETAIL
-          : undefined;
+          : event.block.type === "compaction_item"
+            ? COMPACTION_ITEM_LOSS_DETAIL
+            : event.block.type === "server_tool_use" ||
+                event.block.type === "web_search_tool_result"
+              ? WEB_SEARCH_HISTORY_LOSS_DETAIL
+              : undefined;
       return {
         value: [],
         losses: [

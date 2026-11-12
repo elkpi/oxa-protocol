@@ -3,6 +3,8 @@ import {
   encodeUsageInteger,
   parseUsageInteger,
   ENCRYPTED_CONTENT_LOSS_DETAIL,
+  COMPACTION_ITEM_LOSS_DETAIL,
+  WEB_SEARCH_HISTORY_LOSS_DETAIL,
   type Event,
   type StopReason,
   type Usage,
@@ -403,7 +405,10 @@ type EncoderBlock =
       readonly blockType:
         | "custom_tool_result"
         | "apply_patch_tool_use"
-        | "apply_patch_tool_result";
+        | "apply_patch_tool_result"
+        | "compaction_item"
+        | "server_tool_use"
+        | "web_search_tool_result";
     }
   | {
       readonly kind: "thinking";
@@ -584,7 +589,10 @@ export class ChatCompletionsStreamEncoder {
     if (
       event.block.type === "custom_tool_result" ||
       event.block.type === "apply_patch_tool_use" ||
-      event.block.type === "apply_patch_tool_result"
+      event.block.type === "apply_patch_tool_result" ||
+      event.block.type === "compaction_item" ||
+      event.block.type === "server_tool_use" ||
+      event.block.type === "web_search_tool_result"
     ) {
       if (
         event.block.type === "custom_tool_result" &&
@@ -596,13 +604,21 @@ export class ChatCompletionsStreamEncoder {
         index: event.index,
         blockType: event.block.type,
       };
+      const detail =
+        event.block.type === "compaction_item"
+          ? COMPACTION_ITEM_LOSS_DETAIL
+          : event.block.type === "server_tool_use" ||
+              event.block.type === "web_search_tool_result"
+            ? WEB_SEARCH_HISTORY_LOSS_DETAIL
+            : undefined;
       return {
         value: [],
         losses: [
           {
-            path: `events[${event.index}].block`,
+            path: `events[${ordinal}].block`,
             field: "type",
             reason: "unsupported-semantic",
+            ...(detail !== undefined ? { detail } : {}),
           },
         ],
       };

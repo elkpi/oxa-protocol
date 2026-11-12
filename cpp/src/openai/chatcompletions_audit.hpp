@@ -5,7 +5,7 @@
 namespace oxa::openai::chatcompletions {
 inline const detail::AuditProfile& wire_profile() {
     static const detail::AuditProfile profile{
-        {{"request", {{"model", ""}, {"messages", "message[]"}, {"temperature", ""}, {"top_p", ""}, {"max_tokens", ""}, {"max_completion_tokens", ""}, {"store", ""}, {"stream", ""}, {"stream_options", "stream_options"}, {"stop", ""}, {"reasoning_effort", ""}, {"verbosity", ""}, {"tools", "tool[]"}, {"tool_choice", "tool_choice"}, {"parallel_tool_calls", ""}, {"prompt_cache_key", ""}, {"prompt_cache_options", "prompt_cache_options_def"}, {"response_format", "format"}, {"metadata", ""}}},
+        {{"request", {{"model", ""}, {"messages", "message[]"}, {"temperature", ""}, {"top_p", ""}, {"max_tokens", ""}, {"max_completion_tokens", ""}, {"store", ""}, {"stream", ""}, {"stream_options", "stream_options"}, {"stop", ""}, {"reasoning_effort", ""}, {"verbosity", ""}, {"tools", "tool[]"}, {"tool_choice", "tool_choice"}, {"parallel_tool_calls", ""}, {"prompt_cache_key", ""}, {"prompt_cache_options", "prompt_cache_options_def"}, {"response_format", "format"}, {"logprobs", ""}, {"top_logprobs", ""}, {"metadata", ""}}},
          {"prompt_cache_options_def", {{"mode", ""}, {"ttl", ""}}},
          {"prompt_cache_breakpoint_def", {{"mode", ""}, {"ttl", ""}}},
          {"stream_options", {{"include_usage", ""}, {"include_obfuscation", ""}}},

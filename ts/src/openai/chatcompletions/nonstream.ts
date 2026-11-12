@@ -21,6 +21,8 @@ import {
   PROMPT_CACHE_KEY_LOSS_DETAIL,
   PROMPT_CACHE_OPTIONS_LOSS_DETAIL,
   PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL,
+  COMPACTION_ITEM_LOSS_DETAIL,
+  WEB_SEARCH_HISTORY_LOSS_DETAIL,
   NATIVE_KIND_PROMPT_CACHE_OPTIONS,
   NATIVE_KIND_PROMPT_CACHE_BREAKPOINT,
   type NativeAnnotation,
@@ -69,12 +71,7 @@ function decodeRequestObject(
   options: NonstreamOptions = {},
 ): ConversionResult<Request> {
   const losses: Loss[] = [];
-  for (const field of [
-    "functions",
-    "function_call",
-    "logprobs",
-    "top_logprobs",
-  ])
+  for (const field of ["functions", "function_call"])
     if (wire[field] !== undefined)
       losses.push(loss(field, field, "unmapped-field"));
 
@@ -485,6 +482,12 @@ function decodeRequestObject(
     ...(responseFormat === undefined
       ? {}
       : { response_format: responseFormat }),
+    ...(wire.logprobs === undefined
+      ? {}
+      : { logprobs: wire.logprobs === true }),
+    ...(wire.top_logprobs === undefined
+      ? {}
+      : { top_logprobs: whole(wire.top_logprobs, "top_logprobs") }),
   };
   const request: Request = {
     model: mapModel(options.modelMapper, string(wire.model, "model")),
@@ -627,12 +630,17 @@ function getPromptCacheBreakpoint(item: {
     (n) =>
       n.source === "openai" && n.kind === NATIVE_KIND_PROMPT_CACHE_BREAKPOINT,
   );
-  if (!ann) return undefined;
-  try {
-    return JSON.parse(ann.value);
-  } catch {
-    return undefined;
+  if (ann) {
+    try {
+      return JSON.parse(ann.value);
+    } catch {
+      return undefined;
+    }
   }
+  const cache = item.native?.find(
+    (n) => n.source === "anthropic" && n.kind === "cache_control",
+  );
+  return cache ? { mode: "explicit" } : undefined;
 }
 
 export function encodeRequest(
@@ -641,6 +649,14 @@ export function encodeRequest(
 ): ConversionResult<JsonObject> {
   validateRequest(request);
   const losses: Loss[] = [];
+  (request.compaction_items ?? []).forEach((_item, i) =>
+    losses.push({
+      path: `compaction_items[${i}]`,
+      field: "type",
+      reason: "unsupported-semantic",
+      detail: COMPACTION_ITEM_LOSS_DETAIL,
+    }),
+  );
   (request.tool_change_groups ?? []).forEach((group, i) => {
     if (group.parts.length === 0)
       losses.push({
@@ -964,6 +980,10 @@ export function encodeRequest(
       ? {}
       : { reasoning_effort: params.reasoning_effort }),
     ...(params?.verbosity === undefined ? {} : { verbosity: params.verbosity }),
+    ...(params?.logprobs === undefined ? {} : { logprobs: params.logprobs }),
+    ...(params?.top_logprobs === undefined
+      ? {}
+      : { top_logprobs: integer(params.top_logprobs) }),
     ...(format === undefined || unnamedSchema
       ? {}
       : { response_format: encodeResponseFormat(format) }),
@@ -1324,6 +1344,16 @@ function encodeUserContent(
       });
     } else if (block.type === "tool_reference") {
       losses.push(loss(`${path}[${index}]`, "type", "unsupported-semantic"));
+    } else if (
+      block.type === "server_tool_use" ||
+      block.type === "web_search_tool_result"
+    ) {
+      losses.push({
+        path: `${path}[${index}]`,
+        field: "type",
+        reason: "unsupported-semantic",
+        detail: WEB_SEARCH_HISTORY_LOSS_DETAIL,
+      });
     } else if (block.type === "redacted_thinking") {
       losses.push({
         path: `${path}[${index}]`,
@@ -1487,6 +1517,16 @@ function encodeAssistant(
       });
     } else if (block.type === "tool_reference") {
       losses.push(loss(`${path}[${index}]`, "type", "unsupported-semantic"));
+    } else if (
+      block.type === "server_tool_use" ||
+      block.type === "web_search_tool_result"
+    ) {
+      losses.push({
+        path: `${path}[${index}]`,
+        field: "type",
+        reason: "unsupported-semantic",
+        detail: WEB_SEARCH_HISTORY_LOSS_DETAIL,
+      });
     } else if (block.type === "redacted_thinking") {
       losses.push({
         path: `${path}[${index}]`,
@@ -1512,6 +1552,13 @@ function encodeAssistant(
       });
     else if (block.type === "web_search_call")
       losses.push(loss(`${path}[${index}]`, "type", "unsupported-semantic"));
+    else if (block.type === "compaction_item")
+      losses.push({
+        path: `${path}[${index}]`,
+        field: "type",
+        reason: "unsupported-semantic",
+        detail: COMPACTION_ITEM_LOSS_DETAIL,
+      });
     else if (block.type === "custom_tool_use") {
       toolCalls.push({
         id: block.id,

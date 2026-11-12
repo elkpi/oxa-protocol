@@ -223,6 +223,36 @@ func parseContextManagement(cm *ContextManagementWire, path string) (canonical s
 			if valid {
 				validEdits = append(validEdits, canonEdit)
 			}
+		case "compact_20260112":
+			valid := true
+			canonEdit := map[string]any{"type": "compact_20260112"}
+			for k := range edit {
+				switch k {
+				case "type", "trigger", "pause_after_compaction":
+				default:
+					losses = append(losses, ir.Loss{Path: editPath + "." + k, Field: k, Reason: ir.LossUnmappedField})
+				}
+			}
+			if trigVal, ok := edit["trigger"]; ok {
+				trig, isObj := trigVal.(map[string]any)
+				if !isObj || trig["type"] != "input_tokens" {
+					losses = append(losses, ir.Loss{Path: editPath + ".trigger", Field: "trigger", Reason: ir.LossUnmappedValue})
+					valid = false
+				} else {
+					canonEdit["trigger"] = map[string]any{"type": "input_tokens", "value": trig["value"]}
+				}
+			}
+			if pause, ok := edit["pause_after_compaction"]; ok {
+				if _, isBool := pause.(bool); !isBool {
+					losses = append(losses, ir.Loss{Path: editPath + ".pause_after_compaction", Field: "pause_after_compaction", Reason: ir.LossUnmappedValue})
+					valid = false
+				} else {
+					canonEdit["pause_after_compaction"] = pause
+				}
+			}
+			if valid {
+				validEdits = append(validEdits, canonEdit)
+			}
 		default:
 			losses = append(losses, ir.Loss{
 				Path:   editPath,
@@ -800,6 +830,10 @@ func getBlockNative(item any) []ir.NativeAnnotation {
 	case ir.ApplyPatchToolUseBlock:
 		return b.Native
 	case ir.ApplyPatchToolResultBlock:
+		return b.Native
+	case ir.ServerToolUseBlock:
+		return b.Native
+	case ir.WebSearchToolResultBlock:
 		return b.Native
 	default:
 		return nil

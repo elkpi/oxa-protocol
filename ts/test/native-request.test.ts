@@ -542,17 +542,20 @@ test("cache_control omission loss detail is populated for cross encoding, includ
 
   const cc = encodeChatCompletions(decoded.value);
   assert.equal(cc.losses.length, 3);
-  for (const l of cc.losses) {
-    assert.equal(l.field, "cache_control");
-    assert.equal(l.reason, "unmapped-field");
-    assert.equal(l.detail, CACHE_CONTROL_LOSS_DETAIL);
-  }
+  assert.equal(cc.losses.filter((l) => l.field === "type").length, 2);
+  assert.equal(cc.losses.filter((l) => l.field === "cache_control").length, 1);
+  assert.equal(
+    cc.losses.find((l) => l.field === "cache_control")?.detail,
+    CACHE_CONTROL_LOSS_DETAIL,
+  );
 
   const resp = encodeResponses(decoded.value);
   assert.equal(resp.losses.length, 3);
-  for (const l of resp.losses) {
-    assert.equal(l.detail, CACHE_CONTROL_LOSS_DETAIL);
-  }
+  assert.equal(resp.losses.filter((l) => l.field === "type").length, 2);
+  assert.equal(
+    resp.losses.filter((l) => l.field === "cache_control").length,
+    1,
+  );
 
   // Directly constructed IR with omission omitted
   const reqNoOmission: Request = {

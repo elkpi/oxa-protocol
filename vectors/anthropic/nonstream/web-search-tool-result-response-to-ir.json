@@ -1,0 +1,53 @@
+{
+  "name": "anthropic.nonstream.web-search-tool-result-response-to-ir",
+  "description": "A response carrying server_tool_use and an error web_search_tool_result maps to IR blocks (N-AN-23).",
+  "spec_version": "0.2.0",
+  "mode": "nonstream",
+  "conversion": "to-ir",
+  "source": {"protocol": "anthropic"},
+  "input": {
+    "id": "msg_1",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-opus-5-5",
+    "content": [
+      {
+        "type": "server_tool_use",
+        "id": "srvtoolu_2",
+        "name": "web_search",
+        "input": {"query": "news"}
+      },
+      {
+        "type": "web_search_tool_result",
+        "tool_use_id": "srvtoolu_2",
+        "content": {"type": "web_search_tool_result_error", "error_code": "max_uses_exceeded"}
+      },
+      {"type": "text", "text": "done"}
+    ],
+    "stop_reason": "end_turn",
+    "usage": {"input_tokens": 1, "output_tokens": 2}
+  },
+  "expected_ir": {
+    "specVersion": "0.2.0",
+    "id": "msg_1",
+    "model": "claude-opus-5-5",
+    "content": [
+      {
+        "type": "server_tool_use",
+        "id": "srvtoolu_2",
+        "name": "web_search",
+        "input": "{\"query\":\"news\"}"
+      },
+      {
+        "type": "web_search_tool_result",
+        "tool_use_id": "srvtoolu_2",
+        "content": "{\"error_code\":\"max_uses_exceeded\",\"type\":\"web_search_tool_result_error\"}"
+      },
+      {"type": "text", "text": "done"}
+    ],
+    "stop_reason": "end_turn",
+    "usage": {"input_tokens": 1, "output_tokens": 2}
+  },
+  "expected_losses": [],
+  "tags": ["response", "web-search-history", "n-an-23"]
+}

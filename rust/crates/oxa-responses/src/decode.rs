@@ -53,6 +53,7 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         metadata,
         native: Vec::new(),
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
     if let Some(instructions) = &wire.instructions {
         request.system.push(oxa_ir::SystemBlock::Text {
@@ -177,10 +178,65 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
     request.tool_choice = choice;
     losses.extend(choice_losses);
 
+    if !wire.context_management.is_empty() {
+        let mut kept: Vec<Value> = Vec::new();
+        for (i, entry) in wire.context_management.iter().enumerate() {
+            let path = format!("context_management[{i}]");
+            let Some(obj) = entry.as_object() else {
+                return Err(Error::new(format!("responses: {path} must be an object")));
+            };
+            let Some(kind) = obj.get("type").and_then(Value::as_str) else {
+                return Err(Error::new(format!("responses: {path}.type is required")));
+            };
+            if kind.is_empty() {
+                return Err(Error::new(format!("responses: {path}.type is required")));
+            }
+            if kind != "compaction" {
+                losses.push(loss(
+                    format!("{path}.type"),
+                    "type",
+                    LossReason::UnmappedValue,
+                    format!("unknown context_management type {kind:?}"),
+                ));
+                continue;
+            }
+            let mut canonical = serde_json::Map::new();
+            canonical.insert("type".into(), Value::String("compaction".into()));
+            if let Some(threshold) = obj.get("compact_threshold") {
+                let Some(value) = threshold.as_i64() else {
+                    return Err(Error::new(format!(
+                        "responses: {path}.compact_threshold must be an integer"
+                    )));
+                };
+                if value < 1000 {
+                    return Err(Error::new(format!(
+                        "responses: {path}.compact_threshold must be at least 1000"
+                    )));
+                }
+                canonical.insert("compact_threshold".into(), Value::from(value));
+            }
+            kept.push(Value::Object(canonical));
+        }
+        if !kept.is_empty() {
+            request.native.push(oxa_ir::NativeAnnotation {
+                source: oxa_ir::NATIVE_SOURCE_OPENAI.into(),
+                kind: oxa_ir::NATIVE_KIND_CONTEXT_MANAGEMENT.into(),
+                value: Value::Array(kept).to_string(),
+                omission: Some(oxa_ir::NativeOmission {
+                    field: "context_management".into(),
+                    reason: LossReason::UnmappedField,
+                    detail: Some(oxa_ir::RESPONSES_CONTEXT_MANAGEMENT_LOSS_DETAIL.into()),
+                }),
+                projection: None,
+            });
+        }
+    }
+
     match &wire.input {
         Input::Text(text) => request.messages.push(oxa_ir::Message {
             role: Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: text.clone(),
                 citations: None,
                 native: Vec::new(),
@@ -220,6 +276,7 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
                             )?;
                             if content.is_empty() {
                                 content.push(Block::Text {
+                                    logprobs: None,
                                     text: String::new(),
                                     citations: None,
                                     native: Vec::new(),
@@ -310,6 +367,20 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
                         losses.extend(output_losses);
                         index = next;
                     }
+                    crate::types::ITEM_TYPE_COMPACTION => {
+                        if item.encrypted_content.is_empty() {
+                            return Err(Error::new(format!(
+                                "responses: input[{index}].encrypted_content is required"
+                            )));
+                        }
+                        request.compaction_items.push(oxa_ir::CompactionItem {
+                            encrypted_content: item.encrypted_content.clone(),
+                            id: item.id.clone(),
+                            created_by: item.created_by.clone(),
+                            after_message: request.messages.len() as isize - 1,
+                        });
+                        index += 1;
+                    }
                     "additional_tools" => {
                         let group = decode_additional_tools(
                             item,
@@ -343,6 +414,7 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         request.messages.push(oxa_ir::Message {
             role: Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: String::new(),
                 citations: None,
                 native: Vec::new(),
@@ -378,6 +450,13 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
             None
         }
     };
+    if let Some(top) = wire.top_logprobs
+        && top < 0
+    {
+        return Err(Error::new(
+            "responses: top_logprobs must be a non-negative integer",
+        ));
+    }
     let params = Params {
         temperature: wire.temperature,
         top_p: wire.top_p,
@@ -386,10 +465,13 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         reasoning_effort,
         verbosity,
         response_format,
+        logprobs: None,
+        top_logprobs: wire.top_logprobs,
     };
     if params.temperature.is_some()
         || params.top_p.is_some()
         || params.max_tokens.is_some()
+        || params.top_logprobs.is_some()
         || params.reasoning_effort.is_some()
         || params.verbosity.is_some()
         || params.response_format.is_some()
@@ -397,6 +479,26 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         request.params = Some(params);
     }
     Ok((request, losses))
+}
+
+/// Renders opaque JSON values with object keys in lexicographic order so the
+/// IR text is canonical across implementations (INV-1).
+fn sorted_json(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.iter().map(sorted_json).collect())
+        }
+        serde_json::Value::Object(map) if !map.contains_key("$serde_json::private::Number") => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            let mut sorted = serde_json::Map::new();
+            for key in keys {
+                sorted.insert(key.clone(), sorted_json(&map[key]));
+            }
+            serde_json::Value::Object(sorted)
+        }
+        other => other.clone(),
+    }
 }
 
 fn decode_custom_output(
@@ -421,6 +523,7 @@ fn decode_custom_output(
                             ));
                         }
                         blocks.push(Block::Text {
+                            logprobs: None,
                             text: p.text.clone(),
                             citations: None,
                             native: Vec::new(),
@@ -716,6 +819,7 @@ fn non_empty(value: String) -> Option<String> {
 /// derived and therefore ignored.
 pub fn decode_response(wire: &Response, config: &Config) -> Result<(IrResponse, Vec<Loss>), Error> {
     let mut losses = Vec::new();
+    let mut compactions = Vec::new();
     let mut thinkings = Vec::new();
     let mut text = Vec::new();
     let mut calls = Vec::new();
@@ -822,6 +926,10 @@ pub fn decode_response(wire: &Response, config: &Config) -> Result<(IrResponse, 
                         }
                     }
                     text.push(Block::Text {
+                        logprobs: part
+                            .logprobs
+                            .as_ref()
+                            .and_then(|v| serde_json::to_string(&sorted_json(v)).ok()),
                         text: part.text.clone(),
                         citations: if cites.is_empty() { None } else { Some(cites) },
                         native: Vec::new(),
@@ -969,6 +1077,18 @@ pub fn decode_response(wire: &Response, config: &Config) -> Result<(IrResponse, 
                     native: Vec::new(),
                 });
             }
+            crate::types::ITEM_TYPE_COMPACTION => {
+                if item.encrypted_content.is_empty() {
+                    return Err(Error::new(format!(
+                        "responses: output[{item_index}].encrypted_content is required"
+                    )));
+                }
+                compactions.push(Block::CompactionItem {
+                    encrypted_content: item.encrypted_content.clone(),
+                    id: item.id.clone(),
+                    created_by: item.created_by.clone(),
+                });
+            }
             other => losses.push(loss(
                 format!("output[{item_index}]"),
                 "type",
@@ -979,7 +1099,8 @@ pub fn decode_response(wire: &Response, config: &Config) -> Result<(IrResponse, 
     }
     let (mut stop_reason, status_losses) = decode_status(wire, has_tool_use)?;
     losses.extend(status_losses);
-    let mut content = thinkings;
+    let mut content = compactions;
+    content.extend(thinkings);
     content.extend(text);
     content.extend(calls);
     let has_refusal = content.iter().any(|b| matches!(b, Block::Refusal { .. }));

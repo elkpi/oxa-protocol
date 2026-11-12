@@ -8,6 +8,7 @@ const SUMMARY_PART: WireAuditSpec = {
           type: undefined,
           text: undefined,
           annotations: { items: undefined },
+          logprobs: undefined,
         },
       };
     return undefined;
@@ -25,6 +26,13 @@ const PROMPT_CACHE_OPTIONS: WireAuditSpec = {
   fields: {
     mode: undefined,
     ttl: undefined,
+  },
+};
+
+const CONTEXT_MANAGEMENT_ENTRY: WireAuditSpec = {
+  variant: (entry) => {
+    if (entry.type !== "compaction") return undefined;
+    return { fields: { type: undefined, compact_threshold: undefined } };
   },
 };
 
@@ -191,6 +199,15 @@ const INPUT_ITEM: WireAuditSpec = {
             action: undefined,
           },
         };
+      case "compaction":
+        return {
+          fields: {
+            type: undefined,
+            id: undefined,
+            encrypted_content: undefined,
+            created_by: undefined,
+          },
+        };
       case "additional_tools":
         // Item-level unknown fields are retained for same-face replay
         // (spec/11 N-R-15); declarations inside tools[] are audited like
@@ -319,6 +336,7 @@ const RESPONSE_PART: WireAuditSpec = {
         type: undefined,
         text: undefined,
         annotations: { items: undefined },
+        logprobs: undefined,
       },
     };
   },
@@ -408,6 +426,15 @@ const OUTPUT_ITEM: WireAuditSpec = {
             action: undefined,
           },
         };
+      case "compaction":
+        return {
+          fields: {
+            type: undefined,
+            id: undefined,
+            encrypted_content: undefined,
+            created_by: undefined,
+          },
+        };
       default:
         return undefined;
     }
@@ -445,11 +472,13 @@ export const RESPONSES_REQUEST: WireAuditSpec = {
     temperature: undefined,
     top_p: undefined,
     max_output_tokens: undefined,
+    top_logprobs: undefined,
     tools: { items: TOOL },
     tool_choice: TOOL_CHOICE,
     parallel_tool_calls: undefined,
     prompt_cache_key: undefined,
     prompt_cache_options: PROMPT_CACHE_OPTIONS,
+    context_management: { items: CONTEXT_MANAGEMENT_ENTRY },
     text: { fields: { format: FORMAT, verbosity: undefined } },
     reasoning: { fields: { effort: undefined, summary: undefined } },
     metadata: undefined,

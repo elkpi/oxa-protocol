@@ -41,6 +41,7 @@ pub(crate) fn decode_content(
     let Some(content) = content else {
         return Ok((
             vec![Block::Text {
+                logprobs: None,
                 text: String::new(),
                 citations: None,
                 native: Vec::new(),
@@ -51,6 +52,7 @@ pub(crate) fn decode_content(
     match content {
         ContentValue::Text(text) => Ok((
             vec![Block::Text {
+                logprobs: None,
                 text: text.clone(),
                 citations: None,
                 native: Vec::new(),
@@ -149,6 +151,7 @@ fn decode_content_part(
         }
         PART_TYPE_INPUT_TEXT | PART_TYPE_OUTPUT_TEXT => (
             vec![Block::Text {
+                logprobs: None,
                 text: part.text.clone(),
                 citations: None,
                 native: Vec::new(),
@@ -954,6 +957,7 @@ pub(crate) fn decode_output_run(
             content.push(Block::ToolResult {
                 tool_use_id: item.call_id.clone(),
                 content: vec![Block::Text {
+                    logprobs: None,
                     text: text.clone(),
                     citations: None,
                     native: Vec::new(),
@@ -984,6 +988,7 @@ pub(crate) fn decode_output_run(
                                     ));
                                 }
                                 blocks.push(Block::Text {
+                                    logprobs: None,
                                     text: p.text.clone(),
                                     citations: None,
                                     native: Vec::new(),
@@ -1258,10 +1263,7 @@ pub(crate) fn encode_user_content(blocks: &[Block], path: &str) -> (ContentValue
     let has_pcb = blocks.iter().any(|b| match b {
         Block::Text { native, .. }
         | Block::Image { native, .. }
-        | Block::Document { native, .. } => native.iter().any(|a| {
-            a.source == oxa_ir::NATIVE_SOURCE_OPENAI
-                && a.kind == oxa_ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
-        }),
+        | Block::Document { native, .. } => oxa_ir::openai_breakpoint_wire(native).is_some(),
         _ => false,
     });
     if !has_pcb
@@ -1300,17 +1302,8 @@ pub(crate) fn encode_user_content(blocks: &[Block], path: &str) -> (ContentValue
     let mut losses = Vec::new();
     for (index, block) in blocks.iter().enumerate() {
         match block {
-            Block::Text { text, citations, native } => {
-                let mut pcb = None;
-                for ann in native {
-                    if ann.source == oxa_ir::NATIVE_SOURCE_OPENAI
-                        && ann.kind == oxa_ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
-                        && let Ok(v) = serde_json::from_str::<serde_json::Value>(&ann.value)
-                    {
-                        pcb = Some(v);
-                        break;
-                    }
-                }
+            Block::Text { text, citations, native, .. } => {
+                let pcb = oxa_ir::openai_breakpoint_wire(native);
                 parts.push(ContentPart {
                     kind: PART_TYPE_INPUT_TEXT.to_string(),
                     text: text.clone(),
@@ -1350,6 +1343,18 @@ pub(crate) fn encode_user_content(blocks: &[Block], path: &str) -> (ContentValue
                 LossReason::UnsupportedSemantic,
                 "Anthropic compaction block cannot be represented on the target face",
             )),
+            Block::ServerToolUse { .. } | Block::WebSearchToolResult { .. } => losses.push(loss(
+                format!("{path}[{index}]"),
+                "type",
+                LossReason::UnsupportedSemantic,
+                oxa_ir::WEB_SEARCH_HISTORY_LOSS_DETAIL,
+            )),
+            Block::CompactionItem { .. } => losses.push(loss(
+                format!("{path}[{index}]"),
+                "type",
+                LossReason::UnsupportedSemantic,
+                oxa_ir::COMPACTION_ITEM_LOSS_DETAIL,
+            )),
             Block::RedactedThinking { .. } => losses.push(loss(
                 format!("{path}[{index}]"),
                 "type",
@@ -1369,14 +1374,8 @@ pub(crate) fn encode_user_content(blocks: &[Block], path: &str) -> (ContentValue
                 &format!("{path}[{index}]"),
             ) {
                 Ok(mut part) => {
-                    for ann in native {
-                        if ann.source == oxa_ir::NATIVE_SOURCE_OPENAI
-                            && ann.kind == oxa_ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
-                            && let Ok(v) = serde_json::from_str::<serde_json::Value>(&ann.value)
-                        {
-                            part.prompt_cache_breakpoint = Some(v);
-                            break;
-                        }
+                    if let Some(v) = oxa_ir::openai_breakpoint_wire(native) {
+                        part.prompt_cache_breakpoint = Some(v);
                     }
                     parts.push(part);
                 }
@@ -1402,16 +1401,7 @@ pub(crate) fn encode_user_content(blocks: &[Block], path: &str) -> (ContentValue
                         "IR DocumentBlock carries conflicting file sources",
                     ));
                 } else {
-                    let mut pcb = None;
-                    for ann in native {
-                        if ann.source == oxa_ir::NATIVE_SOURCE_OPENAI
-                            && ann.kind == oxa_ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
-                            && let Ok(v) = serde_json::from_str::<serde_json::Value>(&ann.value)
-                        {
-                            pcb = Some(v);
-                            break;
-                        }
-                    }
+                    let pcb = oxa_ir::openai_breakpoint_wire(native);
                     let mut cp = ContentPart {
                         kind: PART_TYPE_INPUT_FILE.to_string(),
                         prompt_cache_breakpoint: pcb,
@@ -1572,6 +1562,18 @@ pub(crate) fn encode_user_message(message: &IrMessage, path: &str) -> (Vec<Input
                     ..InputItem::default()
                 });
             }
+            Block::ServerToolUse { .. } | Block::WebSearchToolResult { .. } => losses.push(loss(
+                format!("{path}.content[{i}]"),
+                "type",
+                LossReason::UnsupportedSemantic,
+                oxa_ir::WEB_SEARCH_HISTORY_LOSS_DETAIL,
+            )),
+            Block::CompactionItem { .. } => losses.push(loss(
+                format!("{path}[{i}]"),
+                "type",
+                LossReason::UnsupportedSemantic,
+                oxa_ir::COMPACTION_ITEM_LOSS_DETAIL,
+            )),
             _ => unreachable!(),
         }
     }
@@ -1636,6 +1638,12 @@ pub(crate) fn encode_assistant_message(
                 "type",
                 LossReason::UnsupportedSemantic,
                 "Anthropic compaction block cannot be represented on the target face",
+            )),
+            Block::CompactionItem { .. } => losses.push(loss(
+                format!("{path}[{index}]"),
+                "type",
+                LossReason::UnsupportedSemantic,
+                oxa_ir::COMPACTION_ITEM_LOSS_DETAIL,
             )),
             Block::RedactedThinking { .. } => losses.push(loss(
                 format!("{path}[{index}]"),
@@ -1749,6 +1757,12 @@ pub(crate) fn encode_assistant_message(
                 "type",
                 LossReason::UnsupportedSemantic,
                 "this IR block cannot be rendered in a Responses item",
+            )),
+            Block::ServerToolUse { .. } | Block::WebSearchToolResult { .. } => losses.push(loss(
+                format!("{path}[{index}]"),
+                "type",
+                LossReason::UnsupportedSemantic,
+                oxa_ir::WEB_SEARCH_HISTORY_LOSS_DETAIL,
             )),
             Block::Image { .. }
             | Block::Document { .. }

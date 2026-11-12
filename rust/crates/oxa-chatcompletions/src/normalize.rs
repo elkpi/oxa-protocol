@@ -41,6 +41,7 @@ pub(crate) fn decode_content(
     let Some(content) = content else {
         return Ok((
             vec![Block::Text {
+                logprobs: None,
                 text: String::new(),
                 citations: None,
                 native: Vec::new(),
@@ -51,6 +52,7 @@ pub(crate) fn decode_content(
     match content {
         ContentValue::Text(text) => Ok((
             vec![Block::Text {
+                logprobs: None,
                 text: text.clone(),
                 citations: None,
                 native: Vec::new(),
@@ -69,6 +71,7 @@ pub(crate) fn decode_content(
         }
         ContentValue::Null(_) => Ok((
             vec![Block::Text {
+                logprobs: None,
                 text: String::new(),
                 citations: None,
                 native: Vec::new(),
@@ -133,6 +136,7 @@ fn decode_content_part(
     let (mut blocks, losses) = match part.kind.as_str() {
         CONTENT_PART_TYPE_TEXT => (
             vec![Block::Text {
+                logprobs: None,
                 text: part.text.clone(),
                 citations: None,
                 native: Vec::new(),
@@ -666,17 +670,10 @@ pub(crate) fn encode_user_content(blocks: &[Block], path: &str) -> (ContentValue
     let mut losses = Vec::new();
     for (index, block) in blocks.iter().enumerate() {
         match block {
-            Block::Text { text: value, citations, native } => {
-                let mut pcb = None;
-                for ann in native {
-                    if ann.source == oxa_ir::NATIVE_SOURCE_OPENAI
-                        && ann.kind == oxa_ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
-                        && let Ok(v) = serde_json::from_str::<serde_json::Value>(&ann.value)
-                    {
-                        pcb = Some(v);
-                        has_image = true;
-                        break;
-                    }
+            Block::Text { text: value, citations, native, .. } => {
+                let pcb = oxa_ir::openai_breakpoint_wire(native);
+                if pcb.is_some() {
+                    has_image = true;
                 }
                 parts.push(ContentPart {
                     kind: CONTENT_PART_TYPE_TEXT.to_string(),
@@ -738,14 +735,8 @@ pub(crate) fn encode_user_content(blocks: &[Block], path: &str) -> (ContentValue
             ) {
                 Ok(mut part) => {
                     has_image = true;
-                    for ann in native {
-                        if ann.source == oxa_ir::NATIVE_SOURCE_OPENAI
-                            && ann.kind == oxa_ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
-                            && let Ok(v) = serde_json::from_str::<serde_json::Value>(&ann.value)
-                        {
-                            part.prompt_cache_breakpoint = Some(v);
-                            break;
-                        }
+                    if let Some(v) = oxa_ir::openai_breakpoint_wire(native) {
+                        part.prompt_cache_breakpoint = Some(v);
                     }
                     parts.push(part);
                 }
@@ -793,16 +784,7 @@ pub(crate) fn encode_user_content(blocks: &[Block], path: &str) -> (ContentValue
                     continue;
                 }
                 has_image = true;
-                let mut pcb = None;
-                for ann in native {
-                    if ann.source == oxa_ir::NATIVE_SOURCE_OPENAI
-                        && ann.kind == oxa_ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
-                        && let Ok(v) = serde_json::from_str::<serde_json::Value>(&ann.value)
-                    {
-                        pcb = Some(v);
-                        break;
-                    }
-                }
+                let pcb = oxa_ir::openai_breakpoint_wire(native);
                 if let Some(fid) = file_id {
                     parts.push(ContentPart {
                         kind: CONTENT_PART_TYPE_FILE.to_string(),
@@ -832,6 +814,12 @@ pub(crate) fn encode_user_content(blocks: &[Block], path: &str) -> (ContentValue
                 "type",
                 LossReason::UnsupportedSemantic,
                 "this IR block cannot be rendered in Chat Completions",
+            )),
+            Block::ServerToolUse { .. } | Block::WebSearchToolResult { .. } => losses.push(loss(
+                format!("{path}[{index}]"),
+                "type",
+                LossReason::UnsupportedSemantic,
+                oxa_ir::WEB_SEARCH_HISTORY_LOSS_DETAIL,
             )),
             _ => losses.push(loss(
                 format!("{path}[{index}]"),
@@ -972,6 +960,14 @@ pub(crate) fn encode_assistant_message(blocks: &[Block], path: &str) -> (Message
             Block::WebSearchCall { .. } => losses.push(loss(
                 format!("{path}[{index}]"), "type", LossReason::UnsupportedSemantic,
                 "Responses web_search_call has no Chat Completions equivalent",
+            )),
+            Block::CompactionItem { .. } => losses.push(loss(
+                format!("{path}[{index}]"), "type", LossReason::UnsupportedSemantic,
+                oxa_ir::COMPACTION_ITEM_LOSS_DETAIL,
+            )),
+            Block::ServerToolUse { .. } | Block::WebSearchToolResult { .. } => losses.push(loss(
+                format!("{path}[{index}]"), "type", LossReason::UnsupportedSemantic,
+                oxa_ir::WEB_SEARCH_HISTORY_LOSS_DETAIL,
             )),
             Block::ApplyPatchToolUse { .. } => losses.push(loss(
                 format!("{path}[{index}]"),

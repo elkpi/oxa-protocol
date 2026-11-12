@@ -22,6 +22,7 @@ fn raw_request_ignores_union_irrelevant_fields_and_reports_unmapped() {
     assert_eq!(
         request.messages[0].content,
         vec![oxa_ir::Block::Text {
+            logprobs: None,
             text: "hi".to_string(),
             citations: None,
             native: Vec::new(),

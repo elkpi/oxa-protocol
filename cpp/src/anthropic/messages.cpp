@@ -605,6 +605,51 @@ StatusOr<std::pair<std::vector<ir::Block>, std::vector<ir::Loss>>> decode_conten
                 return invalid_argument("anthropic: " + block_path + ".tool_name is required");
             }
             blocks.push_back(ir::ToolReferenceBlock{std::move(tool_name)});
+        } else if (kind == BLOCK_TYPE_SERVER_TOOL_USE) {
+            const auto* id_val = item.find("id");
+            if (!id_val || !id_val->is_string() || id_val->as_string().empty()) {
+                return invalid_argument("anthropic: " + block_path + ".id is required");
+            }
+            const auto* name_val = item.find("name");
+            if (!name_val || !name_val->is_string() || name_val->as_string().empty()) {
+                return invalid_argument("anthropic: " + block_path + ".name is required");
+            }
+            if (name_val->as_string() != "web_search") {
+                losses.push_back(make_ant_loss(
+                    block_path, "type", ir::LOSS_UNSUPPORTED_SEMANTIC,
+                    "Anthropic server tool \"" + name_val->as_string() + "\" has no IR equivalent"));
+                continue;
+            }
+            const auto* input_val = item.find("input");
+            if (!input_val || !input_val->is_object()) {
+                return invalid_argument("anthropic: " + block_path + ".input must be a JSON object");
+            }
+            ir::ServerToolUseBlock st;
+            st.id = id_val->as_string();
+            st.name = "web_search";
+            st.input = json::serialize(*input_val);
+            if (const auto* caller = item.find("caller")) {
+                if (!caller->is_object()) return invalid_argument("anthropic: " + block_path + ".caller must be a JSON object");
+                st.caller = json::serialize(*caller);
+            }
+            blocks.push_back(std::move(st));
+        } else if (kind == BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT) {
+            const auto* id_val = item.find("tool_use_id");
+            if (!id_val || !id_val->is_string() || id_val->as_string().empty()) {
+                return invalid_argument("anthropic: " + block_path + ".tool_use_id is required");
+            }
+            const auto* content_val = item.find("content");
+            if (!content_val || (!content_val->is_array() && !content_val->is_object())) {
+                return invalid_argument("anthropic: " + block_path + ".content must be a JSON array or object");
+            }
+            ir::WebSearchToolResultBlock wr;
+            wr.tool_use_id = id_val->as_string();
+            wr.content = json::serialize(*content_val);
+            if (const auto* caller = item.find("caller")) {
+                if (!caller->is_object()) return invalid_argument("anthropic: " + block_path + ".caller must be a JSON object");
+                wr.caller = json::serialize(*caller);
+            }
+            blocks.push_back(std::move(wr));
         } else {
             losses.push_back(make_ant_loss(
                 block_path, "type", ir::LOSS_UNSUPPORTED_SEMANTIC,
@@ -617,7 +662,8 @@ StatusOr<std::pair<std::vector<ir::Block>, std::vector<ir::Loss>>> decode_conten
             if (is_request) {
                 if (canon.has_value() && !blocks.empty()) {
                     std::visit([&](auto& blk) {
-                        if constexpr (!std::is_same_v<std::decay_t<decltype(blk)>, ir::WebSearchCallBlock>) blk.native.push_back(ir::NativeAnnotation{
+                        if constexpr (!std::is_same_v<std::decay_t<decltype(blk)>, ir::WebSearchCallBlock> &&
+                                      !std::is_same_v<std::decay_t<decltype(blk)>, ir::CompactionItemBlock>) blk.native.push_back(ir::NativeAnnotation{
                             std::string(ir::NATIVE_SOURCE_ANTHROPIC),
                             std::string(ir::NATIVE_KIND_CACHE_CONTROL),
                             std::move(*canon),
@@ -1136,6 +1182,9 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
     OXA_RETURN_IF_ERROR(ir::validate_tool_strict(req));
     OXA_RETURN_IF_ERROR(ir::validate_native_request(req));
     std::vector<ir::Loss> losses;
+    for (std::size_t ci = 0; ci < req.compaction_items.size(); ++ci) {
+        losses.push_back(make_ant_loss("compaction_items[" + std::to_string(ci) + "]", "type", ir::LOSS_UNSUPPORTED_SEMANTIC, std::string(ir::COMPACTION_ITEM_LOSS_DETAIL)));
+    }
     json::Value out = json::Value::object();
     out.set("model", json::Value::string(opts.model_map.map(req.model)));
     if (req.metadata.has_value() && !req.metadata->empty()) {
@@ -1172,15 +1221,16 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
             for (std::size_t ai = 0; ai < s.native.size(); ++ai) {
                 const auto& ann = s.native[ai];
                 if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                    std::string field = ann.omission.has_value() && !ann.omission->field.empty() ? ann.omission->field : "prompt_cache_breakpoint";
-                    std::string reason = ann.omission.has_value() && !ann.omission->reason.empty() ? ann.omission->reason : std::string(ir::LOSS_UNMAPPED_FIELD);
-                    std::string detail = ann.omission.has_value() && ann.omission->detail.has_value() ? *ann.omission->detail : std::string(ir::PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL);
-                    losses.push_back(ir::Loss{
-                        "system[" + std::to_string(i) + "].native[" + std::to_string(ai) + "]",
-                        std::move(field),
-                        std::move(reason),
-                        std::move(detail),
-                    });
+                    auto parsed = json::parse(ann.value);
+                    if (parsed.ok() && parsed->is_object()) {
+                        const std::string path = "system[" + std::to_string(i) + "].native[" + std::to_string(ai) + "]";
+                        if (parsed->find("mode")) {
+                            losses.push_back(ir::Loss{path, "mode", std::string(ir::LOSS_UNMAPPED_FIELD), "prompt_cache_breakpoint.mode is not represented by cache_control"});
+                        }
+                        if (parsed->find("ttl")) {
+                            losses.push_back(ir::Loss{path, "ttl", std::string(ir::LOSS_UNMAPPED_FIELD), "prompt_cache_breakpoint.ttl has no equivalent cache_control ttl"});
+                        }
+                    }
                 }
             }
         }
@@ -1449,15 +1499,16 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                     for (std::size_t ai = 0; ai < nats->size(); ++ai) {
                         const auto& ann = (*nats)[ai];
                         if (ann.source == ir::NATIVE_SOURCE_OPENAI && ann.kind == ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
-                            std::string field = ann.omission.has_value() && !ann.omission->field.empty() ? ann.omission->field : "prompt_cache_breakpoint";
-                            std::string reason = ann.omission.has_value() && !ann.omission->reason.empty() ? ann.omission->reason : std::string(ir::LOSS_UNMAPPED_FIELD);
-                            std::string detail = ann.omission.has_value() && ann.omission->detail.has_value() ? *ann.omission->detail : std::string(ir::PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL);
-                            losses.push_back(ir::Loss{
-                                "messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "].native[" + std::to_string(ai) + "]",
-                                std::move(field),
-                                std::move(reason),
-                                std::move(detail),
-                            });
+                            auto parsed = json::parse(ann.value);
+                            if (parsed.ok() && parsed->is_object()) {
+                                const std::string path = "messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "].native[" + std::to_string(ai) + "]";
+                                if (parsed->find("mode")) {
+                                    losses.push_back(ir::Loss{path, "mode", std::string(ir::LOSS_UNMAPPED_FIELD), "prompt_cache_breakpoint.mode is not represented by cache_control"});
+                                }
+                                if (parsed->find("ttl")) {
+                                    losses.push_back(ir::Loss{path, "ttl", std::string(ir::LOSS_UNMAPPED_FIELD), "prompt_cache_breakpoint.ttl has no equivalent cache_control ttl"});
+                                }
+                            }
                         }
                     }
                 }
@@ -1776,6 +1827,42 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
                         bw.set("cache_control", std::move(*cc));
                     }
                     content_arr.push_back(std::move(bw));
+                } else if (const auto* st = std::get_if<ir::ServerToolUseBlock>(&b)) {
+                    if (st->id.empty()) return invalid_argument("anthropic: messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "].id is required");
+                    if (st->name != "web_search") return invalid_argument("anthropic: messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "].name must be \"web_search\"");
+                    auto input = json::parse(ir::ir_text_value(st->input));
+                    if (!input.ok()) return invalid_argument("anthropic: messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "].input must be valid JSON");
+                    json::Value sw = json::Value::object();
+                    sw.set("type", json::Value::string(std::string(BLOCK_TYPE_SERVER_TOOL_USE)));
+                    sw.set("id", json::Value::string(st->id));
+                    sw.set("name", json::Value::string("web_search"));
+                    sw.set("input", std::move(*input));
+                    if (st->caller.has_value()) {
+                        auto caller = json::parse(ir::ir_text_value(*st->caller));
+                        if (!caller.ok()) return invalid_argument("anthropic: messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "].caller must be valid JSON");
+                        sw.set("caller", std::move(*caller));
+                    }
+                    if (auto cc = get_block_cache_control(st->native)) {
+                        sw.set("cache_control", std::move(*cc));
+                    }
+                    content_arr.push_back(std::move(sw));
+                } else if (const auto* wr = std::get_if<ir::WebSearchToolResultBlock>(&b)) {
+                    if (wr->tool_use_id.empty()) return invalid_argument("anthropic: messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "].tool_use_id is required");
+                    auto content = json::parse(ir::ir_text_value(wr->content));
+                    if (!content.ok()) return invalid_argument("anthropic: messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "].content must be valid JSON");
+                    json::Value ww = json::Value::object();
+                    ww.set("type", json::Value::string(std::string(BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT)));
+                    ww.set("tool_use_id", json::Value::string(wr->tool_use_id));
+                    ww.set("content", std::move(*content));
+                    if (wr->caller.has_value()) {
+                        auto caller = json::parse(ir::ir_text_value(*wr->caller));
+                        if (!caller.ok()) return invalid_argument("anthropic: messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "].caller must be valid JSON");
+                        ww.set("caller", std::move(*caller));
+                    }
+                    if (auto cc = get_block_cache_control(wr->native)) {
+                        ww.set("cache_control", std::move(*cc));
+                    }
+                    content_arr.push_back(std::move(ww));
                 } else if (std::holds_alternative<ir::RefusalBlock>(b)) {
                     losses.push_back(make_ant_loss(
                         "messages[" + std::to_string(i) + "].content[" + std::to_string(bi) + "]",
@@ -1820,6 +1907,14 @@ StatusOr<Conversion<json::Value>> encode_request(const ir::Request& req,
     OXA_RETURN_IF_ERROR(encode_request_native(req, out, losses));
     if (req.params.has_value() && req.params->verbosity.has_value()) {
         losses.push_back(make_ant_loss("params.verbosity", "verbosity", ir::LOSS_UNMAPPED_FIELD, ""));
+    }
+    if (req.params.has_value() && req.params->logprobs.has_value()) {
+        losses.push_back(make_ant_loss("params.logprobs", "logprobs", ir::LOSS_UNMAPPED_FIELD,
+            "Anthropic Messages has no log-probability sampling parameter"));
+    }
+    if (req.params.has_value() && req.params->top_logprobs.has_value()) {
+        losses.push_back(make_ant_loss("params.top_logprobs", "top_logprobs", ir::LOSS_UNMAPPED_FIELD,
+            "Anthropic Messages has no log-probability sampling parameter"));
     }
     if (req.params && req.params->response_format) {
         const auto& rf = *req.params->response_format;
@@ -1992,6 +2087,38 @@ StatusOr<Conversion<json::Value>> encode_response(const ir::Response& resp,
             retained_tool_use = true;
         } else if (std::holds_alternative<ir::WebSearchCallBlock>(b)) {
             losses.push_back(make_ant_loss("content[" + std::to_string(i) + "]", "type", ir::LOSS_UNSUPPORTED_SEMANTIC, "Responses web_search_call has no Anthropic equivalent"));
+        } else if (const auto* st = std::get_if<ir::ServerToolUseBlock>(&b)) {
+            if (st->id.empty()) return invalid_argument("anthropic: content[" + std::to_string(i) + "].id is required");
+            if (st->name != "web_search") return invalid_argument("anthropic: content[" + std::to_string(i) + "].name must be \"web_search\"");
+            auto input = json::parse(ir::ir_text_value(st->input));
+            if (!input.ok()) return invalid_argument("anthropic: content[" + std::to_string(i) + "].input must be valid JSON");
+            json::Value sw = json::Value::object();
+            sw.set("type", json::Value::string(std::string(BLOCK_TYPE_SERVER_TOOL_USE)));
+            sw.set("id", json::Value::string(st->id));
+            sw.set("name", json::Value::string("web_search"));
+            sw.set("input", std::move(*input));
+            if (st->caller.has_value()) {
+                auto caller = json::parse(ir::ir_text_value(*st->caller));
+                if (!caller.ok()) return invalid_argument("anthropic: content[" + std::to_string(i) + "].caller must be valid JSON");
+                sw.set("caller", std::move(*caller));
+            }
+            content_arr.push_back(std::move(sw));
+        } else if (const auto* wr = std::get_if<ir::WebSearchToolResultBlock>(&b)) {
+            if (wr->tool_use_id.empty()) return invalid_argument("anthropic: content[" + std::to_string(i) + "].tool_use_id is required");
+            auto content = json::parse(ir::ir_text_value(wr->content));
+            if (!content.ok()) return invalid_argument("anthropic: content[" + std::to_string(i) + "].content must be valid JSON");
+            json::Value ww = json::Value::object();
+            ww.set("type", json::Value::string(std::string(BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT)));
+            ww.set("tool_use_id", json::Value::string(wr->tool_use_id));
+            ww.set("content", std::move(*content));
+            if (wr->caller.has_value()) {
+                auto caller = json::parse(ir::ir_text_value(*wr->caller));
+                if (!caller.ok()) return invalid_argument("anthropic: content[" + std::to_string(i) + "].caller must be valid JSON");
+                ww.set("caller", std::move(*caller));
+            }
+            content_arr.push_back(std::move(ww));
+        } else if (std::holds_alternative<ir::CompactionItemBlock>(b)) {
+            losses.push_back(make_ant_loss("content[" + std::to_string(i) + "]", "type", ir::LOSS_UNSUPPORTED_SEMANTIC, std::string(ir::COMPACTION_ITEM_LOSS_DETAIL)));
         } else if (std::holds_alternative<ir::ApplyPatchToolUseBlock>(b) || std::holds_alternative<ir::ApplyPatchToolResultBlock>(b)) {
             losses.push_back(make_ant_loss("content[" + std::to_string(i) + "]", "type",
                 ir::LOSS_UNSUPPORTED_SEMANTIC, "apply_patch tools have no equivalent in Anthropic Messages"));
@@ -2542,6 +2669,20 @@ StatusOr<Conversion<std::vector<json::Value>>> StreamEncoder::apply(const ir::Ev
             skipped_atomic_ = true; skipped_custom_ = false; open_tool_ = false; open_thinking_ = false;
             losses.push_back(make_ant_loss("events[" + std::to_string(cbs->index) + "].block", "type",
                 ir::LOSS_UNSUPPORTED_SEMANTIC, "apply_patch tools have no equivalent in Anthropic Messages"));
+            return Conversion<std::vector<json::Value>>{std::move(chunks), std::move(losses)};
+        }
+        if (std::holds_alternative<ir::CompactionItemBlock>(cbs->block) ||
+            std::holds_alternative<ir::ServerToolUseBlock>(cbs->block) ||
+            std::holds_alternative<ir::WebSearchToolResultBlock>(cbs->block)) {
+            skipped_atomic_ = true;
+            skipped_custom_ = false;
+            open_tool_ = false;
+            open_thinking_ = false;
+            std::string_view detail = std::holds_alternative<ir::CompactionItemBlock>(cbs->block)
+                ? ir::COMPACTION_ITEM_LOSS_DETAIL
+                : ir::WEB_SEARCH_HISTORY_LOSS_DETAIL;
+            losses.push_back(make_ant_loss("events[" + std::to_string(cbs->index) + "].block", "type",
+                ir::LOSS_UNSUPPORTED_SEMANTIC, std::string(detail)));
             return Conversion<std::vector<json::Value>>{std::move(chunks), std::move(losses)};
         }
         skipped_custom_ = false;

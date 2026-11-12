@@ -1,0 +1,35 @@
+{
+  "name": "cross.nonstream.responses-to-anthropic-compaction-item-request",
+  "description": "A Responses compaction checkpoint is omitted on Anthropic with one loss and is not rewritten as an Anthropic compaction block (N-R-22).",
+  "spec_version": "0.2.0",
+  "mode": "nonstream",
+  "conversion": "protocol-to-protocol",
+  "source": {"protocol": "responses"},
+  "target": {"protocol": "anthropic"},
+  "input": {
+    "model": "gpt-5.4",
+    "max_output_tokens": 64,
+    "input": [
+      {"type": "message", "role": "user", "content": "before"},
+      {"type": "compaction", "id": "cmp_1", "encrypted_content": "cipher"},
+      {"type": "message", "role": "user", "content": "after"}
+    ]
+  },
+  "expected_output": {
+    "model": "gpt-5.4",
+    "max_tokens": 64,
+    "messages": [
+      {"role": "user", "content": [{"type": "text", "text": "before"}]},
+      {"role": "user", "content": [{"type": "text", "text": "after"}]}
+    ]
+  },
+  "expected_losses": [
+    {
+      "path": "compaction_items[0]",
+      "field": "type",
+      "reason": "unsupported-semantic",
+      "detail": "Responses compaction item cannot be represented on the target face"
+    }
+  ],
+  "tags": ["cross", "request", "compaction", "loss", "n-r-22"]
+}

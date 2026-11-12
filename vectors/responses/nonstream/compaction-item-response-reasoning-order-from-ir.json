@@ -1,0 +1,54 @@
+{
+  "name": "responses.nonstream.compaction-item-response-reasoning-order-from-ir",
+  "description": "Compaction output items stay ahead of reasoning, text, and tool calls in canonical order (N-R-22).",
+  "spec_version": "0.2.0",
+  "mode": "nonstream",
+  "conversion": "from-ir",
+  "source": {"protocol": "responses"},
+  "target": {"protocol": "responses"},
+  "input": {
+    "specVersion": "0.3.0",
+    "id": "resp_cmp_order",
+    "model": "gpt-5.4",
+    "content": [
+      {"type": "compaction_item", "encrypted_content": "cipher"},
+      {"type": "thinking", "thinking": "plan"},
+      {"type": "text", "text": "done"},
+      {"type": "tool_use", "id": "c1", "name": "f", "input": "{\"a\":1}"}
+    ],
+    "stop_reason": "tool_use",
+    "usage": {"input_tokens": 5, "output_tokens": 6}
+  },
+  "expected_output": {
+    "id": "resp_cmp_order",
+    "object": "response",
+    "status": "completed",
+    "model": "gpt-5.4",
+    "output": [
+      {"type": "compaction", "encrypted_content": "cipher"},
+      {
+        "type": "reasoning",
+        "id": "rs_abc123",
+        "summary": [{"type": "output_text", "text": "plan", "annotations": []}]
+      },
+      {
+        "type": "message",
+        "id": "msg_abc123",
+        "status": "completed",
+        "role": "assistant",
+        "content": [{"type": "output_text", "text": "done", "annotations": []}]
+      },
+      {
+        "type": "function_call",
+        "id": "fc_abc123",
+        "status": "completed",
+        "call_id": "c1",
+        "name": "f",
+        "arguments": "{\"a\":1}"
+      }
+    ],
+    "usage": {"input_tokens": 5, "output_tokens": 6, "total_tokens": 11}
+  },
+  "expected_losses": [],
+  "tags": ["response", "compaction", "reasoning", "n-r-22"]
+}

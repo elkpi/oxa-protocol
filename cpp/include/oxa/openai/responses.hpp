@@ -35,6 +35,7 @@ inline constexpr std::string_view ITEM_TYPE_APPLY_PATCH_CALL = "apply_patch_call
 inline constexpr std::string_view ITEM_TYPE_APPLY_PATCH_CALL_OUTPUT = "apply_patch_call_output";
 inline constexpr std::string_view ITEM_TYPE_REASONING = "reasoning";
 inline constexpr std::string_view ITEM_TYPE_WEB_SEARCH_CALL = "web_search_call";
+inline constexpr std::string_view ITEM_TYPE_COMPACTION = "compaction";
 
 inline constexpr std::string_view PART_TYPE_INPUT_TEXT = "input_text";
 inline constexpr std::string_view PART_TYPE_OUTPUT_TEXT = "output_text";
@@ -197,7 +198,7 @@ public:
     StatusOr<Conversion<std::vector<json::Value>>> apply(const ir::Event& event);
 
 private:
-    enum class OutputItemKind { Message, Reasoning, Redacted, FunctionCall, CustomToolCall, ApplyPatchCall, ApplyPatchResult, EncryptedContent, WebSearchCall };
+    enum class OutputItemKind { Message, Reasoning, Redacted, FunctionCall, CustomToolCall, ApplyPatchCall, ApplyPatchResult, EncryptedContent, WebSearchCall, Compaction };
 
     struct StreamOutputItem {
         OutputItemKind kind;
@@ -210,6 +211,7 @@ private:
         std::string namespace_val;
         std::string encrypted_content;
         std::optional<json::Value> web_search_item;
+        std::optional<json::Value> compaction_item;
     };
 
     struct StreamEncodeBlock {
@@ -257,6 +259,8 @@ private:
     StatusOr<std::pair<std::vector<json::Value>, std::vector<ir::Loss>>> start_encrypted_content_block(std::int64_t index, const ir::EncryptedContentBlock& block);
     StatusOr<std::pair<std::vector<json::Value>, std::vector<ir::Loss>>> start_web_search_block(std::int64_t index, const ir::WebSearchCallBlock& block);
     StatusOr<std::pair<std::vector<json::Value>, std::vector<ir::Loss>>> stop_web_search_block();
+    StatusOr<std::pair<std::vector<json::Value>, std::vector<ir::Loss>>> start_compaction_block(std::int64_t index, const ir::CompactionItemBlock& block);
+    StatusOr<std::pair<std::vector<json::Value>, std::vector<ir::Loss>>> stop_compaction_block();
     StatusOr<std::pair<std::vector<json::Value>, std::vector<ir::Loss>>> start_thinking_block(std::int64_t index, const ir::ThinkingBlock& block, std::size_t ordinal);
     StatusOr<std::pair<std::vector<json::Value>, std::vector<ir::Loss>>> start_function_call_block(std::int64_t index, const ir::ToolUseBlock& block);
     StatusOr<std::pair<std::vector<json::Value>, std::vector<ir::Loss>>> start_custom_tool_call_block(std::int64_t index, const ir::CustomToolUseBlock& block);

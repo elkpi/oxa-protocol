@@ -172,6 +172,15 @@ function encodeBlock(block: Block): JsonObject {
       action: block.action,
       ...(block.extra === undefined ? {} : { extra: block.extra }),
     };
+  if (block.type === "compaction_item")
+    return {
+      type: "compaction_item",
+      encrypted_content: block.encrypted_content,
+      ...(block.id === undefined || block.id === "" ? {} : { id: block.id }),
+      ...(block.created_by === undefined || block.created_by === ""
+        ? {}
+        : { created_by: block.created_by }),
+    };
   if (block.type === "tool_use")
     return {
       type: "tool_use",
@@ -294,6 +303,25 @@ function decodeBlock(value: JsonValue | undefined): Block {
       ...(block.category === undefined
         ? {}
         : { category: string(block.category, "block.category") }),
+    };
+  if (block.type === "compaction_item")
+    return {
+      type: "compaction_item",
+      encrypted_content: nonEmptyString(
+        string(block.encrypted_content, "block.encrypted_content"),
+        "block.encrypted_content",
+      ),
+      ...(block.id === undefined
+        ? {}
+        : { id: nonEmptyString(string(block.id, "block.id"), "block.id") }),
+      ...(block.created_by === undefined
+        ? {}
+        : {
+            created_by: nonEmptyString(
+              string(block.created_by, "block.created_by"),
+              "block.created_by",
+            ),
+          }),
     };
   fail("unsupported block type");
 }

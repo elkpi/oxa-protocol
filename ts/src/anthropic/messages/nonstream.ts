@@ -21,6 +21,7 @@ import {
   validateCitationValue,
   validateRequest,
   ENCRYPTED_CONTENT_LOSS_DETAIL,
+  COMPACTION_ITEM_LOSS_DETAIL,
 } from "../../ir/index.js";
 import { auditWire, mergeWireLosses } from "../../json/wire-audit.js";
 import { ANTHROPIC_REQUEST, ANTHROPIC_RESPONSE } from "./audit.js";
@@ -42,7 +43,7 @@ import {
   DOCUMENT_CONTEXT_LOSS_DETAIL,
   DOCUMENT_CITATIONS_LOSS_DETAIL,
   NATIVE_KIND_PROMPT_CACHE_BREAKPOINT,
-  PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL,
+  breakpointTranslationLosses,
 } from "../../ir/native.js";
 import type {
   Block,
@@ -67,6 +68,20 @@ import type {
   ToolChangeGroup,
   ToolChangePart,
 } from "../../ir/index.js";
+
+function canonicalizeWebJson(value: JsonValue): JsonValue {
+  if (Array.isArray(value)) return value.map(canonicalizeWebJson);
+  if (value !== null && typeof value === "object") {
+    const sorted: Record<string, JsonValue> = Object.create(null);
+    for (const key of Object.keys(value).sort()) {
+      sorted[key] = canonicalizeWebJson(
+        (value as Record<string, JsonValue>)[key]!,
+      );
+    }
+    return sorted;
+  }
+  return value;
+}
 
 function decodeToolChange(
   block: JsonObject,
@@ -806,6 +821,14 @@ export function encodeRequest(
 ): ConversionResult<JsonObject> {
   validateRequest(request);
   const losses: Loss[] = [];
+  (request.compaction_items ?? []).forEach((_item, i) =>
+    losses.push({
+      path: `compaction_items[${i}]`,
+      field: "type",
+      reason: "unsupported-semantic",
+      detail: COMPACTION_ITEM_LOSS_DETAIL,
+    }),
+  );
   const metadata = encodeAnthropicMetadata(request.metadata, losses);
   const maxTokens = request.params?.max_tokens ?? 4096n;
   if (request.params?.max_tokens === undefined)
@@ -1119,21 +1142,23 @@ export function encodeRequest(
                 detail:
                   "developer instruction is carried as Anthropic system content; Anthropic has no developer role",
               });
+            let translated = false;
             block.native?.forEach((ann, sAnnIdx) => {
               if (
                 ann.source === "openai" &&
                 ann.kind === NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
               ) {
-                losses.push({
-                  path: `system[${index}].native[${sAnnIdx}]`,
-                  field: ann.omission?.field || "prompt_cache_breakpoint",
-                  reason: ann.omission?.reason || "unmapped-field",
-                  detail:
-                    ann.omission?.detail || PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL,
-                });
+                translated = true;
+                for (const item of breakpointTranslationLosses(
+                  ann.value,
+                  `system[${index}].native[${sAnnIdx}]`,
+                ))
+                  losses.push(item);
               }
             });
-            const cc = getBlockCacheControl(block);
+            const cc =
+              getBlockCacheControl(block) ??
+              (translated ? { type: "ephemeral" } : undefined);
             return {
               type: "text",
               text: block.text,
@@ -1156,6 +1181,20 @@ export function encodeRequest(
   encodeRequestNative(request, outValue, losses);
   if (request.params?.verbosity !== undefined)
     losses.push(loss("params.verbosity", "verbosity", "unmapped-field"));
+  if (request.params?.logprobs !== undefined)
+    losses.push({
+      path: "params.logprobs",
+      field: "logprobs",
+      reason: "unmapped-field",
+      detail: "Anthropic Messages has no log-probability sampling parameter",
+    });
+  if (request.params?.top_logprobs !== undefined)
+    losses.push({
+      path: "params.top_logprobs",
+      field: "top_logprobs",
+      reason: "unmapped-field",
+      detail: "Anthropic Messages has no log-probability sampling parameter",
+    });
   const format = request.params?.response_format;
   let outputConfig: JsonObject | undefined;
   if (format?.type === "json_schema") {
@@ -1686,6 +1725,58 @@ function decodeContent(
           ...(native ? { native } : {}),
         });
       }
+    } else if (type === "server_tool_use") {
+      const id = nonEmptyString(block.id, `${path}[${index}].id`);
+      const name = nonEmptyString(block.name, `${path}[${index}].name`);
+      if (name !== "web_search") {
+        losses.push({
+          path: `${path}[${index}]`,
+          field: "type",
+          reason: "unsupported-semantic",
+          detail: `Anthropic server tool "${name}" has no IR equivalent`,
+        });
+        continue;
+      }
+      const input = object(block.input, `${path}[${index}].input`);
+      const caller =
+        block.caller === undefined
+          ? undefined
+          : object(block.caller, `${path}[${index}].caller`);
+      blocks.push({
+        type: "server_tool_use",
+        id,
+        name: "web_search",
+        input: stringifyJson(canonicalizeWebJson(input)),
+        ...(caller === undefined
+          ? {}
+          : { caller: stringifyJson(canonicalizeWebJson(caller)) }),
+        ...(native ? { native } : {}),
+      });
+    } else if (type === "web_search_tool_result") {
+      const toolUseId = nonEmptyString(
+        block.tool_use_id,
+        `${path}[${index}].tool_use_id`,
+      );
+      const content = block.content;
+      if (
+        content === undefined ||
+        content === null ||
+        typeof content !== "object"
+      )
+        fail(`${path}[${index}].content must be a JSON array or object`);
+      const caller =
+        block.caller === undefined
+          ? undefined
+          : object(block.caller, `${path}[${index}].caller`);
+      blocks.push({
+        type: "web_search_tool_result",
+        tool_use_id: toolUseId,
+        content: stringifyJson(canonicalizeWebJson(content as JsonValue)),
+        ...(caller === undefined
+          ? {}
+          : { caller: stringifyJson(canonicalizeWebJson(caller)) }),
+        ...(native ? { native } : {}),
+      });
     } else if (type === "tool_reference") {
       const toolName =
         (block.tool_name !== undefined
@@ -1726,16 +1817,24 @@ function encodeContent(
           ann.source === "openai" &&
           ann.kind === NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
         ) {
-          losses.push({
-            path: `${path}[${index}].native[${bAnnIdx}]`,
-            field: ann.omission?.field || "prompt_cache_breakpoint",
-            reason: ann.omission?.reason || "unmapped-field",
-            detail: ann.omission?.detail || PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL,
-          });
+          for (const item of breakpointTranslationLosses(
+            ann.value,
+            `${path}[${index}].native[${bAnnIdx}]`,
+          ))
+            losses.push(item);
         }
       });
     }
-    const cc = getBlockCacheControl(block);
+    const translated =
+      "native" in block &&
+      block.native?.some(
+        (ann) =>
+          ann.source === "openai" &&
+          ann.kind === NATIVE_KIND_PROMPT_CACHE_BREAKPOINT,
+      );
+    const cc =
+      getBlockCacheControl(block) ??
+      (translated ? { type: "ephemeral" } : undefined);
     if (block.type === "compaction" && isRequest) {
       if (`${path}[${index}]` !== "messages[0].content[0]")
         fail(`${path}[${index}]: compaction must be first conversation block`);
@@ -2009,6 +2108,27 @@ function encodeContent(
         });
       }
       continue;
+    } else if (block.type === "server_tool_use") {
+      output.push({
+        type: "server_tool_use",
+        id: block.id,
+        name: "web_search",
+        input: parseJson(block.input),
+        ...(block.caller === undefined
+          ? {}
+          : { caller: parseJson(block.caller) }),
+        ...(cc ? { cache_control: cc } : {}),
+      });
+    } else if (block.type === "web_search_tool_result") {
+      output.push({
+        type: "web_search_tool_result",
+        tool_use_id: block.tool_use_id,
+        content: parseJson(block.content),
+        ...(block.caller === undefined
+          ? {}
+          : { caller: parseJson(block.caller) }),
+        ...(cc ? { cache_control: cc } : {}),
+      });
     } else if (block.type === "tool_reference") {
       if (!(block as ToolReferenceBlock).tool_name) {
         fail(`${path}[${index}].tool_name is required`);
@@ -2024,6 +2144,13 @@ function encodeContent(
       block.type === "web_search_call"
     ) {
       losses.push(loss(`${path}[${index}]`, "type", "unsupported-semantic"));
+    } else if (block.type === "compaction_item") {
+      losses.push({
+        path: `${path}[${index}]`,
+        field: "type",
+        reason: "unsupported-semantic",
+        detail: COMPACTION_ITEM_LOSS_DETAIL,
+      });
     }
   }
   return output;

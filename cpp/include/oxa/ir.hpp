@@ -60,6 +60,9 @@ inline constexpr std::string_view NATIVE_KIND_PROMPT_CACHE_BREAKPOINT = "prompt_
 inline constexpr std::string_view CACHE_CONTROL_LOSS_DETAIL =
     "anthropic-native cache breakpoint; the target face has no cache_control representation";
 
+inline constexpr std::string_view RESPONSES_CONTEXT_MANAGEMENT_LOSS_DETAIL =
+    "Responses context_management has no equivalent on the target face";
+
 inline constexpr std::string_view PROMPT_CACHE_KEY_LOSS_DETAIL =
     "Anthropic Messages has no prompt_cache_key parameter; prompt cache key is dropped";
 
@@ -68,6 +71,14 @@ inline constexpr std::string_view PROMPT_CACHE_OPTIONS_LOSS_DETAIL =
 
 inline constexpr std::string_view PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL =
     "Anthropic Messages has no prompt_cache_breakpoint parameter; prompt cache breakpoint is dropped";
+
+// Cross-face omission text for a Responses compaction checkpoint (spec/11
+// N-R-22). It MUST NOT contain the ciphertext.
+inline constexpr std::string_view WEB_SEARCH_HISTORY_LOSS_DETAIL =
+    "Anthropic web_search history cannot be represented on the target face";
+
+inline constexpr std::string_view COMPACTION_ITEM_LOSS_DETAIL =
+    "Responses compaction item cannot be represented on the target face";
 
 inline constexpr std::string_view DEFER_LOADING_LOSS_DETAIL =
     "deferred tool loading is a provider-side context-assembly instruction; the tool definition is unchanged and loads up front when the target has no tool search";
@@ -97,6 +108,9 @@ inline constexpr std::string_view BLOCK_TYPE_ENCRYPTED_CONTENT = "encrypted_cont
 inline constexpr std::string_view BLOCK_TYPE_IMAGE = "image";
 inline constexpr std::string_view BLOCK_TYPE_DOCUMENT = "document";
 inline constexpr std::string_view BLOCK_TYPE_WEB_SEARCH_CALL = "web_search_call";
+inline constexpr std::string_view BLOCK_TYPE_COMPACTION_ITEM = "compaction_item";
+inline constexpr std::string_view BLOCK_TYPE_SERVER_TOOL_USE = "server_tool_use";
+inline constexpr std::string_view BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT = "web_search_tool_result";
 inline constexpr std::string_view BLOCK_TYPE_TOOL_USE = "tool_use";
 inline constexpr std::string_view BLOCK_TYPE_TOOL_RESULT = "tool_result";
 inline constexpr std::string_view BLOCK_TYPE_CUSTOM_TOOL_USE = "custom_tool_use";
@@ -237,6 +251,7 @@ struct TextCitation {
 struct TextBlock {
     std::string text;
     std::optional<std::vector<TextCitation>> citations;
+    std::optional<std::string> logprobs;  // raw JSON text (INV-1); output-side only
     std::vector<NativeAnnotation> native;
     std::string role;
 
@@ -386,6 +401,31 @@ struct WebSearchCallBlock {
     json::Value extra = json::Value::object();
 };
 
+// Responses compaction checkpoint (spec/11 N-R-22). The ciphertext stays
+// opaque and MUST NOT appear in a loss detail. Not an Anthropic CompactionBlock.
+struct CompactionItemBlock {
+    std::string encrypted_content;
+    std::string id;
+    std::string created_by;
+};
+
+// Anthropic provider-hosted web_search history (spec/12 N-AN-23). `input`,
+// `content`, and `caller` are canonical compact JSON text and stay opaque.
+struct ServerToolUseBlock {
+    std::string id;
+    std::string name = "web_search";
+    std::string input;
+    std::optional<std::string> caller;
+    std::vector<NativeAnnotation> native;
+};
+
+struct WebSearchToolResultBlock {
+    std::string tool_use_id;
+    std::string content;
+    std::optional<std::string> caller;
+    std::vector<NativeAnnotation> native;
+};
+
 struct RefusalBlock {
     std::string refusal;
     std::optional<std::string> category;
@@ -408,7 +448,8 @@ struct ToolReferenceBlock {
 using Block = std::variant<TextBlock, ThinkingBlock, RedactedThinkingBlock, EncryptedContentBlock, ImageBlock, DocumentBlock,
                            ToolUseBlock, ToolResultBlock,
                            CustomToolUseBlock, CustomToolResultBlock,
-                           ApplyPatchToolUseBlock, ApplyPatchToolResultBlock, WebSearchCallBlock, RefusalBlock, ToolReferenceBlock, CompactionBlock>;
+                           ApplyPatchToolUseBlock, ApplyPatchToolResultBlock, WebSearchCallBlock, RefusalBlock, ToolReferenceBlock, CompactionBlock,
+                           CompactionItemBlock, ServerToolUseBlock, WebSearchToolResultBlock>;
 
 struct BlockHolder {
     Block block;
@@ -460,6 +501,17 @@ struct Params {
     std::optional<std::string> reasoning_effort;
     std::optional<std::string> verbosity;
     std::optional<ResponseFormat> response_format;
+    std::optional<bool> logprobs;
+    std::optional<std::int64_t> top_logprobs;
+};
+
+// One Responses compaction checkpoint placed relative to request messages
+// (spec/11 N-R-22). `after_message` -1 emits the item before every message.
+struct CompactionItem {
+    std::string encrypted_content;
+    std::string id;
+    std::string created_by;
+    std::int64_t after_message = -1;
 };
 
 struct Request {
@@ -472,6 +524,7 @@ struct Request {
     std::optional<std::map<std::string, std::string>> metadata;
     std::vector<NativeAnnotation> native;
     std::vector<ToolChangeGroup> tool_change_groups;
+    std::vector<CompactionItem> compaction_items;
 };
 
 // ---- response (spec/01 §4) -------------------------------------------------
@@ -590,6 +643,18 @@ StatusOr<NativeAnnotation> load_native_annotation(const json::Value& v);
 
 Status validate_native_request(const Request& req);
 Status validate_tool_strict(const Request& req);
+std::optional<json::Value> openai_breakpoint_wire(const std::vector<NativeAnnotation>& native);
+
+// ir_text_value decodes an IR string token (a JSON string literal) into the
+// text it carries. Used for INV-1 opaque JSON text fields.
+inline std::string ir_text_value(const std::string& token) {
+    if (token.size() >= 2 && token.front() == '"' && token.back() == '"') {
+        auto parsed = json::parse(token);
+        if (parsed.ok() && parsed->is_string()) return parsed->as_string();
+    }
+    return token;
+}
+
 StatusOr<std::vector<Loss>> omitted_native_request_losses(const Request& req, std::string_view target);
 Status validate_citation_value(std::string_view val);
 Status validate_citation(std::string_view source, std::string_view val);

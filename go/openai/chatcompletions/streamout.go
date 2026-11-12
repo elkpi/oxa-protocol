@@ -127,6 +127,18 @@ func (e *StreamEncoder) apply(ev ir.Event) ([]*Chunk, []ir.Loss, error) {
 				"anthropic encrypted thinking replay state; the target face cannot preserve this block",
 			)
 			return nil, []ir.Loss{l}, nil
+		case ir.CompactionItemBlock:
+			e.active = &streamEncodeBlock{kind: streamRedactedBlock, index: event.Index}
+			return nil, []ir.Loss{loss(
+				fmt.Sprintf("events[%d].block", ordinal), "type", ir.LossUnsupportedSemantic,
+				ir.CompactionItemLossDetail,
+			)}, nil
+		case ir.ServerToolUseBlock, ir.WebSearchToolResultBlock:
+			e.active = &streamEncodeBlock{kind: streamRedactedBlock, index: event.Index}
+			return nil, []ir.Loss{loss(
+				fmt.Sprintf("events[%d].block", ordinal), "type", ir.LossUnsupportedSemantic,
+				ir.WebSearchHistoryLossDetail,
+			)}, nil
 		case ir.ThinkingBlock:
 			e.active = &streamEncodeBlock{kind: streamThinkingBlock, index: event.Index}
 			return nil, nil, nil

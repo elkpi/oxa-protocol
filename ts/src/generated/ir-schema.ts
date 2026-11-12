@@ -16,6 +16,7 @@ export interface IrSchemaRequest {
   readonly metadata?: { readonly [key: string]: string; };
   readonly native?: readonly (IrSchemaNativeAnnotation)[];
   readonly tool_change_groups?: readonly (IrSchemaToolChangeGroup)[];
+  readonly compaction_items?: readonly (IrSchemaCompactionItem)[];
 }
 
 export interface IrSchemaSystemBlock {
@@ -30,12 +31,13 @@ export interface IrSchemaMessage {
   readonly content: readonly (IrSchemaRequestBlock)[];
 }
 
-export type IrSchemaRequestBlock = IrSchemaRequestTextBlock | IrSchemaRequestImageBlock | IrSchemaRequestDocumentBlock | IrSchemaRequestToolUseBlock | IrSchemaRequestToolResultBlock | IrSchemaRequestThinkingBlock | IrSchemaRequestRedactedThinkingBlock | IrSchemaRequestEncryptedContentBlock | IrSchemaRequestToolReferenceBlock | IrSchemaRequestCustomToolUseBlock | IrSchemaRequestCustomToolResultBlock | IrSchemaRequestApplyPatchToolUseBlock | IrSchemaRequestApplyPatchToolResultBlock | IrSchemaWebSearchCallBlock | IrSchemaRequestRefusalBlock | IrSchemaRequestCompactionBlock;
+export type IrSchemaRequestBlock = IrSchemaRequestTextBlock | IrSchemaRequestImageBlock | IrSchemaRequestDocumentBlock | IrSchemaRequestToolUseBlock | IrSchemaRequestToolResultBlock | IrSchemaRequestThinkingBlock | IrSchemaRequestRedactedThinkingBlock | IrSchemaRequestEncryptedContentBlock | IrSchemaRequestToolReferenceBlock | IrSchemaRequestCustomToolUseBlock | IrSchemaRequestCustomToolResultBlock | IrSchemaRequestApplyPatchToolUseBlock | IrSchemaRequestApplyPatchToolResultBlock | IrSchemaWebSearchCallBlock | IrSchemaRequestRefusalBlock | IrSchemaRequestCompactionBlock | IrSchemaCompactionItemBlock | IrSchemaRequestServerToolUseBlock | IrSchemaRequestWebSearchToolResultBlock;
 
 export interface IrSchemaRequestTextBlock {
   readonly type: "text";
   readonly text: string;
   readonly citations?: readonly (IrSchemaTextCitation)[];
+  readonly logprobs?: string;
   readonly native?: readonly (IrSchemaNativeAnnotation)[];
 }
 
@@ -128,7 +130,7 @@ export interface IrSchemaRequestApplyPatchToolResultBlock {
   readonly native?: readonly (IrSchemaNativeAnnotation)[];
 }
 
-export type IrSchemaBlock = IrSchemaTextBlock | IrSchemaImageBlock | IrSchemaToolUseBlock | IrSchemaToolResultBlock | IrSchemaThinkingBlock | IrSchemaRedactedThinkingBlock | IrSchemaEncryptedContentBlock | IrSchemaToolReferenceBlock | IrSchemaCustomToolUseBlock | IrSchemaCustomToolResultBlock | IrSchemaApplyPatchToolUseBlock | IrSchemaApplyPatchToolResultBlock | IrSchemaWebSearchCallBlock | IrSchemaRefusalBlock;
+export type IrSchemaBlock = IrSchemaTextBlock | IrSchemaImageBlock | IrSchemaToolUseBlock | IrSchemaToolResultBlock | IrSchemaThinkingBlock | IrSchemaRedactedThinkingBlock | IrSchemaEncryptedContentBlock | IrSchemaToolReferenceBlock | IrSchemaCustomToolUseBlock | IrSchemaCustomToolResultBlock | IrSchemaApplyPatchToolUseBlock | IrSchemaApplyPatchToolResultBlock | IrSchemaWebSearchCallBlock | IrSchemaRefusalBlock | IrSchemaCompactionItemBlock | IrSchemaServerToolUseBlock | IrSchemaWebSearchToolResultBlock;
 
 export interface IrSchemaRefusalBlock {
   readonly type: "refusal";
@@ -140,6 +142,52 @@ export interface IrSchemaRequestRefusalBlock {
   readonly type: "refusal";
   readonly refusal: string;
   readonly category?: string;
+  readonly native?: readonly (IrSchemaNativeAnnotation)[];
+}
+
+export interface IrSchemaCompactionItem {
+  readonly encrypted_content: string;
+  readonly id?: string;
+  readonly created_by?: string;
+  readonly after_message: number;
+}
+
+export interface IrSchemaCompactionItemBlock {
+  readonly type: "compaction_item";
+  readonly encrypted_content: string;
+  readonly id?: string;
+  readonly created_by?: string;
+}
+
+export interface IrSchemaServerToolUseBlock {
+  readonly type: "server_tool_use";
+  readonly id: string;
+  readonly name: "web_search";
+  readonly input: string;
+  readonly caller?: string;
+}
+
+export interface IrSchemaRequestServerToolUseBlock {
+  readonly type: "server_tool_use";
+  readonly id: string;
+  readonly name: "web_search";
+  readonly input: string;
+  readonly caller?: string;
+  readonly native?: readonly (IrSchemaNativeAnnotation)[];
+}
+
+export interface IrSchemaWebSearchToolResultBlock {
+  readonly type: "web_search_tool_result";
+  readonly tool_use_id: string;
+  readonly content: string;
+  readonly caller?: string;
+}
+
+export interface IrSchemaRequestWebSearchToolResultBlock {
+  readonly type: "web_search_tool_result";
+  readonly tool_use_id: string;
+  readonly content: string;
+  readonly caller?: string;
   readonly native?: readonly (IrSchemaNativeAnnotation)[];
 }
 
@@ -195,6 +243,7 @@ export interface IrSchemaTextBlock {
   readonly type: "text";
   readonly text: string;
   readonly citations?: readonly (IrSchemaTextCitation)[];
+  readonly logprobs?: string;
 }
 
 export interface IrSchemaTextCitation {
@@ -258,6 +307,8 @@ export interface IrSchemaParams {
   readonly reasoning_effort?: IrSchemaReasoningEffort;
   readonly verbosity?: "low" | "medium" | "high";
   readonly response_format?: IrSchemaResponseFormat;
+  readonly logprobs?: boolean;
+  readonly top_logprobs?: number;
 }
 
 export interface IrSchemaResponse {

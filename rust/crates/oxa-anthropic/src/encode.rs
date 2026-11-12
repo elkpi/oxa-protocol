@@ -359,6 +359,14 @@ pub fn encode_request(req: &IrRequest, config: &Config) -> Result<(Request, Vec<
         return Err(Error::new("anthropic: metadata key cannot be empty"));
     }
     let mut losses = Vec::new();
+    for (i, _item) in req.compaction_items.iter().enumerate() {
+        losses.push(loss(
+            format!("compaction_items[{i}]"),
+            "type",
+            LossReason::UnsupportedSemantic,
+            oxa_ir::COMPACTION_ITEM_LOSS_DETAIL,
+        ));
+    }
     let metadata = encode_anthropic_metadata(req.metadata.as_ref(), &mut losses);
     let mut out = Request {
         model: config.map_model(&req.model),
@@ -380,27 +388,10 @@ pub fn encode_request(req: &IrRequest, config: &Config) -> Result<(Request, Vec<
                 if ann.source == oxa_ir::NATIVE_SOURCE_OPENAI
                     && ann.kind == oxa_ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
                 {
-                    let field = ann
-                        .omission
-                        .as_ref()
-                        .map(|o| o.field.clone())
-                        .unwrap_or_else(|| "prompt_cache_breakpoint".into());
-                    let reason = ann
-                        .omission
-                        .as_ref()
-                        .map(|o| o.reason)
-                        .unwrap_or(LossReason::UnmappedField);
-                    let detail = ann
-                        .omission
-                        .as_ref()
-                        .and_then(|o| o.detail.clone())
-                        .unwrap_or_else(|| oxa_ir::PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL.into());
-                    losses.push(Loss {
-                        path: format!("system[{index}].native[{ann_idx}]"),
-                        field,
-                        reason,
-                        detail,
-                    });
+                    losses.extend(oxa_ir::breakpoint_translation_losses(
+                        &ann.value,
+                        &format!("system[{index}].native[{ann_idx}]"),
+                    ));
                 }
             }
         }
@@ -704,6 +695,22 @@ pub fn encode_request(req: &IrRequest, config: &Config) -> Result<(Request, Vec<
                 "",
             ));
         }
+        if params.logprobs.is_some() {
+            losses.push(loss(
+                "params.logprobs",
+                "logprobs",
+                LossReason::UnmappedField,
+                "Anthropic Messages has no log-probability sampling parameter",
+            ));
+        }
+        if params.top_logprobs.is_some() {
+            losses.push(loss(
+                "params.top_logprobs",
+                "top_logprobs",
+                LossReason::UnmappedField,
+                "Anthropic Messages has no log-probability sampling parameter",
+            ));
+        }
         out.stop_sequences = params
             .stop_sequences
             .clone()
@@ -859,27 +866,10 @@ fn encode_request_blocks(
             if ann.source == oxa_ir::NATIVE_SOURCE_OPENAI
                 && ann.kind == oxa_ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
             {
-                let field = ann
-                    .omission
-                    .as_ref()
-                    .map(|o| o.field.clone())
-                    .unwrap_or_else(|| "prompt_cache_breakpoint".into());
-                let reason = ann
-                    .omission
-                    .as_ref()
-                    .map(|o| o.reason)
-                    .unwrap_or(LossReason::UnmappedField);
-                let detail = ann
-                    .omission
-                    .as_ref()
-                    .and_then(|o| o.detail.clone())
-                    .unwrap_or_else(|| oxa_ir::PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL.into());
-                losses.push(Loss {
-                    path: format!("{path}[{index}].native[{ann_idx}]"),
-                    field,
-                    reason,
-                    detail,
-                });
+                losses.extend(oxa_ir::breakpoint_translation_losses(
+                    &ann.value,
+                    &format!("{path}[{index}].native[{ann_idx}]"),
+                ));
             }
         }
     }
@@ -1079,6 +1069,75 @@ fn encode_request_block(block: &Block, path: &str) -> Result<(BlockWire, Vec<Los
                 }
             }
         }
+        Block::ServerToolUse {
+            id,
+            name,
+            input,
+            caller,
+            ..
+        } => {
+            if id.is_empty() {
+                return Err(Error::new(format!("anthropic: {path}.id is required")));
+            }
+            if name != "web_search" {
+                return Err(Error::new(format!(
+                    "anthropic: {path}.name must be \"web_search\""
+                )));
+            }
+            let input_value = serde_json::value::RawValue::from_string(input.clone())
+                .map_err(|e| Error::new(format!("anthropic: {path}.input: {e}")))?;
+            let mut wire = BlockWire {
+                kind: "server_tool_use".to_string(),
+                id: id.clone(),
+                name: name.clone(),
+                input: Some(input_value),
+                ..BlockWire::default()
+            };
+            if let Some(caller) = caller {
+                wire.caller = Some(
+                    serde_json::from_str(caller)
+                        .map_err(|e| Error::new(format!("anthropic: {path}.caller: {e}")))?,
+                );
+            }
+            Ok((wire, Vec::new(), true))
+        }
+        Block::WebSearchToolResult {
+            tool_use_id,
+            content,
+            caller,
+            ..
+        } => {
+            if tool_use_id.is_empty() {
+                return Err(Error::new(format!(
+                    "anthropic: {path}.tool_use_id is required"
+                )));
+            }
+            let content_value: serde_json::Value = serde_json::from_str(content)
+                .map_err(|e| Error::new(format!("anthropic: {path}.content: {e}")))?;
+            let mut wire = BlockWire {
+                kind: "web_search_tool_result".to_string(),
+                tool_use_id: tool_use_id.clone(),
+                content: Some(ContentValue::Json(content_value)),
+                ..BlockWire::default()
+            };
+            if let Some(caller) = caller {
+                wire.caller = Some(
+                    serde_json::from_str(caller)
+                        .map_err(|e| Error::new(format!("anthropic: {path}.caller: {e}")))?,
+                );
+            }
+            Ok((wire, Vec::new(), true))
+        }
+        Block::CompactionItem { .. } => Ok((
+            BlockWire::default(),
+            vec![loss(
+                path,
+                "type",
+                LossReason::UnsupportedSemantic,
+                oxa_ir::COMPACTION_ITEM_LOSS_DETAIL,
+            )],
+            false,
+        )),
         Block::WebSearchCall { .. }
         | Block::ApplyPatchToolUse { .. }
         | Block::ApplyPatchToolResult { .. } => Ok((
@@ -1391,6 +1450,7 @@ fn encode_tool_result_block(
                 text,
                 native,
                 citations,
+                ..
             } => {
                 if citations.as_ref().is_some_and(|c| !c.is_empty()) {
                     return Err(Error::new(format!(
@@ -1711,6 +1771,65 @@ fn encode_response_block(block: &Block, path: &str) -> Result<(BlockWire, Vec<Lo
             ))
         }
         Block::Refusal { .. } => Ok((BlockWire::default(), Vec::new(), false)),
+        Block::ServerToolUse {
+            id,
+            name,
+            input,
+            caller,
+            ..
+        } => {
+            if id.is_empty() {
+                return Err(Error::new(format!("anthropic: {path}.id is required")));
+            }
+            if name != "web_search" {
+                return Err(Error::new(format!(
+                    "anthropic: {path}.name must be \"web_search\""
+                )));
+            }
+            let input_value = RawValue::from_string(input.clone())
+                .map_err(|e| Error::new(format!("anthropic: {path}.input: {e}")))?;
+            let mut wire = BlockWire {
+                kind: "server_tool_use".to_string(),
+                id: id.clone(),
+                name: name.clone(),
+                input: Some(input_value),
+                ..BlockWire::default()
+            };
+            if let Some(caller) = caller {
+                wire.caller = Some(
+                    serde_json::from_str(caller)
+                        .map_err(|e| Error::new(format!("anthropic: {path}.caller: {e}")))?,
+                );
+            }
+            Ok((wire, Vec::new(), true))
+        }
+        Block::WebSearchToolResult {
+            tool_use_id,
+            content,
+            caller,
+            ..
+        } => {
+            if tool_use_id.is_empty() {
+                return Err(Error::new(format!(
+                    "anthropic: {path}.tool_use_id is required"
+                )));
+            }
+            let content_value: serde_json::Value = serde_json::from_str(content)
+                .map_err(|e| Error::new(format!("anthropic: {path}.content: {e}")))?;
+            let mut wire = BlockWire {
+                kind: "web_search_tool_result".to_string(),
+                tool_use_id: tool_use_id.clone(),
+                content: Some(ContentValue::Json(content_value)),
+                ..BlockWire::default()
+            };
+            if let Some(caller) = caller {
+                wire.caller = Some(
+                    serde_json::from_str(caller)
+                        .map_err(|e| Error::new(format!("anthropic: {path}.caller: {e}")))?,
+                );
+            }
+            Ok((wire, Vec::new(), true))
+        }
         _ => Ok((
             BlockWire::default(),
             vec![unsupported_block_loss(

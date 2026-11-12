@@ -139,6 +139,7 @@ fn stream_decoder_maps_reasoning_before_text_and_keeps_usage_details() {
             Event::ContentBlockStart {
                 index: 1,
                 block: Block::Text {
+                    logprobs: None,
                     text: String::new(),
                     citations: None,
                     native: Vec::new(),
@@ -349,6 +350,7 @@ fn stream_decoder_happy_path() {
         Event::ContentBlockStart {
             index: 0,
             block: Block::Text {
+                logprobs: None,
                 text: String::new(),
                 citations: None,
                 native: Vec::new(),
@@ -452,6 +454,7 @@ fn stream_encoder_happy_path() {
         .apply(&Event::ContentBlockStart {
             index: 0,
             block: Block::Text {
+                logprobs: None,
                 text: String::new(),
                 citations: None,
                 native: Vec::new(),
@@ -522,6 +525,7 @@ fn stream_encoder_ordering_degrade_loss() {
     e.apply(&Event::ContentBlockStart {
         index: 1,
         block: Block::Text {
+            logprobs: None,
             text: String::new(),
             citations: None,
             native: Vec::new(),

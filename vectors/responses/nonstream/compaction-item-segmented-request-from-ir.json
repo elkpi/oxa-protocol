@@ -1,0 +1,110 @@
+{
+  "name": "responses.nonstream.compaction-item-segmented-request-from-ir",
+  "description": "A compaction checkpoint after an assistant message that is segmented by a positional tool change still renders at that message boundary (N-R-22).",
+  "spec_version": "0.3.0",
+  "mode": "nonstream",
+  "conversion": "from-ir",
+  "source": {
+    "protocol": "responses"
+  },
+  "target": {
+    "protocol": "responses"
+  },
+  "input": {
+    "specVersion": "0.3.0",
+    "model": "gpt-5.4",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "hi"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "answer"
+          },
+          {
+            "type": "text",
+            "text": "second"
+          }
+        ]
+      }
+    ],
+    "tool_change_groups": [
+      {
+        "message_index": 1,
+        "content_index": 1,
+        "parts": [
+          {
+            "type": "tool_change",
+            "change": {
+              "op": "add",
+              "tool": {
+                "name": "g",
+                "input_schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "compaction_items": [
+      {
+        "encrypted_content": "cipher",
+        "id": "cmp_1",
+        "after_message": 1
+      }
+    ]
+  },
+  "expected_output": {
+    "model": "gpt-5.4",
+    "input": [
+      {
+        "role": "user",
+        "content": "hi"
+      },
+      {
+        "role": "assistant",
+        "content": "answer"
+      },
+      {
+        "type": "additional_tools",
+        "role": "developer",
+        "tools": [
+          {
+            "type": "function",
+            "name": "g",
+            "parameters": {
+              "type": "object"
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": "second"
+      },
+      {
+        "type": "compaction",
+        "id": "cmp_1",
+        "encrypted_content": "cipher"
+      }
+    ]
+  },
+  "expected_losses": [],
+  "tags": [
+    "request",
+    "compaction",
+    "n-r-22",
+    "segmented"
+  ]
+}

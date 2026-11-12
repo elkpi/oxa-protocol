@@ -15,18 +15,21 @@ type Block interface {
 }
 
 const (
-	BlockTypeText             = "text"
-	BlockTypeImage            = "image"
-	BlockTypeToolUse          = "tool_use"
-	BlockTypeToolResult       = "tool_result"
-	BlockTypeThinking         = "thinking"
-	BlockTypeRedactedThinking = "redacted_thinking"
-	BlockTypeEncryptedContent = "encrypted_content"
-	BlockTypeDocument         = "document"
-	BlockTypeWebSearchCall    = "web_search_call"
-	BlockTypeRefusal          = "refusal"
-	BlockTypeToolReference    = "tool_reference"
-	BlockTypeCompaction       = "compaction"
+	BlockTypeText                = "text"
+	BlockTypeImage               = "image"
+	BlockTypeToolUse             = "tool_use"
+	BlockTypeToolResult          = "tool_result"
+	BlockTypeThinking            = "thinking"
+	BlockTypeRedactedThinking    = "redacted_thinking"
+	BlockTypeEncryptedContent    = "encrypted_content"
+	BlockTypeDocument            = "document"
+	BlockTypeWebSearchCall       = "web_search_call"
+	BlockTypeRefusal             = "refusal"
+	BlockTypeToolReference       = "tool_reference"
+	BlockTypeCompaction          = "compaction"
+	BlockTypeCompactionItem      = "compaction_item"
+	BlockTypeServerToolUse       = "server_tool_use"
+	BlockTypeWebSearchToolResult = "web_search_tool_result"
 )
 
 // Citation sources.
@@ -46,6 +49,8 @@ type TextBlock struct {
 	Text      string
 	Citations []TextCitation
 	Native    []NativeAnnotation
+	// Logprobs is a raw JSON array of token logprob objects (since 3.3.0).
+	Logprobs string
 }
 
 // RedactedThinkingBlock is Anthropic encrypted thinking replay state (since 2.4.11).
@@ -109,6 +114,55 @@ type ToolReferenceBlock struct {
 }
 
 func (ToolReferenceBlock) isBlock() {}
+
+// CompactionItemBlock is a Responses compaction checkpoint (since 3.3.0).
+// EncryptedContent is opaque provider ciphertext and MUST NOT be logged,
+// decoded, or copied into a loss detail. It is not an Anthropic CompactionBlock.
+type CompactionItemBlock struct {
+	EncryptedContent string
+	ID               string
+	CreatedBy        string
+}
+
+func (CompactionItemBlock) isBlock() {}
+
+func (CompactionItemBlock) String() string { return "[CompactionItemBlock]" }
+
+func (c CompactionItemBlock) GoString() string {
+	return "ir.CompactionItemBlock{EncryptedContent: [REDACTED]}"
+}
+
+// CompactionItemLossDetail is the cross-face omission text for a Responses
+// compaction checkpoint. It MUST NOT contain the ciphertext.
+const CompactionItemLossDetail = "Responses compaction item cannot be represented on the target face"
+
+// ServerToolUseBlock is an Anthropic server-executed web_search call (since 3.3.0).
+// Input is the raw JSON object text (INV-1). Only name "web_search" is mapped.
+type ServerToolUseBlock struct {
+	ID     string
+	Name   string
+	Input  json.RawMessage
+	Caller json.RawMessage
+	Native []NativeAnnotation
+}
+
+func (ServerToolUseBlock) isBlock() {}
+
+// WebSearchToolResultBlock is the Anthropic web_search result paired with a
+// ServerToolUseBlock (since 3.3.0). Content is the raw JSON array or error
+// object and MUST NOT be parsed or copied into a loss detail.
+type WebSearchToolResultBlock struct {
+	ToolUseID string
+	Content   json.RawMessage
+	Caller    json.RawMessage
+	Native    []NativeAnnotation
+}
+
+func (WebSearchToolResultBlock) isBlock() {}
+
+// WebSearchHistoryLossDetail is the cross-face omission text for Anthropic
+// web_search history. It MUST NOT contain result ciphertext.
+const WebSearchHistoryLossDetail = "Anthropic web_search history cannot be represented on the target face"
 
 // CompactionBlock represents a server compaction summary block placed as the first
 // block of Messages[0] (spec/01 s3.4, since 0.3.0).

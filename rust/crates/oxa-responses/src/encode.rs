@@ -146,6 +146,19 @@ pub fn encode_request(req: &IrRequest, config: &Config) -> Result<(Request, Vec<
     out.parallel_tool_calls = parallel_tool_calls;
 
     let mut items = leading_system_items;
+    for (i, item) in req.compaction_items.iter().enumerate() {
+        if item.encrypted_content.is_empty() {
+            return Err(Error::new(
+                "responses: compaction item encrypted_content is required",
+            ));
+        }
+        if item.after_message < -1 || item.after_message >= req.messages.len() as isize {
+            return Err(Error::new(format!(
+                "responses: compaction_items[{i}].after_message is out of range"
+            )));
+        }
+    }
+    append_compaction_items(&mut items, req, -1);
     for group in &req.tool_change_groups {
         if group.message_index > req.messages.len()
             || group.content_index < -1
@@ -186,6 +199,7 @@ pub fn encode_request(req: &IrRequest, config: &Config) -> Result<(Request, Vec<
                 &mut losses,
             );
         }
+        append_compaction_items(&mut items, req, index as isize);
     }
     if req.system.is_empty()
         && let [item] = items.as_slice()
@@ -201,6 +215,28 @@ pub fn encode_request(req: &IrRequest, config: &Config) -> Result<(Request, Vec<
         out.temperature = params.temperature;
         out.top_p = params.top_p;
         out.max_output_tokens = params.max_tokens;
+        let mut send_top = params.top_logprobs;
+        if let Some(enabled) = params.logprobs {
+            if enabled {
+                if send_top.is_none() {
+                    losses.push(loss(
+                        "params.logprobs",
+                        "logprobs",
+                        LossReason::UnmappedField,
+                        "Responses has no logprobs boolean; top_logprobs is the sampling switch",
+                    ));
+                }
+            } else {
+                send_top = None;
+                losses.push(loss(
+                    "params.logprobs",
+                    "logprobs",
+                    LossReason::UnmappedField,
+                    "Responses has no logprobs boolean; explicit false is dropped",
+                ));
+            }
+        }
+        out.top_logprobs = send_top;
         out.reasoning = params.reasoning_effort.map(|effort| {
             let effort = match effort {
                 ReasoningEffort::Minimal => "minimal",
@@ -292,6 +328,12 @@ pub fn encode_request(req: &IrRequest, config: &Config) -> Result<(Request, Vec<
             } else if let Ok(val) = serde_json::from_str::<serde_json::Value>(&n.value) {
                 out.prompt_cache_options = Some(val);
             }
+        } else if n.source == "openai"
+            && n.kind == oxa_ir::NATIVE_KIND_CONTEXT_MANAGEMENT
+            && let Ok(serde_json::Value::Array(entries)) =
+                serde_json::from_str::<serde_json::Value>(&n.value)
+        {
+            out.context_management = entries;
         }
     }
     let omission_losses = oxa_ir::omitted_native_request_losses(req, "responses")
@@ -321,11 +363,13 @@ pub fn encode_response(resp: &IrResponse, config: &Config) -> Result<(Response, 
     let mut apc_index = 0usize;
     let mut apco_index = 0usize;
     let mut refusal_msg = None;
+    let mut compaction_items: Vec<OutputItem> = Vec::new();
     for (index, block) in resp.content.iter().enumerate() {
         match block {
             Block::Text {
                 text: value,
                 citations,
+                logprobs,
                 ..
             } => {
                 let mut part_annotations: Vec<Value> = Vec::new();
@@ -375,6 +419,9 @@ pub fn encode_response(resp: &IrResponse, config: &Config) -> Result<(Response, 
                     kind: PART_TYPE_OUTPUT_TEXT.to_string(),
                     text: value.clone(),
                     annotations: part_annotations,
+                    logprobs: logprobs
+                        .as_ref()
+                        .and_then(|text| serde_json::from_str(text).ok()),
                     ..Default::default()
                 });
             }
@@ -547,6 +594,32 @@ pub fn encode_response(resp: &IrResponse, config: &Config) -> Result<(Response, 
                     ..OutputItem::default()
                 });
             }
+            Block::ServerToolUse { .. } | Block::WebSearchToolResult { .. } => {
+                losses.push(loss(
+                    format!("content[{index}]"),
+                    "type",
+                    LossReason::UnsupportedSemantic,
+                    oxa_ir::WEB_SEARCH_HISTORY_LOSS_DETAIL,
+                ));
+            }
+            Block::CompactionItem {
+                encrypted_content,
+                id,
+                created_by,
+            } => {
+                if encrypted_content.is_empty() {
+                    return Err(Error::new(
+                        "responses: content encrypted_content is required",
+                    ));
+                }
+                compaction_items.push(OutputItem {
+                    kind: crate::types::ITEM_TYPE_COMPACTION.to_string(),
+                    id: id.clone(),
+                    encrypted_content: encrypted_content.clone(),
+                    created_by: created_by.clone(),
+                    ..OutputItem::default()
+                });
+            }
             Block::Image { .. }
             | Block::ToolResult { .. }
             | Block::ToolReference { .. }
@@ -612,6 +685,9 @@ pub fn encode_response(resp: &IrResponse, config: &Config) -> Result<(Response, 
                 ..OutputItem::default()
             },
         );
+    }
+    for (offset, item) in compaction_items.into_iter().enumerate() {
+        output.insert(offset, item);
     }
     let (status, incomplete_details, error) = match resp.stop_reason {
         StopReason::EndTurn | StopReason::ToolUse => (STATUS_COMPLETED.to_string(), None, None),
@@ -841,6 +917,22 @@ fn build_nested_container(
         raw: Some(serde_json::Value::Object(obj)),
         ..ToolDef::default()
     })
+}
+
+fn append_compaction_items(items: &mut Vec<InputItem>, req: &oxa_ir::Request, after: isize) {
+    for item in req
+        .compaction_items
+        .iter()
+        .filter(|i| i.after_message == after)
+    {
+        items.push(InputItem {
+            kind: crate::types::ITEM_TYPE_COMPACTION.to_string(),
+            id: item.id.clone(),
+            encrypted_content: item.encrypted_content.clone(),
+            created_by: item.created_by.clone(),
+            ..InputItem::default()
+        });
+    }
 }
 
 fn encode_message_segment(
@@ -1154,15 +1246,7 @@ fn validate_usage(usage: &Usage) -> Result<(), Error> {
 
 fn system_block_breakpoint(block: &oxa_ir::SystemBlock) -> Option<serde_json::Value> {
     let oxa_ir::SystemBlock::Text { native, .. } = block;
-    for ann in native {
-        if ann.source == oxa_ir::NATIVE_SOURCE_OPENAI
-            && ann.kind == oxa_ir::NATIVE_KIND_PROMPT_CACHE_BREAKPOINT
-            && let Ok(v) = serde_json::from_str::<serde_json::Value>(&ann.value)
-        {
-            return Some(v);
-        }
-    }
-    None
+    oxa_ir::openai_breakpoint_wire(native)
 }
 
 fn encode_system_instructions(

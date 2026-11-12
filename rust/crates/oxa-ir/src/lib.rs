@@ -37,15 +37,17 @@ pub use native::{
     NATIVE_KIND_STREAM_OPTIONS, NATIVE_KIND_THINKING_BUDGET, NATIVE_KIND_THINKING_DISPLAY,
     NATIVE_KIND_THINKING_MODE, NATIVE_KIND_TOP_K, NATIVE_SOURCE_ANTHROPIC, NATIVE_SOURCE_OPENAI,
     PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL, PROMPT_CACHE_KEY_LOSS_DETAIL,
-    PROMPT_CACHE_OPTIONS_LOSS_DETAIL, STREAM_OPTIONS_LOSS_DETAIL, fingerprint_losses,
-    omitted_native_request_losses, validate_native_request,
+    PROMPT_CACHE_OPTIONS_LOSS_DETAIL, RESPONSES_CONTEXT_MANAGEMENT_LOSS_DETAIL,
+    STREAM_OPTIONS_LOSS_DETAIL, breakpoint_translation_losses, fingerprint_losses,
+    omitted_native_request_losses, openai_breakpoint_wire, validate_native_request,
 };
 pub use raw_schema::{insert_schema_raw, raw_json_at, request_from_json, request_to_json};
 pub use request::{
-    ApplyPatchCallStatus, ApplyPatchOperation, ApplyPatchResultStatus, Block, CustomToolFormat,
-    CustomToolOutput, ENCRYPTED_CONTENT_LOSS_DETAIL, Message, NativeAnnotation, NativeOmission,
-    NativeProjection, Params, ReasoningEffort, Request, ResponseFormat, Role, SystemBlock,
-    TextCitation, Tool, ToolChange, ToolChangeGroup, ToolChangeOp, ToolChangePart, ToolChangeRef,
-    ToolChoice, ToolChoiceMode, ToolType,
+    ApplyPatchCallStatus, ApplyPatchOperation, ApplyPatchResultStatus, Block,
+    COMPACTION_ITEM_LOSS_DETAIL, CompactionItem, CustomToolFormat, CustomToolOutput,
+    ENCRYPTED_CONTENT_LOSS_DETAIL, Message, NativeAnnotation, NativeOmission, NativeProjection,
+    Params, ReasoningEffort, Request, ResponseFormat, Role, SystemBlock, TextCitation, Tool,
+    ToolChange, ToolChangeGroup, ToolChangeOp, ToolChangePart, ToolChangeRef, ToolChoice,
+    ToolChoiceMode, ToolType, WEB_SEARCH_HISTORY_LOSS_DETAIL,
 };
 pub use response::{InputTokensDetails, OutputTokensDetails, Response, StopReason, Usage};

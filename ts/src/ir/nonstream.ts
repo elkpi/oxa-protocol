@@ -93,6 +93,7 @@ import {
   type ToolResultBlock,
   type Usage,
   type NativeAnnotation,
+  type CompactionItem,
 } from "./types.js";
 import { validateNativeRequest } from "./native.js";
 
@@ -124,6 +125,19 @@ export function encodeRequest(request: Request): JsonObject {
           tool_change_groups: request.tool_change_groups.map(
             encodeToolChangeGroup,
           ),
+        }),
+    ...(request.compaction_items === undefined ||
+    request.compaction_items.length === 0
+      ? {}
+      : {
+          compaction_items: request.compaction_items.map((item) => ({
+            encrypted_content: item.encrypted_content,
+            ...(item.id === undefined || item.id === "" ? {} : { id: item.id }),
+            ...(item.created_by === undefined || item.created_by === ""
+              ? {}
+              : { created_by: item.created_by }),
+            after_message: integer(BigInt(item.after_message)),
+          })),
         }),
     ...(request.tools === undefined || request.tools.length === 0
       ? {}
@@ -522,6 +536,14 @@ export function decodeRequest(document: JsonValue): Request {
             decodeNativeAnnotation,
           ),
         }),
+    ...(root.compaction_items === undefined
+      ? {}
+      : {
+          compaction_items: array(
+            root.compaction_items,
+            "request.compaction_items",
+          ).map(decodeCompactionItem),
+        }),
   };
   validateRequest(request);
   return request;
@@ -530,6 +552,16 @@ export function decodeRequest(document: JsonValue): Request {
 /** Enforces request conversation invariants INV-2 through INV-4. */
 export function validateRequest(request: Request): void {
   validateNativeRequest(request);
+  for (let i = 0; i < (request.compaction_items?.length ?? 0); i += 1) {
+    const item = request.compaction_items![i]!;
+    if (item.encrypted_content === "")
+      invalid(`ir: compaction_items[${i}].encrypted_content is required`);
+    if (
+      item.after_message < -1 ||
+      item.after_message >= request.messages.length
+    )
+      invalid(`ir: compaction_items[${i}].after_message is out of range`);
+  }
   if (request.metadata !== undefined) {
     for (const key of Object.keys(request.metadata)) {
       if (key.length === 0) invalid("metadata key cannot be empty");
@@ -778,6 +810,32 @@ function encodeBlockBase(
   switch (block.type) {
     case "compaction":
       fail("compaction is only permitted in requests");
+    case "server_tool_use":
+      return {
+        type: "server_tool_use",
+        id: block.id,
+        name: "web_search",
+        input: block.input,
+        ...(block.caller === undefined ? {} : { caller: block.caller }),
+      };
+    case "web_search_tool_result":
+      return {
+        type: "web_search_tool_result",
+        tool_use_id: block.tool_use_id,
+        content: block.content,
+        ...(block.caller === undefined ? {} : { caller: block.caller }),
+      };
+    case "compaction_item":
+      if (block.encrypted_content === "")
+        fail("ir: compaction_item encrypted_content is required");
+      return {
+        type: "compaction_item",
+        encrypted_content: block.encrypted_content,
+        ...(block.id === undefined || block.id === "" ? {} : { id: block.id }),
+        ...(block.created_by === undefined || block.created_by === ""
+          ? {}
+          : { created_by: block.created_by }),
+      };
     case "text":
       return {
         type: "text",
@@ -976,9 +1034,9 @@ function decodeRequestBlock(value: JsonValue): Block {
   if (block.native !== undefined) {
     native = array(block.native, "block.native").map(decodeNativeAnnotation);
   }
-  if (base.type === "web_search_call") {
+  if (base.type === "web_search_call" || base.type === "compaction_item") {
     if (native !== undefined)
-      fail("web_search_call does not support native annotations");
+      fail(`${base.type} does not support native annotations`);
     return base;
   }
   return native ? { ...base, native } : base;
@@ -1155,6 +1213,41 @@ function decodeBlockBase(
           ? {}
           : { category: string(block.category, "block.category") }),
       };
+    case "server_tool_use":
+      return {
+        type: "server_tool_use",
+        id: nonEmptyString(block.id, "block.id"),
+        name: "web_search",
+        input: nonEmptyString(block.input, "block.input"),
+        ...(block.caller === undefined
+          ? {}
+          : { caller: nonEmptyString(block.caller, "block.caller") }),
+      };
+    case "web_search_tool_result":
+      return {
+        type: "web_search_tool_result",
+        tool_use_id: nonEmptyString(block.tool_use_id, "block.tool_use_id"),
+        content: nonEmptyString(block.content, "block.content"),
+        ...(block.caller === undefined
+          ? {}
+          : { caller: nonEmptyString(block.caller, "block.caller") }),
+      };
+    case "compaction_item":
+      return {
+        type: "compaction_item",
+        encrypted_content: nonEmptyString(
+          block.encrypted_content,
+          "block.encrypted_content",
+        ),
+        ...(block.id === undefined
+          ? {}
+          : { id: nonEmptyString(block.id, "block.id") }),
+        ...(block.created_by === undefined
+          ? {}
+          : {
+              created_by: nonEmptyString(block.created_by, "block.created_by"),
+            }),
+      };
     default:
       fail("unsupported IR block type");
   }
@@ -1264,6 +1357,10 @@ function encodeParams(params: Params): JsonObject {
       ? {}
       : { reasoning_effort: params.reasoning_effort }),
     ...(params.verbosity === undefined ? {} : { verbosity: params.verbosity }),
+    ...(params.logprobs === undefined ? {} : { logprobs: params.logprobs }),
+    ...(params.top_logprobs === undefined
+      ? {}
+      : { top_logprobs: integer(params.top_logprobs) }),
     ...(params.response_format === undefined
       ? {}
       : { response_format: encodeResponseFormat(params.response_format) }),
@@ -1381,6 +1478,14 @@ function decodeParams(value: JsonValue): Params {
     ...(params.verbosity === undefined
       ? {}
       : { verbosity: parseVerbosity(params.verbosity) }),
+    ...(params.logprobs === undefined
+      ? {}
+      : { logprobs: params.logprobs === true }),
+    ...(params.top_logprobs === undefined
+      ? {}
+      : {
+          top_logprobs: token(params.top_logprobs, "params.top_logprobs"),
+        }),
     ...(params.response_format === undefined
       ? {}
       : {
@@ -1402,6 +1507,8 @@ function paramsSet(params: Params): boolean {
     (params.stop_sequences !== undefined && params.stop_sequences.length > 0) ||
     params.reasoning_effort !== undefined ||
     params.verbosity !== undefined ||
+    params.logprobs !== undefined ||
+    params.top_logprobs !== undefined ||
     params.response_format !== undefined
   );
 }
@@ -1591,6 +1698,40 @@ function object(value: JsonValue | undefined, name: string): JsonObject {
   )
     fail(`${name} must be an object`);
   return value;
+}
+
+function decodeCompactionItem(value: JsonValue): CompactionItem {
+  const item = object(value, "compaction_item");
+  const after = signedInteger(
+    item.after_message,
+    "compaction_item.after_message",
+  );
+  return {
+    encrypted_content: nonEmptyString(
+      item.encrypted_content,
+      "compaction_item.encrypted_content",
+    ),
+    ...(item.id === undefined
+      ? {}
+      : { id: nonEmptyString(item.id, "compaction_item.id") }),
+    ...(item.created_by === undefined
+      ? {}
+      : {
+          created_by: nonEmptyString(
+            item.created_by,
+            "compaction_item.created_by",
+          ),
+        }),
+    after_message: after,
+  };
+}
+
+function signedInteger(value: JsonValue | undefined, name: string): number {
+  if (!isJsonNumber(value) || !value.isInteger)
+    fail(`${name} must be an integer`);
+  const result = Number(value.token);
+  if (!Number.isSafeInteger(result)) fail(`${name} must be an integer`);
+  return result;
 }
 
 function string(value: JsonValue | undefined, name: string): string {

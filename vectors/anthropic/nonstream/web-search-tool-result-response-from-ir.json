@@ -1,0 +1,54 @@
+{
+  "name": "anthropic.nonstream.web-search-tool-result-response-from-ir",
+  "description": "IR server_tool_use and web_search_tool_result blocks encode back into an Anthropic response (N-AN-23).",
+  "spec_version": "0.2.0",
+  "mode": "nonstream",
+  "conversion": "from-ir",
+  "source": {"protocol": "anthropic"},
+  "target": {"protocol": "anthropic"},
+  "input": {
+    "specVersion": "0.2.0",
+    "id": "msg_1",
+    "model": "claude-opus-5-5",
+    "content": [
+      {
+        "type": "server_tool_use",
+        "id": "srvtoolu_2",
+        "name": "web_search",
+        "input": "{\"query\":\"news\"}"
+      },
+      {
+        "type": "web_search_tool_result",
+        "tool_use_id": "srvtoolu_2",
+        "content": "{\"error_code\":\"max_uses_exceeded\",\"type\":\"web_search_tool_result_error\"}"
+      },
+      {"type": "text", "text": "done"}
+    ],
+    "stop_reason": "end_turn",
+    "usage": {"input_tokens": 1, "output_tokens": 2}
+  },
+  "expected_output": {
+    "id": "msg_1",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-opus-5-5",
+    "content": [
+      {
+        "type": "server_tool_use",
+        "id": "srvtoolu_2",
+        "name": "web_search",
+        "input": {"query": "news"}
+      },
+      {
+        "type": "web_search_tool_result",
+        "tool_use_id": "srvtoolu_2",
+        "content": {"error_code": "max_uses_exceeded", "type": "web_search_tool_result_error"}
+      },
+      {"type": "text", "text": "done"}
+    ],
+    "stop_reason": "end_turn",
+    "usage": {"input_tokens": 1, "output_tokens": 2}
+  },
+  "expected_losses": [],
+  "tags": ["response", "web-search-history", "n-an-23"]
+}

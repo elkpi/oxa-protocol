@@ -36,7 +36,7 @@ Status: normative. 扩展 spec/01、spec/02、spec/10、spec/11、spec/12；IR c
 | `Request` | `thinking_display` | `thinking.display`（`summarized` / `omitted` / `updates`） |
 | `Request` | `output_effort` | `output_config.effort`（`low` / `medium` / `high` / `xhigh` / `max`） |
 | `Request` | `cache_control` | 顶层 `cache_control` |
-| `Request` | `context_management` | 顶层 `context_management.edits` |
+| `Request` | `context_management` | 顶层 `context_management.edits`（Anthropic）或 `context_management[]`（Responses，spec/11 N-R-23） |
 | `Request` | `top_k` | 顶层 `top_k`（非负安全整数，2.4.11） |
 | `Request` | `disable_parallel_tool_use` | `tool_choice.disable_parallel_tool_use`（`true` / `false`，2.4.11） |
 | `SystemBlock` | `cache_control` | `system[i].cache_control` |
@@ -84,14 +84,20 @@ Status: normative. 扩展 spec/01、spec/02、spec/10、spec/11、spec/12；IR c
 - 可选 `ttl` 仅支持 `"5m"` 与 `"1h"`。
 - 未知 `type` 或未知 `ttl` 取值：放弃该断点（不生成 `cache_control` 附加项），产生一条定位到该未知 leaf 的 `unmapped-value` loss；MUST NOT 删除未知 TTL 后采用默认五分钟 TTL。
 
-- 跨面遗漏 `detail`：当携带 `cache_control` 附加项的 IR 编码至无 cache 断点表示的目标面（OpenAI Chat Completions、OpenAI Responses）时，该 `unmapped-field` 遗漏的 `detail` 必须为 `anthropic-native cache breakpoint; the target face has no cache_control representation`，跨实现逐字节一致。该 detail 表达的是能力缺口（capability gap，目标面不可表达），而非实现缺失；调用方可据此按意图放行该类遗漏。
+- 显式断点跨面（规范 3.3.0）：Anthropic 的 `cache_control` 与 OpenAI 的 `prompt_cache_breakpoint` 都表示“该宿主上存在一个显式缓存断点”，两者可在同一宿主上互相映射。
+  - 可承载宿主：`SystemBlock`；非 `tool_result` 的 user 内容块（`TextBlock`、`ImageBlock`、`DocumentBlock`）。目标面在对应 wire 位置能表达断点时，映射为对端标记（Anthropic `{"type":"ephemeral"}`，OpenAI `{"mode":"explicit"}`）。`type`、`ttl` 与 `mode` 的拼写差异逐项记 `unmapped-field`（`opaque-argument` 见 spec/02），MUST NOT 把 `ttl`/`mode` 折算成对端取值。
+  - 不可承载宿主：assistant 消息的文本内容（两个 OpenAI 面的 assistant 内容都是字符串）、`tool_result.content` 内的块、工具声明与顶层 request。这些位置的断点整项省略，记一条 `unmapped-field`，`field` 使用该注解的 omission field，`detail` 必须为 `anthropic-native cache breakpoint; the target face has no cache_control representation`，跨实现逐字节一致。该 detail 表达的是能力缺口，而非实现缺失。
+  - 反向（OpenAI → Anthropic）同理：`prompt_cache_breakpoint` 只在上述可承载宿主出现；映射为 `cache_control` 时 `mode` 与 `ttl` 记 `unmapped-field`。
 
 ### 3.3 Context Management
 - `edits` 数组项的 `type` 目前仅识别：
   - `"clear_tool_uses_20250919"`：可选参数 `trigger`（`{type:"input_tokens",value:int}`）、`keep`（`{type:"tool_uses",value:int}`）、`clear_at_least`（`{type:"input_tokens",value:int}`）、`exclude_tools`（`string[]`）、`clear_tool_inputs`（`boolean`）。
   - `"clear_thinking_20251015"`：可选参数 `keep`（`"all"` 或 `{type:"thinking_turns",value:int}`）。
+  - `"compact_20260112"`：可选参数 `trigger`（`{type:"input_tokens",value:int}`）、`pause_after_compaction`（`boolean`）。
 - 未知 edit `type`：跳过该项，产生针对该 edit 的 `unsupported-semantic` loss，不递归审计其子属性；其余合法 edits 正常保留。
 - 已知 edit 中的 trigger/keep 参数枚举值无法解释：跳过该 edit 并产生定位到该参数的 `unmapped-value` loss；MUST NOT 丢弃参数后执行默认策略。若所有 edits 均被跳过，则不生成 `context_management` 附加项。
+
+Anthropic `context_management.edits` 与 Responses `context_management[]` 是两套独立形状，即使用同一个 `kind: "context_management"` 也不得互相折算；按 `source` 区分：`anthropic` 的值是 `{"edits":[...]}` 对象，`openai` 的值是 `[{...}]` 数组。
 
 ### 3.4 Defer Loading（规范 2.4.7）
 - `defer_loading` 仅适用于普通或 custom 工具（function / custom 工具声明）。

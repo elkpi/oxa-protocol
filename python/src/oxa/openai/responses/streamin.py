@@ -30,6 +30,7 @@ from oxa.ir import (
     ThinkingBlock,
     ThinkingDelta,
     ToolUseBlock,
+    CompactionItemBlock,
     WebSearchCallBlock,
     Usage,
 )
@@ -272,7 +273,7 @@ class StreamDecoder:
                 self._custom_tool_call = _StreamCustomToolCall(call_id=call_id, name=name)
                 return []
 
-            if item_type == "web_search_call":
+            if item_type == "web_search_call" or item_type == "compaction":
                 return []
             self._skipped_item = True
             if item_type == ITEM_TYPE_FUNCTION_CALL_OUTPUT:
@@ -682,6 +683,18 @@ class StreamDecoder:
                 idx = self._next_block_index
                 self._next_block_index += 1
                 events.append(ContentBlockStart(index=idx, block=EncryptedContentBlock(data=item["encrypted_content"])))
+                events.append(ContentBlockStop(index=idx))
+            if self._item_type == "compaction":
+                cipher = item.get("encrypted_content")
+                if not isinstance(cipher, str) or not cipher:
+                    raise ValueError("responses: compaction item encrypted_content is required")
+                ident = item.get("id", "")
+                created = item.get("created_by", "")
+                if not isinstance(ident, str) or not isinstance(created, str):
+                    raise ValueError("responses: compaction id and created_by must be strings")
+                idx = self._next_block_index
+                self._next_block_index += 1
+                events.append(ContentBlockStart(index=idx, block=CompactionItemBlock(encrypted_content=cipher, id=ident, created_by=created)))
                 events.append(ContentBlockStop(index=idx))
             if self._item_type == "web_search_call":
                 from oxa.ir.web_search import inspect_web_search, validate_web_search_extra

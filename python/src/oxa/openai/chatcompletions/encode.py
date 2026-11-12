@@ -28,7 +28,7 @@ from oxa.ir import (
     ResponseFormatText,
     ToolResultBlock,
 )
-from oxa.ir.native import omitted_native_request_losses
+from oxa.ir.native import omitted_native_request_losses, openai_breakpoint
 from oxa.ir import (
     ROLE_ASSISTANT as IR_ROLE_ASSISTANT,
 )
@@ -65,6 +65,10 @@ def encode_request(
     from oxa.ir.codec import validate_tool_availability
     validate_tool_availability(req)
     losses: list[Loss] = []
+    from oxa.ir import COMPACTION_ITEM_LOSS_DETAIL
+
+    for index in range(len(req.compaction_items)):
+        losses.append(loss(f"compaction_items[{index}]", "type", LOSS_UNSUPPORTED_SEMANTIC, COMPACTION_ITEM_LOSS_DETAIL))
 
     model = req.model
     if table is not None:
@@ -174,11 +178,11 @@ def encode_request(
 
     if req.system:
         has_dev = any(getattr(block, "role", "") == "developer" for block in req.system)
-        has_pcb = any(any(n.source == "openai" and n.kind == "prompt_cache_breakpoint" for n in getattr(block, "native", ())) for block in req.system)
+        has_pcb = any(openai_breakpoint(getattr(block, "native", ())) is not None for block in req.system)
         if has_dev or has_pcb:
             for block in req.system:
                 role = ROLE_DEVELOPER if getattr(block, "role", "") == "developer" else ROLE_SYSTEM
-                pcb = next((json.loads(n.value) for n in getattr(block, "native", ()) if n.source == "openai" and n.kind == "prompt_cache_breakpoint"), None)
+                pcb = openai_breakpoint(getattr(block, "native", ()))
                 if pcb is not None:
                     out["messages"].append({
                         "role": role,
@@ -257,6 +261,12 @@ def encode_request(
             out["reasoning_effort"] = req.params.reasoning_effort
         if req.params.verbosity is not None:
             out["verbosity"] = req.params.verbosity
+        if req.params.logprobs is not None:
+            out["logprobs"] = req.params.logprobs
+        elif req.params.top_logprobs is not None:
+            out["logprobs"] = True
+        if req.params.top_logprobs is not None:
+            out["top_logprobs"] = req.params.top_logprobs
         if req.params.response_format is not None:
             rf = req.params.response_format
             if isinstance(rf, ResponseFormatJsonSchema) and not rf.name:

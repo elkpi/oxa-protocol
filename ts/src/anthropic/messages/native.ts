@@ -421,6 +421,75 @@ function parseContextManagement(
       if (valid) {
         validEdits.push(canonEdit);
       }
+    } else if (editType === "compact_20260112") {
+      for (const k of Object.keys(editObj)) {
+        if (k !== "type" && k !== "trigger" && k !== "pause_after_compaction") {
+          losses.push({
+            path: `${editPath}.${k}`,
+            field: k,
+            reason: "unmapped-field",
+          });
+        }
+      }
+      let valid = true;
+      const canonEdit: Record<string, JsonValue> = {
+        type: "compact_20260112",
+      };
+      if ("trigger" in editObj && editObj.trigger !== undefined) {
+        if (
+          typeof editObj.trigger === "object" &&
+          editObj.trigger !== null &&
+          !Array.isArray(editObj.trigger)
+        ) {
+          const trig = editObj.trigger as Record<string, JsonValue>;
+          for (const k of Object.keys(trig)) {
+            if (k !== "type" && k !== "value") {
+              losses.push({
+                path: `${editPath}.trigger.${k}`,
+                field: k,
+                reason: "unmapped-field",
+              });
+            }
+          }
+          if (trig.type !== "input_tokens") {
+            losses.push({
+              path: `${editPath}.trigger`,
+              field: "trigger",
+              reason: "unmapped-value",
+            });
+            valid = false;
+          } else {
+            canonEdit.trigger = {
+              type: "input_tokens",
+              ...(trig.value !== undefined
+                ? { value: trig.value as JsonValue }
+                : {}),
+            };
+          }
+        } else {
+          losses.push({
+            path: `${editPath}.trigger`,
+            field: "trigger",
+            reason: "unmapped-value",
+          });
+          valid = false;
+        }
+      }
+      if ("pause_after_compaction" in editObj) {
+        if (typeof editObj.pause_after_compaction !== "boolean") {
+          losses.push({
+            path: `${editPath}.pause_after_compaction`,
+            field: "pause_after_compaction",
+            reason: "unmapped-value",
+          });
+          valid = false;
+        } else {
+          canonEdit.pause_after_compaction = editObj.pause_after_compaction;
+        }
+      }
+      if (valid) {
+        validEdits.push(canonEdit);
+      }
     } else {
       losses.push({
         path: editPath,

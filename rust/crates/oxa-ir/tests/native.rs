@@ -26,6 +26,7 @@ fn test_native_portable_round_trip() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: "Hello".into(),
                 citations: None,
                 native: vec![NativeAnnotation {
@@ -73,6 +74,7 @@ fn test_native_portable_round_trip() {
             },
         ],
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
 
     let json_str = to_json(&req).expect("to_json");
@@ -95,6 +97,7 @@ fn test_validate_native_request() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: "hi".into(),
                 citations: None,
                 native: vec![],
@@ -121,6 +124,7 @@ fn test_validate_native_request() {
             },
         ],
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
 
     assert!(validate_native_request(&duplicate).is_err());
@@ -136,6 +140,7 @@ fn test_cache_control_omission_loss_detail() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: "hi".into(),
                 citations: None,
                 native: vec![NativeAnnotation {
@@ -157,13 +162,17 @@ fn test_cache_control_omission_loss_detail() {
         metadata: None,
         native: vec![],
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
 
     let losses = omitted_native_request_losses(&req, "chatcompletions").expect("losses");
     assert_eq!(losses.len(), 1);
-    assert_eq!(losses[0].field, "cache_control");
+    assert_eq!(losses[0].field, "type");
     assert_eq!(losses[0].reason, LossReason::UnmappedField);
-    assert_eq!(losses[0].detail, CACHE_CONTROL_LOSS_DETAIL);
+    assert_eq!(
+        losses[0].detail,
+        "cache_control.type is not represented by prompt_cache_breakpoint"
+    );
 
     let req_no_om = Request {
         model: "m".into(),
@@ -171,6 +180,7 @@ fn test_cache_control_omission_loss_detail() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: "hi".into(),
                 citations: None,
                 native: vec![NativeAnnotation {
@@ -188,13 +198,17 @@ fn test_cache_control_omission_loss_detail() {
         metadata: None,
         native: vec![],
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
     let losses_no_om =
         omitted_native_request_losses(&req_no_om, "chatcompletions").expect("losses");
     assert_eq!(losses_no_om.len(), 1);
-    assert_eq!(losses_no_om[0].field, "cache_control");
+    assert_eq!(losses_no_om[0].field, "type");
     assert_eq!(losses_no_om[0].reason, LossReason::UnmappedField);
-    assert_eq!(losses_no_om[0].detail, CACHE_CONTROL_LOSS_DETAIL);
+    assert_eq!(
+        losses_no_om[0].detail,
+        "cache_control.type is not represented by prompt_cache_breakpoint"
+    );
 
     let req_empty_detail = Request {
         model: "m".into(),
@@ -202,6 +216,7 @@ fn test_cache_control_omission_loss_detail() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: "hi".into(),
                 citations: None,
                 native: vec![NativeAnnotation {
@@ -223,11 +238,16 @@ fn test_cache_control_omission_loss_detail() {
         metadata: None,
         native: vec![],
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
     let losses_empty =
         omitted_native_request_losses(&req_empty_detail, "chatcompletions").expect("losses");
     assert_eq!(losses_empty.len(), 1);
-    assert_eq!(losses_empty[0].detail, CACHE_CONTROL_LOSS_DETAIL);
+    assert_eq!(losses_empty[0].field, "type");
+    assert_eq!(
+        losses_empty[0].detail,
+        "cache_control.type is not represented by prompt_cache_breakpoint"
+    );
 }
 
 #[test]
@@ -280,6 +300,7 @@ fn test_validate_native_request_new_kinds() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: "hi".into(),
                 citations: None,
                 native: vec![],
@@ -336,6 +357,7 @@ fn test_validate_native_request_new_kinds() {
             },
         ],
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
     assert!(validate_native_request(&req).is_ok());
 
@@ -370,6 +392,7 @@ fn test_prompt_cache_breakpoint_host_and_null_value() {
             metadata: None,
             native: vec![],
             tool_change_groups: Vec::new(),
+            compaction_items: Vec::new(),
         }
     }
 
@@ -385,6 +408,7 @@ fn test_prompt_cache_breakpoint_host_and_null_value() {
 
     // Null values are rejected (a JSON null is not an object).
     let null_req = breakpoint_req(Block::Text {
+        logprobs: None,
         text: "hi".into(),
         citations: None,
         native: vec![breakpoint_ann("null")],
@@ -429,6 +453,7 @@ fn test_validate_native_request_positional_and_compaction() {
             messages: vec![oxa_ir::Message {
                 role: oxa_ir::Role::User,
                 content: vec![Block::Text {
+                    logprobs: None,
                     text: "go".into(),
                     citations: None,
                     native: vec![],
@@ -440,6 +465,7 @@ fn test_validate_native_request_positional_and_compaction() {
             metadata: None,
             native: vec![],
             tool_change_groups: Vec::new(),
+            compaction_items: Vec::new(),
         }
     }
 

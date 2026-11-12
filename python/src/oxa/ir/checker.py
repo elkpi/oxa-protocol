@@ -27,6 +27,9 @@ from oxa.ir.types import (
     RedactedThinkingBlock,
     EncryptedContentBlock,
     ToolReferenceBlock,
+    CompactionItemBlock,
+    ServerToolUseBlock,
+    WebSearchToolResultBlock,
     WebSearchCallBlock,
     SignatureDelta,
     TextBlock,
@@ -125,7 +128,7 @@ def _validate_with(stream: EventStream, allow_synthesized: bool) -> None:
                     _OpenTool(input=event.block.input, fragments=[], fragment_count=0,
                               custom=isinstance(event.block, CustomToolUseBlock)),
                 )
-            elif isinstance(event.block, (ApplyPatchToolUseBlock, ApplyPatchToolResultBlock, WebSearchCallBlock, EncryptedContentBlock, ToolReferenceBlock)):
+            elif isinstance(event.block, (ApplyPatchToolUseBlock, ApplyPatchToolResultBlock, WebSearchCallBlock, EncryptedContentBlock, ToolReferenceBlock, CompactionItemBlock, ServerToolUseBlock, WebSearchToolResultBlock)):
                 open_block = (event.index, "atomic")
             else:
                 block_kind = getattr(event.block, "type", type(event.block).__name__)

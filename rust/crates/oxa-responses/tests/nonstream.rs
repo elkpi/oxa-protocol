@@ -47,6 +47,7 @@ fn encodes_tool_results_before_normal_user_content_and_reports_reordering() {
             role: Role::User,
             content: vec![
                 Block::Text {
+                    logprobs: None,
                     text: "Use the tool result.".to_string(),
                     citations: None,
                     native: Vec::new(),
@@ -54,6 +55,7 @@ fn encodes_tool_results_before_normal_user_content_and_reports_reordering() {
                 Block::ToolResult {
                     tool_use_id: "call_1".to_string(),
                     content: vec![Block::Text {
+                        logprobs: None,
                         text: "Sunny".to_string(),
                         citations: None,
                         native: Vec::new(),
@@ -73,10 +75,13 @@ fn encodes_tool_results_before_normal_user_content_and_reports_reordering() {
             reasoning_effort: None,
             verbosity: None,
             response_format: None,
+            logprobs: None,
+            top_logprobs: None,
         }),
         metadata: None,
         native: Vec::new(),
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
 
     let (wire, losses) = encode_request(&request, &Config::default()).expect("encode request");
@@ -308,6 +313,7 @@ fn encodes_reasoning_summary_and_usage_details() {
                 native: Vec::new(),
             },
             Block::Text {
+                logprobs: None,
                 text: "Answer.".to_string(),
                 citations: None,
                 native: Vec::new(),
@@ -385,6 +391,7 @@ fn encodes_refusal_with_the_required_empty_error_message() {
         id: "resp_1".to_string(),
         model: "gpt-4o-mini".to_string(),
         content: vec![Block::Text {
+            logprobs: None,
             text: "I cannot help with that.".to_string(),
             citations: None,
             native: Vec::new(),

@@ -21,6 +21,7 @@ const (
 	streamRedactedBlock
 	streamEncryptedBlock
 	streamWebSearchBlock
+	streamCompactionBlock
 )
 
 // streamOutputItem retains one native Responses output-item lifecycle. A message
@@ -51,6 +52,7 @@ type streamEncodeBlock struct {
 	applyPatchResult *ir.ApplyPatchToolResultBlock
 	citationLossSeen bool
 	webSearch        *OutputItem
+	compaction       *OutputItem
 }
 
 // StreamEncoder incrementally converts an IR event stream into OpenAI
@@ -154,6 +156,8 @@ func (e *StreamEncoder) Apply(ev ir.Event) ([]*StreamEvent, []ir.Loss, error) {
 			out, losses, err = e.startFunctionCallBlock(event.Index, block)
 		case ir.WebSearchCallBlock:
 			out, losses, err = e.startWebSearchBlock(event.Index, block)
+		case ir.CompactionItemBlock:
+			out, losses, err = e.startCompactionBlock(event.Index, block)
 		default:
 			return nil, nil, fmt.Errorf("responses: ContentBlockStart carries unsupported block %T", block)
 		}
@@ -198,6 +202,8 @@ func (e *StreamEncoder) Apply(ev ir.Event) ([]*StreamEvent, []ir.Loss, error) {
 			return nil, nil, fmt.Errorf("responses: EncryptedContentBlock received unexpected delta %T", event.Delta)
 		case streamWebSearchBlock:
 			return nil, nil, fmt.Errorf("responses: WebSearchCallBlock received unexpected delta %T", event.Delta)
+		case streamCompactionBlock:
+			return nil, nil, fmt.Errorf("responses: CompactionItemBlock received unexpected delta %T", event.Delta)
 		case streamReasoningOutputItem:
 			switch delta := event.Delta.(type) {
 			case ir.ThinkingDelta:
@@ -263,6 +269,8 @@ func (e *StreamEncoder) Apply(ev ir.Event) ([]*StreamEvent, []ir.Loss, error) {
 			return nil, nil, nil
 		case streamWebSearchBlock:
 			return e.stopWebSearchBlock()
+		case streamCompactionBlock:
+			return e.stopCompactionBlock()
 		case streamMessageOutputItem:
 			return e.stopTextBlock()
 		case streamReasoningOutputItem:
@@ -292,6 +300,8 @@ func (e *StreamEncoder) Apply(ev ir.Event) ([]*StreamEvent, []ir.Loss, error) {
 				out = append(out, e.closeReasoningItem())
 			case streamWebSearchBlock:
 				return nil, nil, fmt.Errorf("responses: MessageDelta before web_search_call block stop")
+			case streamCompactionBlock:
+				return nil, nil, fmt.Errorf("responses: MessageDelta before compaction block stop")
 			default:
 				return nil, nil, fmt.Errorf("responses: MessageDelta with an uncompleted function_call item")
 			}
@@ -702,6 +712,45 @@ func (e *StreamEncoder) stopWebSearchBlock() ([]*StreamEvent, []ir.Loss, error) 
 		return nil, nil, fmt.Errorf("responses: web_search_call stop without an active item")
 	}
 	done := *e.activeBlock.webSearch
+	e.completed = append(e.completed, done)
+	outputIndex := e.activeItem.outputIndex
+	e.activeItem = nil
+	e.activeBlock = nil
+	return []*StreamEvent{{Type: EventTypeResponseOutputItemDone, OutputIndex: outputIndex, Item: &done}}, nil, nil
+}
+
+func (e *StreamEncoder) startCompactionBlock(index int, block ir.CompactionItemBlock) ([]*StreamEvent, []ir.Loss, error) {
+	if block.EncryptedContent == "" {
+		return nil, nil, fmt.Errorf("responses: compaction item encrypted_content is required")
+	}
+	var out []*StreamEvent
+	if e.activeItem != nil {
+		switch e.activeItem.kind {
+		case streamMessageOutputItem:
+			out = append(out, e.closeMessageItem())
+		case streamReasoningOutputItem:
+			out = append(out, e.closeReasoningItem())
+		default:
+			return nil, nil, fmt.Errorf("responses: compaction cannot open before the active item completes")
+		}
+	}
+	id := block.ID
+	if id == "" {
+		id = "cmp_abc123"
+	}
+	wire := &OutputItem{Type: ItemTypeCompaction, ID: id, EncryptedContent: block.EncryptedContent, CreatedBy: block.CreatedBy}
+	e.activeItem = &streamOutputItem{kind: streamCompactionBlock, id: id, outputIndex: e.nextOutputIndex}
+	e.nextOutputIndex++
+	e.activeBlock = &streamEncodeBlock{index: index, kind: streamCompactionBlock, compaction: wire}
+	out = append(out, &StreamEvent{Type: EventTypeResponseOutputItemAdded, OutputIndex: e.activeItem.outputIndex, Item: wire})
+	return out, nil, nil
+}
+
+func (e *StreamEncoder) stopCompactionBlock() ([]*StreamEvent, []ir.Loss, error) {
+	if e.activeItem == nil || e.activeBlock == nil || e.activeBlock.compaction == nil {
+		return nil, nil, fmt.Errorf("responses: compaction stop without an active item")
+	}
+	done := *e.activeBlock.compaction
 	e.completed = append(e.completed, done)
 	outputIndex := e.activeItem.outputIndex
 	e.activeItem = nil

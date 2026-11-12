@@ -23,6 +23,10 @@ export const BLOCK_TYPE_APPLY_PATCH_TOOL_RESULT =
   "apply_patch_tool_result" as const;
 export const BLOCK_TYPE_REFUSAL = "refusal" as const;
 export const BLOCK_TYPE_TOOL_REFERENCE = "tool_reference" as const;
+export const BLOCK_TYPE_COMPACTION_ITEM = "compaction_item" as const;
+export const BLOCK_TYPE_SERVER_TOOL_USE = "server_tool_use" as const;
+export const BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT =
+  "web_search_tool_result" as const;
 
 // Tool choice modes (spec/01 §3.6)
 export const TOOL_CHOICE_AUTO = "auto" as const;

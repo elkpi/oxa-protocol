@@ -33,6 +33,9 @@ pub const NATIVE_SOURCE_OPENAI: &str = "openai";
 pub const CACHE_CONTROL_LOSS_DETAIL: &str =
     "anthropic-native cache breakpoint; the target face has no cache_control representation";
 
+pub const RESPONSES_CONTEXT_MANAGEMENT_LOSS_DETAIL: &str =
+    "Responses context_management has no equivalent on the target face";
+
 pub const PROMPT_CACHE_KEY_LOSS_DETAIL: &str =
     "Anthropic Messages has no prompt_cache_key parameter; prompt cache key is dropped";
 
@@ -633,12 +636,25 @@ fn validate_block_native(blk: &Block, host: HostType, path: &str) -> Result<(), 
             crate::validate_web_search_extra(extra)?;
             crate::inspect_web_search_call(id, status, action, path)?;
         }
+        Block::CompactionItem {
+            encrypted_content, ..
+        } => {
+            if encrypted_content.is_empty() {
+                return Err(Error::Custom(format!(
+                    "ir: {path}: compaction_item encrypted_content is required"
+                )));
+            }
+        }
         Block::Text { native, .. }
         | Block::Image { native, .. }
         | Block::Document { native, .. }
         | Block::ToolReference { native, .. }
         | Block::Refusal { native, .. }
-        | Block::Compaction { native, .. } => {
+        | Block::Compaction { native, .. }
+        | Block::ServerToolUse { native, .. } => {
+            validate_annotations(native, host, path)?;
+        }
+        Block::WebSearchToolResult { native, .. } => {
             validate_annotations(native, host, path)?;
         }
         Block::Thinking { native, .. }
@@ -706,6 +722,7 @@ pub fn omitted_native_request_losses(request: &Request, target: &str) -> Result<
             has_active_budget_proj,
             current_effort,
             target,
+            false,
         );
     }
 
@@ -719,6 +736,7 @@ pub fn omitted_native_request_losses(request: &Request, target: &str) -> Result<
                 false,
                 None,
                 target,
+                true,
             );
         }
     }
@@ -733,6 +751,7 @@ pub fn omitted_native_request_losses(request: &Request, target: &str) -> Result<
                 blk,
                 &format!("messages[{m_idx}].content[{c_idx}]"),
                 target,
+                msg.role == Role::User,
             );
         }
     }
@@ -747,6 +766,7 @@ pub fn omitted_native_request_losses(request: &Request, target: &str) -> Result<
                     false,
                     None,
                     target,
+                    false,
                 );
             }
         }
@@ -755,7 +775,13 @@ pub fn omitted_native_request_losses(request: &Request, target: &str) -> Result<
     Ok(losses)
 }
 
-fn collect_block_omissions(losses: &mut Vec<Loss>, blk: &Block, path: &str, target: &str) {
+fn collect_block_omissions(
+    losses: &mut Vec<Loss>,
+    blk: &Block,
+    path: &str,
+    target: &str,
+    breakpoint_host: bool,
+) {
     let (native, children) = match blk {
         Block::Text { native, .. }
         | Block::Thinking { native, .. }
@@ -783,6 +809,9 @@ fn collect_block_omissions(losses: &mut Vec<Loss>, blk: &Block, path: &str, targ
         Block::RedactedThinking { .. }
         | Block::EncryptedContent { .. }
         | Block::WebSearchCall { .. }
+        | Block::CompactionItem { .. }
+        | Block::ServerToolUse { .. }
+        | Block::WebSearchToolResult { .. }
         | Block::Compaction { .. } => {
             // Whole-block drop; annotations are part of it and are not reported a second time.
             static EMPTY: Vec<NativeAnnotation> = Vec::new();
@@ -805,6 +834,11 @@ fn collect_block_omissions(losses: &mut Vec<Loss>, blk: &Block, path: &str, targ
         }
     };
 
+    let breakpoint_host = breakpoint_host
+        && matches!(
+            blk,
+            Block::Text { .. } | Block::Image { .. } | Block::Document { .. }
+        );
     for (i, ann) in native.iter().enumerate() {
         append_omission_loss(
             losses,
@@ -813,6 +847,7 @@ fn collect_block_omissions(losses: &mut Vec<Loss>, blk: &Block, path: &str, targ
             false,
             None,
             target,
+            breakpoint_host,
         );
     }
 
@@ -821,7 +856,13 @@ fn collect_block_omissions(losses: &mut Vec<Loss>, blk: &Block, path: &str, targ
             if matches!(child, Block::Document { .. }) {
                 continue;
             }
-            collect_block_omissions(losses, child, &format!("{path}.content[{k}]"), target);
+            collect_block_omissions(
+                losses,
+                child,
+                &format!("{path}.content[{k}]"),
+                target,
+                false,
+            );
         }
     }
 }
@@ -833,6 +874,7 @@ fn append_omission_loss(
     has_active_budget_proj: bool,
     current_effort: Option<crate::request::ReasoningEffort>,
     target: &str,
+    breakpoint_host: bool,
 ) {
     if ann.source == NATIVE_SOURCE_OPENAI {
         match ann.kind.as_str() {
@@ -977,6 +1019,10 @@ fn append_omission_loss(
                 if target == "chatcompletions" || target == "responses" {
                     return;
                 }
+                if target == "anthropic" && breakpoint_host {
+                    losses.extend(breakpoint_translation_losses(&ann.value, path));
+                    return;
+                }
                 let (field, reason, detail) = if let Some(ref om) = ann.omission {
                     let f = if om.field.is_empty() {
                         "prompt_cache_breakpoint".to_string()
@@ -1081,6 +1127,10 @@ fn append_omission_loss(
             }
         }
         NATIVE_KIND_CACHE_CONTROL => {
+            if breakpoint_host && (target == "chatcompletions" || target == "responses") {
+                losses.extend(cache_control_translation_losses(&ann.value, path));
+                return;
+            }
             let (field, reason, detail) = if let Some(ref om) = ann.omission {
                 let f = if om.field.is_empty() {
                     "cache_control".to_string()
@@ -1237,4 +1287,62 @@ fn append_omission_loss(
             });
         }
     }
+}
+
+fn cache_control_translation_losses(value: &str, path: &str) -> Vec<Loss> {
+    let mut losses = vec![Loss {
+        path: path.into(),
+        field: "type".into(),
+        reason: LossReason::UnmappedField,
+        detail: "cache_control.type is not represented by prompt_cache_breakpoint".into(),
+    }];
+    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(value)
+        && parsed.get("ttl").is_some()
+    {
+        losses.push(Loss {
+            path: path.into(),
+            field: "ttl".into(),
+            reason: LossReason::UnmappedField,
+            detail: "cache_control.ttl has no equivalent prompt cache ttl".into(),
+        });
+    }
+    losses
+}
+
+pub fn breakpoint_translation_losses(value: &str, path: &str) -> Vec<Loss> {
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(value) else {
+        return Vec::new();
+    };
+    let mut losses = Vec::new();
+    if parsed.get("mode").is_some() {
+        losses.push(Loss {
+            path: path.into(),
+            field: "mode".into(),
+            reason: LossReason::UnmappedField,
+            detail: "prompt_cache_breakpoint.mode is not represented by cache_control".into(),
+        });
+    }
+    if parsed.get("ttl").is_some() {
+        losses.push(Loss {
+            path: path.into(),
+            field: "ttl".into(),
+            reason: LossReason::UnmappedField,
+            detail: "prompt_cache_breakpoint.ttl has no equivalent cache_control ttl".into(),
+        });
+    }
+    losses
+}
+
+pub fn openai_breakpoint_wire(native: &[NativeAnnotation]) -> Option<serde_json::Value> {
+    for ann in native {
+        if ann.source == NATIVE_SOURCE_OPENAI && ann.kind == NATIVE_KIND_PROMPT_CACHE_BREAKPOINT {
+            return serde_json::from_str(&ann.value).ok();
+        }
+    }
+    for ann in native {
+        if ann.source == NATIVE_SOURCE_ANTHROPIC && ann.kind == NATIVE_KIND_CACHE_CONTROL {
+            return Some(serde_json::json!({"mode": "explicit"}));
+        }
+    }
+    None
 }

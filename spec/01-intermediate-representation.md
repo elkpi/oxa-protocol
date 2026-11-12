@@ -51,7 +51,11 @@ Tool/ToolChoice。两类新块都可作为零 Delta 原子响应块；INV-3/4 �
   opaque strings (INV-1). A `ThinkingBlock`'s `signature` is carried
   verbatim with the same discipline: never validated or rewritten. By contrast,
   `tool.input_schema` is carried as a JSON object, verbatim; implementations
-  MUST NOT analyze or rewrite it.
+  MUST NOT analyze or rewrite it. Since 3.3.0 the same opaque-string discipline
+  applies to `text.logprobs` (a per-token array): it is canonical compact
+  JSON text (object keys in lexicographic order, no insignificant
+  whitespace), compared by exact string equality, never parsed for meaning
+  or copied into a loss detail.
   (Rationale: tool arguments arrive from all three faces as text fragments
   or strings and must concatenate without parsing; signatures are provider-specific
   opaque tokens; tool schemas arrive from all three faces as objects.)
@@ -73,6 +77,16 @@ A conversation to be sent to a model, face-neutral.
 | `Params` | `params` | `Params` | no | absent means all fields unset |
 | `Metadata` | `metadata` | `map[string]string` | no | string-to-string map. Since 2.5.0 the three faces map it: OpenAI round-trips every key; Anthropic round-trips only `user_id` |
 | `ToolChangeGroups` | `tool_change_groups` | `[]ToolChangeGroup` | no | ordered mid-conversation tool availability changes (since 0.3.0) |
+| `CompactionItems` | `compaction_items` | `[]CompactionItem` | no | Responses compaction checkpoints, placed relative to messages (since 3.3.0; spec/11 N-R-22). Not Anthropic `CompactionBlock`s |
+
+#### CompactionItem
+
+| Go field | JSON property | Type | Required | Notes |
+|----------|---------------|------|----------|-------|
+| `EncryptedContent` | `encrypted_content` | string | yes | non-empty opaque ciphertext; MUST NOT appear in a loss detail |
+| `ID` | `id` | string | no | omitted when empty |
+| `CreatedBy` | `created_by` | string | no | omitted when empty |
+| `AfterMessage` | `after_message` | integer | yes | `-1` places the item before every message; otherwise the message index it follows. Out of range is a structural error |
 
 ### 3.2 SystemBlock
 
@@ -112,8 +126,11 @@ A content block. Sealed; discriminated on the JSON `type` property:
 | `ApplyPatchToolResultBlock` | `apply_patch_tool_result` | 专用补丁结果：tool_use_id、结果状态与可选 output（2.3） |
 | `WebSearchCallBlock` | `web_search_call` | Responses 已完成或进行中的 web search 历史项（2.4.13，spec/11 N-R-16） |
 | `CompactionBlock` | `compaction` | Anthropic compaction summary block with tool changes and replay metadata (since 0.3.0, request-side only; mapping in spec/12 N-AN-22) |
+| `CompactionItemBlock` | `compaction_item` | Responses compaction checkpoint (since 3.3.0; spec/11 N-R-22). Opaque `encrypted_content`. Response content only as a block; request history uses `Request.CompactionItems` |
+| `ServerToolUseBlock` | `server_tool_use` | Anthropic provider-hosted web_search call in history (since 3.3.0; spec/12 N-AN-23). `input` is raw JSON text |
+| `WebSearchToolResultBlock` | `web_search_tool_result` | Anthropic web_search result paired with `ServerToolUseBlock` (since 3.3.0; spec/12 N-AN-23). `content` is raw JSON text and is opaque |
 
-Adding `DocumentBlock` (2.4.8), `RedactedThinkingBlock` (2.4.11), `WebSearchCallBlock` (2.4.13), `EncryptedContentBlock` (2.5.2), `ToolReferenceBlock` (2.5.3), and `CompactionBlock` (3.0.0 / IR 0.3.0) extends the sealed variant set. Consumers that exhaustively match on block variants MUST extend their matches to handle the new variants; per the versioning policy in [README](README.md) this additive change does not by itself require a major version bump, but the match extension is a REQUIRED migration for exhaustive consumers. The IR contract version is `0.3.0`.
+Adding `DocumentBlock` (2.4.8), `RedactedThinkingBlock` (2.4.11), `WebSearchCallBlock` (2.4.13), `EncryptedContentBlock` (2.5.2), `ToolReferenceBlock` (2.5.3), `CompactionBlock` (3.0.0 / IR 0.3.0), `CompactionItemBlock`, `ServerToolUseBlock`, and `WebSearchToolResultBlock` (3.3.0) extends the sealed variant set. Consumers that exhaustively match on block variants MUST extend their matches to handle the new variants; per the versioning policy in [README](README.md) this additive change does not by itself require a major version bump, but the match extension is a REQUIRED migration for exhaustive consumers. The IR contract version is `0.3.0`.
 
 #### TextBlock
 
@@ -121,6 +138,7 @@ Adding `DocumentBlock` (2.4.8), `RedactedThinkingBlock` (2.4.11), `WebSearchCall
 |----------|---------------|------|----------|-------|
 | `Text` | `text` | string | yes | text content |
 | `Citations` | `citations` | `[]TextCitation` | no | optional text citations (since 2.4.11); omitted when empty |
+| `Logprobs` | `logprobs` | string — canonical compact JSON text | no | per-token log-probability array for this output text, carried opaque (since 3.3.0; spec/11); output-side only |
 
 #### TextCitation
 
@@ -247,6 +265,8 @@ The exactly-one-of-three rule is enforced by the schema: a document carrying non
 | `ReasoningEffort` | `reasoning_effort` | enum `minimal` \| `low` \| `medium` \| `high` \| `xhigh` \| `max` | no | absent means unset; unknown inbound values are dropped with unmapped-value (since 2.0; xhigh and max since 2.4) |
 | `ResponseFormat` | `response_format` | `*ResponseFormat` | no | structured output formatting preference (since 2.1) |
 | `Verbosity` | `verbosity` | enum `low` \| `medium` \| `high` | no | output verbosity preference (since 2.5.0); absence means unset |
+| `Logprobs` | `logprobs` | `*bool` / boolean | no | request log-probability sampling switch (since 3.3.0); negative values are not applicable |
+| `TopLogprobs` | `top_logprobs` | `*int64` / integer ≥ 0 | no | number of alternatives per token (since 3.3.0); negative values are a structural error |
 
 ### 3.7.1 ResponseFormat
 

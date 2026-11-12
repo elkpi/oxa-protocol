@@ -24,6 +24,7 @@ type wireTextBlock struct {
 	Type      string             `json:"type"`
 	Text      string             `json:"text"`
 	Citations []wireTextCitation `json:"citations,omitempty"`
+	Logprobs  string             `json:"logprobs,omitempty"`
 }
 
 type wireRedactedThinkingBlock struct {
@@ -72,6 +73,10 @@ func hasNative(b Block) bool {
 	case RedactedThinkingBlock:
 		return len(v.Native) > 0
 	case EncryptedContentBlock:
+		return len(v.Native) > 0
+	case ServerToolUseBlock:
+		return len(v.Native) > 0
+	case WebSearchToolResultBlock:
 		return len(v.Native) > 0
 	case ToolReferenceBlock:
 		return len(v.Native) > 0
@@ -148,7 +153,7 @@ func MarshalBlock(b Block) (json.RawMessage, error) {
 		for _, c := range v.Citations {
 			cites = append(cites, wireTextCitation(c))
 		}
-		return json.Marshal(wireTextBlock{Type: BlockTypeText, Text: v.Text, Citations: cites})
+		return json.Marshal(wireTextBlock{Type: BlockTypeText, Text: v.Text, Citations: cites, Logprobs: v.Logprobs})
 	case ThinkingBlock:
 		return json.Marshal(wireThinkingBlock{
 			Type: BlockTypeThinking, Thinking: v.Thinking, Signature: v.Signature,
@@ -164,6 +169,37 @@ func MarshalBlock(b Block) (json.RawMessage, error) {
 		return json.Marshal(wireRedactedThinkingBlock{
 			Type: BlockTypeEncryptedContent, Data: v.Data,
 		})
+	case CompactionItemBlock:
+		if v.EncryptedContent == "" {
+			return nil, fmt.Errorf("ir: compaction_item encrypted_content is required")
+		}
+		return json.Marshal(struct {
+			Type             string `json:"type"`
+			EncryptedContent string `json:"encrypted_content"`
+			ID               string `json:"id,omitempty"`
+			CreatedBy        string `json:"created_by,omitempty"`
+		}{BlockTypeCompactionItem, v.EncryptedContent, v.ID, v.CreatedBy})
+	case ServerToolUseBlock:
+		if v.ID == "" || v.Name == "" || len(v.Input) == 0 {
+			return nil, fmt.Errorf("ir: server_tool_use requires id, name, and input")
+		}
+		return json.Marshal(struct {
+			Type   string          `json:"type"`
+			ID     string          `json:"id"`
+			Name   string          `json:"name"`
+			Input  json.RawMessage `json:"input"`
+			Caller json.RawMessage `json:"caller,omitempty"`
+		}{BlockTypeServerToolUse, v.ID, v.Name, v.Input, v.Caller})
+	case WebSearchToolResultBlock:
+		if v.ToolUseID == "" || len(v.Content) == 0 {
+			return nil, fmt.Errorf("ir: web_search_tool_result requires tool_use_id and content")
+		}
+		return json.Marshal(struct {
+			Type      string          `json:"type"`
+			ToolUseID string          `json:"tool_use_id"`
+			Content   json.RawMessage `json:"content"`
+			Caller    json.RawMessage `json:"caller,omitempty"`
+		}{BlockTypeWebSearchToolResult, v.ToolUseID, v.Content, v.Caller})
 	case ImageBlock:
 		return json.Marshal(wireImageBlock{
 			Type: BlockTypeImage, MediaType: v.MediaType, Data: v.Data, URL: v.URL,
@@ -276,7 +312,7 @@ func UnmarshalBlock(data []byte) (Block, error) {
 			}
 			cites = append(cites, TextCitation(c))
 		}
-		return TextBlock{Text: w.Text, Citations: cites}, nil
+		return TextBlock{Text: w.Text, Citations: cites, Logprobs: w.Logprobs}, nil
 	case BlockTypeThinking:
 		var w wireThinkingBlock
 		if err := json.Unmarshal(data, &w); err != nil {
@@ -298,6 +334,46 @@ func UnmarshalBlock(data []byte) (Block, error) {
 			return nil, fmt.Errorf("ir: encrypted_content data is required")
 		}
 		return EncryptedContentBlock{Data: w.Data}, nil
+	case BlockTypeCompactionItem:
+		var cw struct {
+			EncryptedContent string `json:"encrypted_content"`
+			ID               string `json:"id"`
+			CreatedBy        string `json:"created_by"`
+		}
+		if err := json.Unmarshal(data, &cw); err != nil {
+			return nil, err
+		}
+		if cw.EncryptedContent == "" {
+			return nil, fmt.Errorf("ir: compaction_item encrypted_content is required")
+		}
+		return CompactionItemBlock{EncryptedContent: cw.EncryptedContent, ID: cw.ID, CreatedBy: cw.CreatedBy}, nil
+	case BlockTypeServerToolUse:
+		var sw struct {
+			ID     string          `json:"id"`
+			Name   string          `json:"name"`
+			Input  json.RawMessage `json:"input"`
+			Caller json.RawMessage `json:"caller"`
+		}
+		if err := json.Unmarshal(data, &sw); err != nil {
+			return nil, err
+		}
+		if sw.ID == "" || sw.Name == "" || len(sw.Input) == 0 {
+			return nil, fmt.Errorf("ir: server_tool_use requires id, name, and input")
+		}
+		return ServerToolUseBlock{ID: sw.ID, Name: sw.Name, Input: sw.Input, Caller: sw.Caller}, nil
+	case BlockTypeWebSearchToolResult:
+		var ww struct {
+			ToolUseID string          `json:"tool_use_id"`
+			Content   json.RawMessage `json:"content"`
+			Caller    json.RawMessage `json:"caller"`
+		}
+		if err := json.Unmarshal(data, &ww); err != nil {
+			return nil, err
+		}
+		if ww.ToolUseID == "" || len(ww.Content) == 0 {
+			return nil, fmt.Errorf("ir: web_search_tool_result requires tool_use_id and content")
+		}
+		return WebSearchToolResultBlock{ToolUseID: ww.ToolUseID, Content: ww.Content, Caller: ww.Caller}, nil
 	case BlockTypeImage:
 		var w wireImageBlock
 		if err := json.Unmarshal(data, &w); err != nil {
@@ -457,8 +533,9 @@ func marshalRequestBlock(b Block) (json.RawMessage, error) {
 			Type      string             `json:"type"`
 			Text      string             `json:"text"`
 			Citations []wireTextCitation `json:"citations,omitempty"`
+			Logprobs  string             `json:"logprobs,omitempty"`
 			Native    []NativeAnnotation `json:"native,omitempty"`
-		}{BlockTypeText, v.Text, cites, v.Native})
+		}{BlockTypeText, v.Text, cites, v.Logprobs, v.Native})
 	case ThinkingBlock:
 		return json.Marshal(struct {
 			Type      string             `json:"type"`
@@ -481,6 +558,39 @@ func marshalRequestBlock(b Block) (json.RawMessage, error) {
 			Data   string             `json:"data"`
 			Native []NativeAnnotation `json:"native,omitempty"`
 		}{BlockTypeEncryptedContent, v.Data, v.Native})
+	case CompactionItemBlock:
+		if v.EncryptedContent == "" {
+			return nil, fmt.Errorf("ir: compaction_item encrypted_content is required")
+		}
+		return json.Marshal(struct {
+			Type             string `json:"type"`
+			EncryptedContent string `json:"encrypted_content"`
+			ID               string `json:"id,omitempty"`
+			CreatedBy        string `json:"created_by,omitempty"`
+		}{BlockTypeCompactionItem, v.EncryptedContent, v.ID, v.CreatedBy})
+	case ServerToolUseBlock:
+		if v.ID == "" || v.Name == "" || len(v.Input) == 0 {
+			return nil, fmt.Errorf("ir: server_tool_use requires id, name, and input")
+		}
+		return json.Marshal(struct {
+			Type   string             `json:"type"`
+			ID     string             `json:"id"`
+			Name   string             `json:"name"`
+			Input  json.RawMessage    `json:"input"`
+			Caller json.RawMessage    `json:"caller,omitempty"`
+			Native []NativeAnnotation `json:"native,omitempty"`
+		}{BlockTypeServerToolUse, v.ID, v.Name, v.Input, v.Caller, v.Native})
+	case WebSearchToolResultBlock:
+		if v.ToolUseID == "" || len(v.Content) == 0 {
+			return nil, fmt.Errorf("ir: web_search_tool_result requires tool_use_id and content")
+		}
+		return json.Marshal(struct {
+			Type      string             `json:"type"`
+			ToolUseID string             `json:"tool_use_id"`
+			Content   json.RawMessage    `json:"content"`
+			Caller    json.RawMessage    `json:"caller,omitempty"`
+			Native    []NativeAnnotation `json:"native,omitempty"`
+		}{BlockTypeWebSearchToolResult, v.ToolUseID, v.Content, v.Caller, v.Native})
 	case ImageBlock:
 		return json.Marshal(struct {
 			Type      string             `json:"type"`
@@ -632,6 +742,7 @@ func unmarshalRequestBlock(data []byte) (Block, error) {
 		var w struct {
 			Text      string             `json:"text"`
 			Citations []wireTextCitation `json:"citations,omitempty"`
+			Logprobs  string             `json:"logprobs,omitempty"`
 			Native    []NativeAnnotation `json:"native,omitempty"`
 		}
 		if err := json.Unmarshal(data, &w); err != nil {
@@ -647,7 +758,7 @@ func unmarshalRequestBlock(data []byte) (Block, error) {
 			}
 			cites = append(cites, TextCitation(c))
 		}
-		return TextBlock{Text: w.Text, Citations: cites, Native: w.Native}, nil
+		return TextBlock{Text: w.Text, Citations: cites, Native: w.Native, Logprobs: w.Logprobs}, nil
 	case BlockTypeThinking:
 		var w struct {
 			Thinking  string             `json:"thinking"`
@@ -679,6 +790,48 @@ func unmarshalRequestBlock(data []byte) (Block, error) {
 			return nil, fmt.Errorf("ir: encrypted_content data is required")
 		}
 		return EncryptedContentBlock{Data: ew.Data, Native: ew.Native}, nil
+	case BlockTypeCompactionItem:
+		var cw struct {
+			EncryptedContent string `json:"encrypted_content"`
+			ID               string `json:"id"`
+			CreatedBy        string `json:"created_by"`
+		}
+		if err := json.Unmarshal(data, &cw); err != nil {
+			return nil, err
+		}
+		if cw.EncryptedContent == "" {
+			return nil, fmt.Errorf("ir: compaction_item encrypted_content is required")
+		}
+		return CompactionItemBlock{EncryptedContent: cw.EncryptedContent, ID: cw.ID, CreatedBy: cw.CreatedBy}, nil
+	case BlockTypeServerToolUse:
+		var sw struct {
+			ID     string             `json:"id"`
+			Name   string             `json:"name"`
+			Input  json.RawMessage    `json:"input"`
+			Caller json.RawMessage    `json:"caller"`
+			Native []NativeAnnotation `json:"native"`
+		}
+		if err := json.Unmarshal(data, &sw); err != nil {
+			return nil, err
+		}
+		if sw.ID == "" || sw.Name == "" || len(sw.Input) == 0 {
+			return nil, fmt.Errorf("ir: server_tool_use requires id, name, and input")
+		}
+		return ServerToolUseBlock{ID: sw.ID, Name: sw.Name, Input: sw.Input, Caller: sw.Caller, Native: sw.Native}, nil
+	case BlockTypeWebSearchToolResult:
+		var ww struct {
+			ToolUseID string             `json:"tool_use_id"`
+			Content   json.RawMessage    `json:"content"`
+			Caller    json.RawMessage    `json:"caller"`
+			Native    []NativeAnnotation `json:"native"`
+		}
+		if err := json.Unmarshal(data, &ww); err != nil {
+			return nil, err
+		}
+		if ww.ToolUseID == "" || len(ww.Content) == 0 {
+			return nil, fmt.Errorf("ir: web_search_tool_result requires tool_use_id and content")
+		}
+		return WebSearchToolResultBlock{ToolUseID: ww.ToolUseID, Content: ww.Content, Caller: ww.Caller, Native: ww.Native}, nil
 	case BlockTypeImage:
 		var w struct {
 			MediaType string             `json:"media_type,omitempty"`
@@ -794,6 +947,7 @@ type wireRequest struct {
 	Metadata         map[string]string  `json:"metadata,omitempty"`
 	Native           []NativeAnnotation `json:"native,omitempty"`
 	ToolChangeGroups []ToolChangeGroup  `json:"tool_change_groups,omitempty"`
+	CompactionItems  []CompactionItem   `json:"compaction_items,omitempty"`
 }
 
 type wireMessage struct {
@@ -853,6 +1007,8 @@ type wireParams struct {
 	ReasoningEffort string              `json:"reasoning_effort,omitempty"`
 	Verbosity       string              `json:"verbosity,omitempty"`
 	ResponseFormat  *wireResponseFormat `json:"response_format,omitempty"`
+	Logprobs        *bool               `json:"logprobs,omitempty"`
+	TopLogprobs     *int                `json:"top_logprobs,omitempty"`
 }
 
 func (p *wireParams) UnmarshalJSON(data []byte) error {
@@ -869,6 +1025,14 @@ func (p *wireParams) UnmarshalJSON(data []byte) error {
 		if string(value) == "null" || !validVerbosity(decoded.Verbosity) {
 			return fmt.Errorf("ir: invalid params.verbosity")
 		}
+	}
+	if value, present := fields["top_logprobs"]; present {
+		if string(value) == "null" || decoded.TopLogprobs == nil || *decoded.TopLogprobs < 0 {
+			return fmt.Errorf("ir: invalid params.top_logprobs")
+		}
+	}
+	if value, present := fields["logprobs"]; present && string(value) == "null" {
+		return fmt.Errorf("ir: invalid params.logprobs")
 	}
 	*p = wireParams(decoded)
 	return nil
@@ -916,6 +1080,9 @@ func MarshalRequest(req *Request) ([]byte, error) {
 	}
 	if req.Params.Verbosity != "" && !validVerbosity(req.Params.Verbosity) {
 		return nil, fmt.Errorf("ir: invalid params.verbosity")
+	}
+	if req.Params.TopLogprobs != nil && *req.Params.TopLogprobs < 0 {
+		return nil, fmt.Errorf("ir: invalid params.top_logprobs")
 	}
 	for k := range req.Metadata {
 		if k == "" {
@@ -979,6 +1146,8 @@ func MarshalRequest(req *Request) ([]byte, error) {
 			StopSequences:   req.Params.StopSequences,
 			ReasoningEffort: req.Params.ReasoningEffort,
 			Verbosity:       req.Params.Verbosity,
+			Logprobs:        req.Params.Logprobs,
+			TopLogprobs:     req.Params.TopLogprobs,
 		}
 		if req.Params.ResponseFormat != nil {
 			params.ResponseFormat = &wireResponseFormat{
@@ -1001,6 +1170,7 @@ func MarshalRequest(req *Request) ([]byte, error) {
 		Metadata:         req.Metadata,
 		Native:           req.Native,
 		ToolChangeGroups: req.ToolChangeGroups,
+		CompactionItems:  req.CompactionItems,
 	})
 	if err != nil {
 		return nil, err
@@ -1071,6 +1241,8 @@ func UnmarshalRequest(data []byte) (*Request, error) {
 			StopSequences:   w.Params.StopSequences,
 			ReasoningEffort: w.Params.ReasoningEffort,
 			Verbosity:       w.Params.Verbosity,
+			Logprobs:        w.Params.Logprobs,
+			TopLogprobs:     w.Params.TopLogprobs,
 		}
 		if w.Params.ResponseFormat != nil {
 			req.Params.ResponseFormat = &ResponseFormat{
@@ -1083,6 +1255,15 @@ func UnmarshalRequest(data []byte) (*Request, error) {
 		}
 	}
 	req.ToolChangeGroups = w.ToolChangeGroups
+	req.CompactionItems = w.CompactionItems
+	for i, item := range req.CompactionItems {
+		if item.EncryptedContent == "" {
+			return nil, fmt.Errorf("ir: compaction_items[%d].encrypted_content is required", i)
+		}
+		if item.AfterMessage < -1 || item.AfterMessage >= len(req.Messages) {
+			return nil, fmt.Errorf("ir: compaction_items[%d].after_message is out of range", i)
+		}
+	}
 	if err := validateCompactionAndToolChangeGroups(req); err != nil {
 		return nil, err
 	}

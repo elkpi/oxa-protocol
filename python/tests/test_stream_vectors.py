@@ -67,7 +67,7 @@ class StreamVectorsTest(unittest.TestCase):
                         encoder_factory=enc_factory,
                     )
 
-        self.assertEqual(total_vectors, 50, "expected 50 total stream vectors across all faces")
+        self.assertEqual(total_vectors, 52, "expected 52 total stream vectors across all faces")
 
     def test_all_cross_stream_vectors(self) -> None:
         root = find_repo_root()
@@ -76,7 +76,7 @@ class StreamVectorsTest(unittest.TestCase):
             return
 
         vectors = load_vectors(root, "cross", "stream")
-        self.assertEqual(len(vectors), 10, "expected 10 cross stream vectors")
+        self.assertEqual(len(vectors), 12, "expected 12 cross stream vectors")
 
         seen_pairs: set[tuple[str, str]] = set()
         for vector in vectors:

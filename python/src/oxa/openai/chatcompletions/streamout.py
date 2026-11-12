@@ -26,6 +26,8 @@ from oxa.ir import (
     RedactedThinkingBlock,
     EncryptedContentBlock,
     ENCRYPTED_CONTENT_LOSS_DETAIL,
+    COMPACTION_ITEM_LOSS_DETAIL,
+    WEB_SEARCH_HISTORY_LOSS_DETAIL,
     WebSearchCallBlock,
     SignatureDelta,
     TextBlock,
@@ -34,6 +36,9 @@ from oxa.ir import (
     ThinkingDelta,
     CitationDelta,
     ToolUseBlock,
+    CompactionItemBlock,
+    ServerToolUseBlock,
+    WebSearchToolResultBlock,
 )
 from oxa.modelmap import Table
 from oxa.openai.chatcompletions.constants import (
@@ -161,6 +166,14 @@ class StreamEncoder:
                         "anthropic encrypted thinking replay state; the target face cannot preserve this block",
                     )
                 ]
+            if isinstance(ev.block, (CompactionItemBlock, ServerToolUseBlock, WebSearchToolResultBlock)):
+                self._active = _StreamEncodeBlock(kind="redacted", index=ev.index)
+                detail = (
+                    COMPACTION_ITEM_LOSS_DETAIL
+                    if isinstance(ev.block, CompactionItemBlock)
+                    else WEB_SEARCH_HISTORY_LOSS_DETAIL
+                )
+                return [], [loss(f"events[{ordinal}].block", "type", LOSS_UNSUPPORTED_SEMANTIC, detail)]
             if isinstance(ev.block, ThinkingBlock):
                 self._active = _StreamEncodeBlock(kind="thinking", index=ev.index)
                 return [], []

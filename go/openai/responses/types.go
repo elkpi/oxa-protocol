@@ -39,6 +39,7 @@ const (
 	ItemTypeReasoning          = "reasoning"
 	ItemTypeAdditionalTools    = "additional_tools"
 	ItemTypeWebSearchCall      = "web_search_call"
+	ItemTypeCompaction         = "compaction"
 
 	PartTypeInputText   = "input_text"
 	PartTypeOutputText  = "output_text"
@@ -104,10 +105,12 @@ type Request struct {
 
 	// ParallelToolCalls has no IR equivalent in v1 and is dropped with an
 	// unmapped-field loss (N-R-8).
-	ParallelToolCalls  *bool   `json:"parallel_tool_calls,omitempty"`
-	Store              *bool   `json:"store,omitempty"`
-	PromptCacheKey     *string `json:"prompt_cache_key,omitempty"`
-	PromptCacheOptions any     `json:"prompt_cache_options,omitempty"`
+	ParallelToolCalls  *bool                    `json:"parallel_tool_calls,omitempty"`
+	Store              *bool                    `json:"store,omitempty"`
+	PromptCacheKey     *string                  `json:"prompt_cache_key,omitempty"`
+	PromptCacheOptions any                      `json:"prompt_cache_options,omitempty"`
+	ContextManagement  []ContextManagementEntry `json:"context_management,omitempty"`
+	TopLogprobs        *int                     `json:"top_logprobs,omitempty"`
 
 	// rawPromptCacheOptions preserves the exact source bytes (including
 	// explicit null) captured by UnmarshalJSON so DecodeRequest can
@@ -140,6 +143,12 @@ func (r *Request) UnmarshalJSON(data []byte) error {
 	}
 	*r = Request(s)
 	return nil
+}
+
+// ContextManagementEntry is one Responses context_management element.
+type ContextManagementEntry struct {
+	Type             string `json:"type"`
+	CompactThreshold *int   `json:"compact_threshold,omitempty"`
 }
 
 // TextParams is the Responses text output-shaping object.
@@ -213,6 +222,7 @@ type InputItem struct {
 	Operation        *ApplyPatchOperationWire   `json:"operation,omitempty"`
 	Summary          []OutputContent            `json:"summary,omitempty"`
 	EncryptedContent string                     `json:"encrypted_content,omitempty"`
+	CreatedBy        string                     `json:"created_by,omitempty"`
 	Tools            []json.RawMessage          `json:"tools,omitempty"`
 	Action           json.RawMessage            `json:"action,omitempty"`
 	Extra            map[string]json.RawMessage `json:"-"`
@@ -371,6 +381,7 @@ type OutputItem struct {
 	Operation        *ApplyPatchOperationWire   `json:"operation,omitempty"`
 	Summary          []OutputContent            `json:"summary,omitempty"`
 	EncryptedContent string                     `json:"encrypted_content,omitempty"`
+	CreatedBy        string                     `json:"created_by,omitempty"`
 	Action           json.RawMessage            `json:"action,omitempty"`
 	Extra            map[string]json.RawMessage `json:"-"`
 }
@@ -381,6 +392,7 @@ type OutputContent struct {
 	Text        string            `json:"text"`
 	Refusal     string            `json:"refusal,omitempty"`
 	Annotations []json.RawMessage `json:"annotations"`
+	Logprobs    json.RawMessage   `json:"logprobs,omitempty"`
 }
 
 func (c OutputContent) MarshalJSON() ([]byte, error) {

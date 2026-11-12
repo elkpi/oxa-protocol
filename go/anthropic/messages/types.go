@@ -6,8 +6,10 @@
 package messages
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/elkpi/oxa-protocol/go/v3/ir"
@@ -18,14 +20,16 @@ const (
 	RoleAssistant = "assistant"
 	RoleSystem    = "system"
 
-	BlockTypeText             = "text"
-	BlockTypeImage            = "image"
-	BlockTypeToolUse          = "tool_use"
-	BlockTypeToolResult       = "tool_result"
-	BlockTypeThinking         = "thinking"
-	BlockTypeRedactedThinking = "redacted_thinking"
-	BlockTypeDocument         = "document"
-	BlockTypeToolReference    = "tool_reference"
+	BlockTypeText                = "text"
+	BlockTypeImage               = "image"
+	BlockTypeToolUse             = "tool_use"
+	BlockTypeToolResult          = "tool_result"
+	BlockTypeThinking            = "thinking"
+	BlockTypeRedactedThinking    = "redacted_thinking"
+	BlockTypeDocument            = "document"
+	BlockTypeToolReference       = "tool_reference"
+	BlockTypeServerToolUse       = "server_tool_use"
+	BlockTypeWebSearchToolResult = "web_search_tool_result"
 
 	SourceTypeBase64 = "base64"
 	SourceTypeURL    = "url"
@@ -338,6 +342,8 @@ type BlockWire struct {
 	IsError   bool   `json:"is_error,omitempty"`
 	// tool_reference
 	ToolName string `json:"tool_name,omitempty"`
+	// server tool history
+	Caller json.RawMessage `json:"caller,omitempty"`
 	// image
 	Source *SourceWire `json:"source,omitempty"`
 	// document
@@ -372,6 +378,15 @@ func (w *BlockWire) UnmarshalJSON(data []byte) error {
 					return fmt.Errorf("anthropic: document %s must be a string", key)
 				}
 			}
+		}
+	}
+	if decoded.Type == BlockTypeWebSearchToolResult {
+		if raw, ok := fields["content"]; ok {
+			value, err := decodeCanonicalJSON(raw)
+			if err != nil {
+				return fmt.Errorf("anthropic: web_search_tool_result content must be valid JSON")
+			}
+			decoded.Content = value
 		}
 	}
 	if decoded.Type == BlockTypeRedactedThinking {
@@ -614,6 +629,87 @@ func inputToIRString(raw json.RawMessage) (json.RawMessage, error) {
 		return nil, fmt.Errorf("anthropic: tool_use input is required")
 	}
 	return json.Marshal(string(raw))
+}
+
+// canonicalIRText validates a JSON object and returns the canonical compact
+// JSON text as an IR string token (sorted keys, no insignificant whitespace).
+func canonicalIRText(raw json.RawMessage, path string) (json.RawMessage, error) {
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("anthropic: %s is required", path)
+	}
+	value, err := decodeCanonicalJSON(raw)
+	if err != nil {
+		return nil, fmt.Errorf("anthropic: %s must be valid JSON", path)
+	}
+	if _, ok := value.(map[string]any); !ok {
+		return nil, fmt.Errorf("anthropic: %s must be a JSON object", path)
+	}
+	canonical, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(string(canonical))
+}
+
+// decodeCanonicalJSON parses JSON without losing integer precision; numbers
+// stay as json.Number and marshal back with their original token text.
+func decodeCanonicalJSON(raw json.RawMessage) (any, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		return nil, fmt.Errorf("trailing JSON data")
+	}
+	return value, nil
+}
+
+// canonicalOptionalObject is canonicalIRText for an optional caller object.
+func canonicalOptionalObject(raw json.RawMessage, path string) (json.RawMessage, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	value, err := decodeCanonicalJSON(raw)
+	if err != nil {
+		return nil, fmt.Errorf("anthropic: %s must be valid JSON", path)
+	}
+	if _, ok := value.(map[string]any); !ok {
+		return nil, fmt.Errorf("anthropic: %s must be a JSON object", path)
+	}
+	canonical, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(string(canonical))
+}
+
+// canonicalContentIR validates a web_search_tool_result content value (an
+// array of results or an error object) and returns canonical IR text.
+func canonicalContentIR(value any, path string) (json.RawMessage, error) {
+	switch value.(type) {
+	case []any, map[string]any:
+	default:
+		return nil, fmt.Errorf("anthropic: %s must be a JSON array or object", path)
+	}
+	canonical, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(string(canonical))
+}
+
+// irTextFromIRString returns the JSON text carried by an IR string token.
+func irTextFromIRString(tok json.RawMessage, path string) (json.RawMessage, error) {
+	if len(tok) == 0 {
+		return nil, fmt.Errorf("anthropic: %s is required", path)
+	}
+	var s string
+	if err := json.Unmarshal(tok, &s); err != nil {
+		return nil, fmt.Errorf("anthropic: %s is not a string: %w", path, err)
+	}
+	return json.RawMessage(s), nil
 }
 
 // inputFromIRString converts an IR tool_use input string token back into the

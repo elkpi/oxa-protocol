@@ -27,6 +27,8 @@ type StreamEncoder struct {
 	openCustom       bool
 	openThinking     bool
 	openRedacted     bool
+	openOmitted      bool
+	omitted          int
 	toolInput        string
 	toolParts        []string
 	thinkingInput    string
@@ -134,7 +136,7 @@ func (e *StreamEncoder) apply(ev ir.Event) ([]*StreamEvent, []ir.Loss, error) {
 					}
 				}
 			}
-			return []*StreamEvent{{Type: EventTypeContentBlockStart, Index: event.Index, ContentBlock: &BlockWire{Type: BlockTypeText, Text: block.Text, Citations: citesRaw}}}, citeLosses, nil
+			return []*StreamEvent{{Type: EventTypeContentBlockStart, Index: e.wireIndexAt(event.Index), ContentBlock: &BlockWire{Type: BlockTypeText, Text: block.Text, Citations: citesRaw}}}, citeLosses, nil
 		case ir.ThinkingBlock:
 			e.nextIndex++
 			e.blockOpen = true
@@ -146,7 +148,7 @@ func (e *StreamEncoder) apply(ev ir.Event) ([]*StreamEvent, []ir.Loss, error) {
 			e.thinkingSig = block.Signature
 			e.thinkingParts = nil
 			e.signatureSeen = false
-			return []*StreamEvent{{Type: EventTypeContentBlockStart, Index: event.Index, ContentBlock: &BlockWire{
+			return []*StreamEvent{{Type: EventTypeContentBlockStart, Index: e.wireIndexAt(event.Index), ContentBlock: &BlockWire{
 				Type: BlockTypeThinking, Thinking: "",
 			}}}, nil, nil
 		case ir.RedactedThinkingBlock:
@@ -157,7 +159,7 @@ func (e *StreamEncoder) apply(ev ir.Event) ([]*StreamEvent, []ir.Loss, error) {
 			e.openThinking = false
 			e.openRedacted = true
 			e.openIndex = event.Index
-			return []*StreamEvent{{Type: EventTypeContentBlockStart, Index: event.Index, ContentBlock: &BlockWire{
+			return []*StreamEvent{{Type: EventTypeContentBlockStart, Index: e.wireIndexAt(event.Index), ContentBlock: &BlockWire{
 				Type: BlockTypeRedactedThinking, Data: block.Data,
 			}}}, nil, nil
 		case ir.ToolUseBlock:
@@ -179,7 +181,7 @@ func (e *StreamEncoder) apply(ev ir.Event) ([]*StreamEvent, []ir.Loss, error) {
 			e.openIndex = event.Index
 			e.toolInput = string(input)
 			e.toolParts = nil
-			return []*StreamEvent{{Type: EventTypeContentBlockStart, Index: event.Index, ContentBlock: &BlockWire{
+			return []*StreamEvent{{Type: EventTypeContentBlockStart, Index: e.wireIndexAt(event.Index), ContentBlock: &BlockWire{
 				Type: BlockTypeToolUse, ID: block.ID, Name: block.Name, Input: json.RawMessage("{}"),
 			}}}, nil, nil
 		case ir.CustomToolUseBlock:
@@ -201,9 +203,20 @@ func (e *StreamEncoder) apply(ev ir.Event) ([]*StreamEvent, []ir.Loss, error) {
 			e.openIndex = event.Index
 			e.toolInput = inputStr
 			e.toolParts = nil
-			return []*StreamEvent{{Type: EventTypeContentBlockStart, Index: event.Index, ContentBlock: &BlockWire{
+			return []*StreamEvent{{Type: EventTypeContentBlockStart, Index: e.wireIndexAt(event.Index), ContentBlock: &BlockWire{
 				Type: BlockTypeToolUse, ID: block.ID, Name: block.Name, Input: json.RawMessage("{}"),
 			}}}, nil, nil
+		case ir.CompactionItemBlock:
+			e.omitBlock(event.Index)
+			return nil, []ir.Loss{{
+				Path:   fmt.Sprintf("events[%d].block", event.Index),
+				Field:  "type",
+				Reason: ir.LossUnsupportedSemantic,
+				Detail: ir.CompactionItemLossDetail,
+			}}, nil
+		case ir.ServerToolUseBlock, ir.WebSearchToolResultBlock:
+			e.omitBlock(event.Index)
+			return nil, []ir.Loss{{Path: fmt.Sprintf("events[%d].block", event.Index), Field: "type", Reason: ir.LossUnsupportedSemantic, Detail: ir.WebSearchHistoryLossDetail}}, nil
 		default:
 			return nil, nil, fmt.Errorf("anthropic: ContentBlockStart carries an unsupported block %T", event.Block)
 		}
@@ -214,24 +227,27 @@ func (e *StreamEncoder) apply(ev ir.Event) ([]*StreamEvent, []ir.Loss, error) {
 		if e.openRedacted {
 			return nil, nil, fmt.Errorf("anthropic: ContentBlockDelta on redacted_thinking block")
 		}
+		if e.openOmitted {
+			return nil, nil, fmt.Errorf("anthropic: ContentBlockDelta on omitted block")
+		}
 		switch delta := event.Delta.(type) {
 		case ir.ThinkingDelta:
 			if !e.openThinking {
 				return nil, nil, fmt.Errorf("anthropic: ThinkingDelta on non-thinking block")
 			}
 			e.thinkingParts = append(e.thinkingParts, delta.Text)
-			return []*StreamEvent{{Type: EventTypeContentBlockDelta, Index: event.Index, Delta: &StreamDelta{Type: DeltaTypeThinking, Thinking: delta.Text}}}, nil, nil
+			return []*StreamEvent{{Type: EventTypeContentBlockDelta, Index: e.wireIndexAt(event.Index), Delta: &StreamDelta{Type: DeltaTypeThinking, Thinking: delta.Text}}}, nil, nil
 		case ir.SignatureDelta:
 			if !e.openThinking {
 				return nil, nil, fmt.Errorf("anthropic: SignatureDelta on non-thinking block")
 			}
 			e.signatureSeen = true
-			return []*StreamEvent{{Type: EventTypeContentBlockDelta, Index: event.Index, Delta: &StreamDelta{Type: DeltaTypeSignature, Signature: delta.Signature}}}, nil, nil
+			return []*StreamEvent{{Type: EventTypeContentBlockDelta, Index: e.wireIndexAt(event.Index), Delta: &StreamDelta{Type: DeltaTypeSignature, Signature: delta.Signature}}}, nil, nil
 		case ir.TextDelta:
 			if e.openTool || e.openThinking || e.openRedacted {
 				return nil, nil, fmt.Errorf("anthropic: TextDelta on non-text block")
 			}
-			return []*StreamEvent{{Type: EventTypeContentBlockDelta, Index: event.Index, Delta: &StreamDelta{Type: DeltaTypeTextDelta, Text: delta.Text}}}, nil, nil
+			return []*StreamEvent{{Type: EventTypeContentBlockDelta, Index: e.wireIndexAt(event.Index), Delta: &StreamDelta{Type: DeltaTypeTextDelta, Text: delta.Text}}}, nil, nil
 		case ir.CitationDelta:
 			if e.openTool || e.openThinking || e.openRedacted {
 				return nil, nil, fmt.Errorf("anthropic: CitationDelta on non-text block")
@@ -259,7 +275,7 @@ func (e *StreamEncoder) apply(ev ir.Event) ([]*StreamEvent, []ir.Loss, error) {
 			if err := json.Unmarshal([]byte(delta.Citation.Value), &citeObj); err != nil {
 				return nil, nil, err
 			}
-			return []*StreamEvent{{Type: EventTypeContentBlockDelta, Index: event.Index, Delta: &StreamDelta{
+			return []*StreamEvent{{Type: EventTypeContentBlockDelta, Index: e.wireIndexAt(event.Index), Delta: &StreamDelta{
 				Type: DeltaTypeCitations, Citation: citeObj,
 			}}}, nil, nil
 		case ir.InputJSONDelta:
@@ -271,7 +287,7 @@ func (e *StreamEncoder) apply(ev ir.Event) ([]*StreamEvent, []ir.Loss, error) {
 				return nil, nil, fmt.Errorf("anthropic: InputJSONDelta: %w", err)
 			}
 			e.toolParts = append(e.toolParts, fragment)
-			return []*StreamEvent{{Type: EventTypeContentBlockDelta, Index: event.Index, Delta: &StreamDelta{
+			return []*StreamEvent{{Type: EventTypeContentBlockDelta, Index: e.wireIndexAt(event.Index), Delta: &StreamDelta{
 				Type: DeltaTypeInputJSONDelta, PartialJSON: fragment,
 			}}}, nil, nil
 		case ir.CustomToolInputDelta:
@@ -294,7 +310,13 @@ func (e *StreamEncoder) apply(ev ir.Event) ([]*StreamEvent, []ir.Loss, error) {
 		if e.openRedacted {
 			e.blockOpen = false
 			e.openRedacted = false
-			return []*StreamEvent{{Type: EventTypeContentBlockStop, Index: event.Index}}, nil, nil
+			return []*StreamEvent{{Type: EventTypeContentBlockStop, Index: e.wireIndexAt(event.Index)}}, nil, nil
+		}
+		if e.openOmitted {
+			e.blockOpen = false
+			e.openOmitted = false
+			e.omitted++
+			return nil, nil, nil
 		}
 		if e.openTool {
 			if e.openCustom {
@@ -309,10 +331,10 @@ func (e *StreamEncoder) apply(ev ir.Event) ([]*StreamEvent, []ir.Loss, error) {
 				}
 				wrapped, _ := json.Marshal(map[string]string{"input": fullInput})
 				events := []*StreamEvent{
-					{Type: EventTypeContentBlockDelta, Index: event.Index, Delta: &StreamDelta{
+					{Type: EventTypeContentBlockDelta, Index: e.wireIndexAt(event.Index), Delta: &StreamDelta{
 						Type: DeltaTypeInputJSONDelta, PartialJSON: string(wrapped),
 					}},
-					{Type: EventTypeContentBlockStop, Index: event.Index},
+					{Type: EventTypeContentBlockStop, Index: e.wireIndexAt(event.Index)},
 				}
 				e.blockOpen = false
 				e.openTool = false
@@ -322,7 +344,7 @@ func (e *StreamEncoder) apply(ev ir.Event) ([]*StreamEvent, []ir.Loss, error) {
 				return events, nil, nil
 			}
 			if len(e.toolParts) == 0 {
-				return e.toolStopWithSynthesizedDelta(event.Index), nil, nil
+				return e.toolStopWithSynthesizedDelta(e.wireIndexAt(event.Index)), nil, nil
 			}
 			if strings.Join(e.toolParts, "") != e.toolInput {
 				return nil, nil, fmt.Errorf("anthropic: tool input fragments do not match ToolUseBlock input")
@@ -333,18 +355,18 @@ func (e *StreamEncoder) apply(ev ir.Event) ([]*StreamEvent, []ir.Loss, error) {
 			if len(e.thinkingParts) == 0 && e.thinkingInput != "" {
 				events = append(events, &StreamEvent{
 					Type:  EventTypeContentBlockDelta,
-					Index: event.Index,
+					Index: e.wireIndexAt(event.Index),
 					Delta: &StreamDelta{Type: DeltaTypeThinking, Thinking: e.thinkingInput},
 				})
 			}
 			if !e.signatureSeen && e.thinkingSig != "" {
 				events = append(events, &StreamEvent{
 					Type:  EventTypeContentBlockDelta,
-					Index: event.Index,
+					Index: e.wireIndexAt(event.Index),
 					Delta: &StreamDelta{Type: DeltaTypeSignature, Signature: e.thinkingSig},
 				})
 			}
-			events = append(events, &StreamEvent{Type: EventTypeContentBlockStop, Index: event.Index})
+			events = append(events, &StreamEvent{Type: EventTypeContentBlockStop, Index: e.wireIndexAt(event.Index)})
 			e.blockOpen = false
 			e.openThinking = false
 			e.thinkingInput = ""
@@ -358,7 +380,7 @@ func (e *StreamEncoder) apply(ev ir.Event) ([]*StreamEvent, []ir.Loss, error) {
 		e.openThinking = false
 		e.toolInput = ""
 		e.toolParts = nil
-		return []*StreamEvent{{Type: EventTypeContentBlockStop, Index: event.Index}}, nil, nil
+		return []*StreamEvent{{Type: EventTypeContentBlockStop, Index: e.wireIndexAt(event.Index)}}, nil, nil
 	case ir.MessageDelta:
 		if !e.started || e.blockOpen || e.deltaSeen {
 			return nil, nil, fmt.Errorf("anthropic: MessageDelta out of grammar order")
@@ -383,6 +405,27 @@ func (e *StreamEncoder) apply(ev ir.Event) ([]*StreamEvent, []ir.Loss, error) {
 	default:
 		return nil, nil, fmt.Errorf("anthropic: unknown event %T", ev)
 	}
+}
+
+// wireIndexAt maps an IR block index onto the Anthropic wire index. A block
+// that is omitted on encode still consumes an IR index, so the wire counter
+// skips it and stays contiguous.
+func (e *StreamEncoder) wireIndexAt(irIndex int) int {
+	return irIndex - e.omitted
+}
+
+// omitBlock opens an IR block that has no Anthropic wire representation: the
+// block's start emits nothing, any delta is rejected, and its stop advances
+// the wire-index offset.
+func (e *StreamEncoder) omitBlock(irIndex int) {
+	e.nextIndex++
+	e.blockOpen = true
+	e.openTool = false
+	e.openCustom = false
+	e.openThinking = false
+	e.openRedacted = false
+	e.openOmitted = true
+	e.openIndex = irIndex
 }
 
 func (e *StreamEncoder) toolStopWithSynthesizedDelta(index int) []*StreamEvent {

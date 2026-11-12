@@ -321,6 +321,7 @@ pub fn decode_request(
             messages: vec![Message {
                 role: Role::User,
                 content: vec![Block::Text {
+                    logprobs: None,
                     text: user_text,
                     citations: None,
                     native: Vec::new(),
@@ -332,6 +333,7 @@ pub fn decode_request(
             metadata: None,
             native: Vec::new(),
             tool_change_groups: Vec::new(),
+            compaction_items: Vec::new(),
         },
         losses,
     ))
@@ -452,6 +454,7 @@ pub fn decode_response(
             id: SYNTHESIZED_ID.to_owned(),
             model: config.map_model(&wire.model),
             content: vec![Block::Text {
+                logprobs: None,
                 text: canon_text,
                 citations: None,
                 native: Vec::new(),

@@ -55,6 +55,7 @@ export interface ResponsesOutputItem {
   readonly summary?: readonly ResponsesOutputContentPart[];
   /** Opaque provider integrity token; dropped with an unmapped-field loss. */
   readonly encrypted_content?: string;
+  readonly created_by?: string;
   readonly call_id?: string;
   readonly name?: string;
   readonly namespace?: string;

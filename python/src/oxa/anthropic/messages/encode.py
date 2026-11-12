@@ -79,6 +79,9 @@ from oxa.ir import (
     ToolReferenceBlock,
     ToolUseBlock,
     WebSearchCallBlock,
+    CompactionItemBlock,
+    ServerToolUseBlock,
+    WebSearchToolResultBlock,
 )
 from oxa.ir import (
     ROLE_ASSISTANT as IR_ROLE_ASSISTANT,
@@ -112,6 +115,10 @@ def encode_request(
     validate_tool_availability(req)
     validate_native_request(req)
     losses: list[Loss] = []
+    from oxa.ir import COMPACTION_ITEM_LOSS_DETAIL
+
+    for index in range(len(req.compaction_items)):
+        losses.append(loss(f"compaction_items[{index}]", "type", LOSS_UNSUPPORTED_SEMANTIC, COMPACTION_ITEM_LOSS_DETAIL))
 
     metadata, meta_losses = encode_anthropic_metadata(req.metadata)
     losses.extend(meta_losses)
@@ -140,14 +147,8 @@ def encode_request(
                 )
             for s_ann_idx, ann in enumerate(getattr(block, "native", ())):
                 if ann.source == "openai" and ann.kind == "prompt_cache_breakpoint":
-                    losses.append(
-                        Loss(
-                            path=f"system[{index}].native[{s_ann_idx}]",
-                            field=ann.omission.field if ann.omission and ann.omission.field else "prompt_cache_breakpoint",
-                            reason=ann.omission.reason if ann.omission and ann.omission.reason else LOSS_UNMAPPED_FIELD,
-                            detail=ann.omission.detail or PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL,
-                        )
-                    )
+                    from oxa.ir.native import _breakpoint_translation_losses
+                    losses.extend(_breakpoint_translation_losses(ann.value, f"system[{index}].native[{s_ann_idx}]"))
         out["system"] = encode_system(req.system)
 
     tools_wire: list[dict[str, Any]] = []
@@ -392,6 +393,24 @@ def encode_request(
             out["stop_sequences"] = req.params.stop_sequences
     if req.params and req.params.verbosity is not None:
         losses.append(loss("params.verbosity", "verbosity", LOSS_UNMAPPED_FIELD, ""))
+    if req.params and req.params.logprobs is not None:
+        losses.append(
+            loss(
+                "params.logprobs",
+                "logprobs",
+                LOSS_UNMAPPED_FIELD,
+                "Anthropic Messages has no log-probability sampling parameter",
+            )
+        )
+    if req.params and req.params.top_logprobs is not None:
+        losses.append(
+            loss(
+                "params.top_logprobs",
+                "top_logprobs",
+                LOSS_UNMAPPED_FIELD,
+                "Anthropic Messages has no log-probability sampling parameter",
+            )
+        )
     native_losses = encode_request_native(req, out)
     losses.extend(native_losses)
 
@@ -434,14 +453,8 @@ def encode_request_blocks(
         losses.extend(b_losses)
         for b_ann_idx, ann in enumerate(getattr(block, "native", ())):
             if ann.source == "openai" and ann.kind == "prompt_cache_breakpoint":
-                losses.append(
-                    Loss(
-                        path=f"{path}[{index}].native[{b_ann_idx}]",
-                        field=ann.omission.field if ann.omission and ann.omission.field else "prompt_cache_breakpoint",
-                        reason=ann.omission.reason if ann.omission and ann.omission.reason else LOSS_UNMAPPED_FIELD,
-                        detail=ann.omission.detail or PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL,
-                    )
-                )
+                from oxa.ir.native import _breakpoint_translation_losses
+                losses.extend(_breakpoint_translation_losses(ann.value, f"{path}[{index}].native[{b_ann_idx}]"))
     return out, losses
 
 
@@ -535,8 +548,38 @@ def encode_request_block(
         if not mapped:
             return None, losses, False
 
+    elif isinstance(block, ServerToolUseBlock):
+        if not block.id:
+            raise ValueError(f"anthropic: {path}.id is required")
+        if block.name != "web_search":
+            raise ValueError(f'anthropic: {path}.name must be "web_search"')
+        if not block.input:
+            raise ValueError(f"anthropic: {path}.input is required")
+        encoded = {
+            "type": "server_tool_use",
+            "id": block.id,
+            "name": "web_search",
+            "input": json.loads(block.input),
+        }
+        if block.caller is not None:
+            encoded["caller"] = json.loads(block.caller)
+    elif isinstance(block, WebSearchToolResultBlock):
+        if not block.tool_use_id:
+            raise ValueError(f"anthropic: {path}.tool_use_id is required")
+        if not block.content:
+            raise ValueError(f"anthropic: {path}.content is required")
+        encoded = {
+            "type": "web_search_tool_result",
+            "tool_use_id": block.tool_use_id,
+            "content": json.loads(block.content),
+        }
+        if block.caller is not None:
+            encoded["caller"] = json.loads(block.caller)
     elif isinstance(block, WebSearchCallBlock):
         return None, [loss(path, "type", LOSS_UNSUPPORTED_SEMANTIC, "Responses web_search_call has no Anthropic equivalent")], False
+    elif isinstance(block, CompactionItemBlock):
+        from oxa.ir import COMPACTION_ITEM_LOSS_DETAIL
+        return None, [loss(path, "type", LOSS_UNSUPPORTED_SEMANTIC, COMPACTION_ITEM_LOSS_DETAIL)], False
     elif isinstance(block, (ApplyPatchToolUseBlock, ApplyPatchToolResultBlock)):
         return None, [loss(path, "type", LOSS_UNSUPPORTED_SEMANTIC, "apply_patch tools have no Anthropic mapping")], False
 
@@ -1055,6 +1098,35 @@ def encode_response_block(
             [],
             True,
         )
+    if isinstance(block, ServerToolUseBlock):
+        if not block.id:
+            raise ValueError(f"anthropic: {path}.id is required")
+        if block.name != "web_search":
+            raise ValueError(f'anthropic: {path}.name must be "web_search"')
+        if not block.input:
+            raise ValueError(f"anthropic: {path}.input is required")
+        encoded = {
+            "type": "server_tool_use",
+            "id": block.id,
+            "name": "web_search",
+            "input": json.loads(block.input),
+        }
+        if block.caller is not None:
+            encoded["caller"] = json.loads(block.caller)
+        return encoded, [], True
+    if isinstance(block, WebSearchToolResultBlock):
+        if not block.tool_use_id:
+            raise ValueError(f"anthropic: {path}.tool_use_id is required")
+        if not block.content:
+            raise ValueError(f"anthropic: {path}.content is required")
+        encoded = {
+            "type": "web_search_tool_result",
+            "tool_use_id": block.tool_use_id,
+            "content": json.loads(block.content),
+        }
+        if block.caller is not None:
+            encoded["caller"] = json.loads(block.caller)
+        return encoded, [], True
     if isinstance(block, (CustomToolResultBlock, ApplyPatchToolUseBlock, ApplyPatchToolResultBlock)):
         return None, [loss(path, "type", LOSS_UNSUPPORTED_SEMANTIC, "custom tools have no Anthropic mapping")], False
     return (

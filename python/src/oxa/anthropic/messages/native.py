@@ -176,6 +176,36 @@ def parse_context_management(cm: Any, path: str) -> tuple[str | None, list[Loss]
             if valid:
                 valid_edits.append(canon_edit)
 
+        elif kind == "compact_20260112":
+            for k in edit:
+                if k not in ("type", "trigger", "pause_after_compaction"):
+                    losses.append(Loss(f"{p}.{k}", k, LOSS_UNMAPPED_FIELD))
+            valid = True
+            canon_edit = {"type": "compact_20260112"}
+            if "trigger" in edit:
+                trig = edit["trigger"]
+                if isinstance(trig, dict):
+                    for k in trig:
+                        if k not in ("type", "value"):
+                            losses.append(Loss(f"{p}.trigger.{k}", k, LOSS_UNMAPPED_FIELD))
+                    if trig.get("type") != "input_tokens":
+                        losses.append(Loss(f"{p}.trigger", "trigger", LOSS_UNMAPPED_VALUE))
+                        valid = False
+                    else:
+                        canon_edit["trigger"] = {"type": "input_tokens", "value": trig.get("value")}
+                else:
+                    losses.append(Loss(f"{p}.trigger", "trigger", LOSS_UNMAPPED_VALUE))
+                    valid = False
+            if "pause_after_compaction" in edit:
+                pause = edit["pause_after_compaction"]
+                if not isinstance(pause, bool):
+                    losses.append(Loss(f"{p}.pause_after_compaction", "pause_after_compaction", LOSS_UNMAPPED_VALUE))
+                    valid = False
+                else:
+                    canon_edit["pause_after_compaction"] = pause
+            if valid:
+                valid_edits.append(canon_edit)
+
         else:
             losses.append(
                 Loss(
@@ -397,12 +427,15 @@ def decode_request_native(wire: dict[str, Any], req: Request) -> tuple[Request, 
 
 
 def get_block_cache_control(native: tuple[NativeAnnotation, ...]) -> dict[str, Any] | None:
-    for n in native:
+    for n in native or ():
         if n.source == NATIVE_SOURCE_ANTHROPIC and n.kind == NATIVE_KIND_CACHE_CONTROL:
             try:
                 return json.loads(n.value)
             except Exception:
                 return None
+    for n in native or ():
+        if n.source == "openai" and n.kind == "prompt_cache_breakpoint":
+            return {"type": "ephemeral"}
     return None
 
 

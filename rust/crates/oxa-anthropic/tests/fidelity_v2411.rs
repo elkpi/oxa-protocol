@@ -246,6 +246,7 @@ fn test_disable_parallel_tool_use_null_rejected_and_conflict() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: "Hi".into(),
                 citations: None,
                 native: Vec::new(),
@@ -268,6 +269,7 @@ fn test_disable_parallel_tool_use_null_rejected_and_conflict() {
             projection: None,
         }],
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
     assert!(encode_request(&req_conflict, &config).is_err());
 }
@@ -281,6 +283,7 @@ fn test_between_tools_encode_conflict() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: "Hi".into(),
                 citations: None,
                 native: Vec::new(),
@@ -307,6 +310,7 @@ fn test_between_tools_encode_conflict() {
             },
         ],
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
     assert!(encode_request(&req_conflict, &config).is_err());
 }
@@ -319,6 +323,7 @@ fn test_omitted_native_losses_default_fallback() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: "Hi".into(),
                 citations: None,
                 native: Vec::new(),
@@ -350,6 +355,7 @@ fn test_omitted_native_losses_default_fallback() {
             },
         ],
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
     let losses = oxa_ir::omitted_native_request_losses(&req, "chatcompletions").expect("losses");
     assert!(

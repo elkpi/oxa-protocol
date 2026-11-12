@@ -13,12 +13,16 @@ from oxa.ir.constants import (
     BLOCK_TYPE_REDACTED_THINKING,
     BLOCK_TYPE_ENCRYPTED_CONTENT,
     ENCRYPTED_CONTENT_LOSS_DETAIL,
+    COMPACTION_ITEM_LOSS_DETAIL,
     BLOCK_TYPE_TOOL_RESULT,
     BLOCK_TYPE_TOOL_USE,
     BLOCK_TYPE_CUSTOM_TOOL_USE,
     BLOCK_TYPE_CUSTOM_TOOL_RESULT,
     BLOCK_TYPE_APPLY_PATCH_TOOL_USE,
     BLOCK_TYPE_APPLY_PATCH_TOOL_RESULT,
+    BLOCK_TYPE_COMPACTION_ITEM,
+    BLOCK_TYPE_SERVER_TOOL_USE,
+    BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT,
     BLOCK_TYPE_WEB_SEARCH_CALL,
     BLOCK_TYPE_REFUSAL,
     BLOCK_TYPE_TOOL_REFERENCE,
@@ -65,6 +69,7 @@ class TextBlock:
     text: str
     native: tuple[NativeAnnotation, ...] = ()
     citations: tuple[TextCitation, ...] | None = None
+    logprobs: str | None = None
     role: str = ""
     type: str = field(default=BLOCK_TYPE_TEXT, init=False)
 
@@ -275,12 +280,63 @@ class ApplyPatchToolResultBlock:
 
 
 @dataclass(frozen=True, slots=True)
+class CompactionItemBlock:
+    """Responses compaction checkpoint (spec/11 N-R-22). Not an Anthropic compaction block."""
+
+    encrypted_content: str
+    id: str = ""
+    created_by: str = ""
+    type: str = field(default=BLOCK_TYPE_COMPACTION_ITEM, init=False)
+
+
+@dataclass(frozen=True, slots=True)
+class CompactionItem:
+    """One Responses compaction checkpoint placed relative to request messages."""
+
+    encrypted_content: str
+    after_message: int
+    id: str = ""
+    created_by: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class WebSearchCallBlock:
     id: str
     status: str
     action: dict[str, Any]
     extra: dict[str, Any] = field(default_factory=dict)
     type: str = field(default=BLOCK_TYPE_WEB_SEARCH_CALL, init=False)
+
+
+@dataclass(frozen=True, slots=True)
+class ServerToolUseBlock:
+    """Anthropic provider-hosted web_search call in history (spec/12 N-AN-23)."""
+
+    id: str
+    input: str
+    name: str = "web_search"
+    caller: str | None = None
+    native: tuple[NativeAnnotation, ...] = ()
+    type: str = field(default=BLOCK_TYPE_SERVER_TOOL_USE, init=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.native, tuple):
+            object.__setattr__(self, "native", _normalize_native(self.native))
+
+
+@dataclass(frozen=True, slots=True)
+class WebSearchToolResultBlock:
+    """Anthropic web_search result paired with a ServerToolUseBlock (spec/12 N-AN-23)."""
+
+    tool_use_id: str
+    content: str
+    caller: str | None = None
+    native: tuple[NativeAnnotation, ...] = ()
+    type: str = field(default=BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT, init=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.native, tuple):
+            object.__setattr__(self, "native", _normalize_native(self.native))
 
 
 @dataclass(frozen=True, slots=True)
@@ -339,6 +395,9 @@ Block = (
     | ApplyPatchToolResultBlock
     | WebSearchCallBlock
     | RefusalBlock
+    | CompactionItemBlock
+    | ServerToolUseBlock
+    | WebSearchToolResultBlock
 )
 SystemBlock = TextBlock
 
@@ -500,6 +559,8 @@ class Params:
     reasoning_effort: ReasoningEffort | None = None
     verbosity: str | None = None
     response_format: ResponseFormat | None = None
+    logprobs: bool | None = None
+    top_logprobs: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -515,6 +576,7 @@ class Request:
     metadata: dict[str, str] | None = None
     native: tuple[NativeAnnotation, ...] = ()
     tool_change_groups: list[ToolChangeGroup] = field(default_factory=list)
+    compaction_items: list[CompactionItem] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not isinstance(self.native, tuple):

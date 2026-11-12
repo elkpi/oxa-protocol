@@ -1,0 +1,55 @@
+{
+  "name": "cross.nonstream.chatcompletions-to-anthropic-logprobs-request",
+  "description": "Chat Completions logprobs sampling parameters have no Anthropic equivalent; each records one unmapped-field loss.",
+  "spec_version": "0.3.0",
+  "mode": "nonstream",
+  "conversion": "protocol-to-protocol",
+  "source": {
+    "protocol": "chatcompletions"
+  },
+  "target": {
+    "protocol": "anthropic"
+  },
+  "input": {
+    "model": "m",
+    "max_tokens": 16,
+    "messages": [
+      {
+        "role": "user",
+        "content": "go"
+      }
+    ],
+    "logprobs": true,
+    "top_logprobs": 5
+  },
+  "expected_output": {
+    "model": "m",
+    "messages": [
+      {
+        "role": "user",
+        "content": "go"
+      }
+    ],
+    "max_tokens": 16
+  },
+  "expected_losses": [
+    {
+      "path": "params.logprobs",
+      "field": "logprobs",
+      "reason": "unmapped-field",
+      "detail": "Anthropic Messages has no log-probability sampling parameter"
+    },
+    {
+      "path": "params.top_logprobs",
+      "field": "top_logprobs",
+      "reason": "unmapped-field",
+      "detail": "Anthropic Messages has no log-probability sampling parameter"
+    }
+  ],
+  "tags": [
+    "cross",
+    "request",
+    "logprobs",
+    "loss"
+  ]
+}

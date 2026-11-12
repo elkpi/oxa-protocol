@@ -1,0 +1,120 @@
+{
+  "name": "cross.stream.responses-to-chatcompletions-compaction-item",
+  "description": "A Responses compaction item has no Chat Completions streaming representation; the block is omitted with an unsupported-semantic loss and the stream still terminates normally.",
+  "spec_version": "0.3.0",
+  "mode": "stream",
+  "conversion": "protocol-to-protocol",
+  "source": {
+    "protocol": "responses"
+  },
+  "target": {
+    "protocol": "chatcompletions"
+  },
+  "input": {
+    "events": [
+      {
+        "type": "response.created",
+        "response": {
+          "id": "resp_cmp_s",
+          "object": "response",
+          "status": "in_progress",
+          "model": "gpt-5.4",
+          "output": []
+        }
+      },
+      {
+        "type": "response.output_item.added",
+        "output_index": 0,
+        "item": {
+          "type": "compaction",
+          "id": "cmp_1",
+          "encrypted_content": "cipher",
+          "created_by": "system"
+        }
+      },
+      {
+        "type": "response.output_item.done",
+        "output_index": 0,
+        "item": {
+          "type": "compaction",
+          "id": "cmp_1",
+          "encrypted_content": "cipher",
+          "created_by": "system"
+        }
+      },
+      {
+        "type": "response.completed",
+        "response": {
+          "id": "resp_cmp_s",
+          "object": "response",
+          "status": "completed",
+          "model": "gpt-5.4",
+          "output": [
+            {
+              "type": "compaction",
+              "id": "cmp_1",
+              "encrypted_content": "cipher",
+              "created_by": "system"
+            }
+          ],
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 3,
+            "total_tokens": 5
+          }
+        }
+      }
+    ]
+  },
+  "expected_output": {
+    "events": [
+      {
+        "id": "resp_cmp_s",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "gpt-5.4",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "role": "assistant"
+            },
+            "finish_reason": null
+          }
+        ]
+      },
+      {
+        "id": "resp_cmp_s",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "gpt-5.4",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {},
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 2,
+          "completion_tokens": 3,
+          "total_tokens": 5
+        }
+      }
+    ]
+  },
+  "expected_losses": [
+    {
+      "path": "events[1].block",
+      "field": "type",
+      "reason": "unsupported-semantic",
+      "detail": "Responses compaction item cannot be represented on the target face"
+    }
+  ],
+  "tags": [
+    "stream",
+    "cross-face",
+    "compaction",
+    "loss"
+  ]
+}

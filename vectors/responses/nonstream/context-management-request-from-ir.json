@@ -1,0 +1,59 @@
+{
+  "name": "responses.nonstream.context-management-request-from-ir",
+  "description": "A Responses context_management native option encodes back to the request wire verbatim (N-R-23).",
+  "spec_version": "0.2.0",
+  "mode": "nonstream",
+  "conversion": "from-ir",
+  "source": {
+    "protocol": "responses"
+  },
+  "target": {
+    "protocol": "responses"
+  },
+  "input": {
+    "specVersion": "0.2.0",
+    "model": "gpt-5.4",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "hi"
+          }
+        ]
+      }
+    ],
+    "native": [
+      {
+        "source": "openai",
+        "kind": "context_management",
+        "value": "[{\"compact_threshold\":20000,\"type\":\"compaction\"},{\"type\":\"compaction\"}]",
+        "omission": {
+          "field": "context_management",
+          "reason": "unmapped-field",
+          "detail": "Responses context_management has no equivalent on the target face"
+        }
+      }
+    ]
+  },
+  "expected_output": {
+    "model": "gpt-5.4",
+    "input": "hi",
+    "context_management": [
+      {
+        "type": "compaction",
+        "compact_threshold": 20000
+      },
+      {
+        "type": "compaction"
+      }
+    ]
+  },
+  "expected_losses": [],
+  "tags": [
+    "request",
+    "context-management",
+    "compaction-trigger"
+  ]
+}

@@ -235,7 +235,8 @@ namespace {
 #if defined(__EXCEPTIONS) || defined(__cpp_exceptions)
 bool block_has_native(const Block& b) {
     return std::visit([](const auto& val) {
-        if constexpr (std::is_same_v<std::decay_t<decltype(val)>, WebSearchCallBlock>) return false;
+        if constexpr (std::is_same_v<std::decay_t<decltype(val)>, WebSearchCallBlock> ||
+                      std::is_same_v<std::decay_t<decltype(val)>, CompactionItemBlock>) return false;
         else return !val.native.empty();
     }, b);
 }
@@ -270,6 +271,7 @@ json::Value dump_block_impl(const Block& b, F&& recurse) {
             }
             out.set("citations", std::move(cites));
         }
+        if (t->logprobs.has_value()) out.set("logprobs", json::Value::string(*t->logprobs));
         return out;
     }
     if (const auto* rt = std::get_if<RedactedThinkingBlock>(&b)) {
@@ -337,6 +339,28 @@ json::Value dump_block_impl(const Block& b, F&& recurse) {
         else { json::Value output = json::Value::array();
             for (const auto& inner : std::get<std::vector<BlockHolder>>(cr->output)) output.push_back(recurse(inner.block));
             out.set("output", std::move(output)); }
+        return out;
+    }
+    if (const auto* st = std::get_if<ServerToolUseBlock>(&b)) {
+        out.set("type", json::Value::string(std::string(BLOCK_TYPE_SERVER_TOOL_USE)));
+        out.set("id", json::Value::string(st->id));
+        out.set("name", json::Value::string(st->name));
+        out.set("input", json::Value::string(st->input));
+        if (st->caller) out.set("caller", json::Value::string(*st->caller));
+        return out;
+    }
+    if (const auto* wr = std::get_if<WebSearchToolResultBlock>(&b)) {
+        out.set("type", json::Value::string(std::string(BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT)));
+        out.set("tool_use_id", json::Value::string(wr->tool_use_id));
+        out.set("content", json::Value::string(wr->content));
+        if (wr->caller) out.set("caller", json::Value::string(*wr->caller));
+        return out;
+    }
+    if (const auto* ci = std::get_if<CompactionItemBlock>(&b)) {
+        out.set("type", json::Value::string(std::string(BLOCK_TYPE_COMPACTION_ITEM)));
+        out.set("encrypted_content", json::Value::string(ci->encrypted_content));
+        if (!ci->id.empty()) out.set("id", json::Value::string(ci->id));
+        if (!ci->created_by.empty()) out.set("created_by", json::Value::string(ci->created_by));
         return out;
     }
     if (const auto* ws = std::get_if<WebSearchCallBlock>(&b)) {
@@ -467,7 +491,10 @@ json::Value dump_block(const Block& b) {
 json::Value dump_request_block(const Block& b) {
     json::Value out = dump_block_impl(b, [](const Block& inner) { return dump_request_block(inner); });
     const auto* nat = std::visit([](const auto& val) -> const std::vector<NativeAnnotation>* {
-        if constexpr (std::is_same_v<std::decay_t<decltype(val)>, WebSearchCallBlock>) return nullptr;
+        if constexpr (std::is_same_v<std::decay_t<decltype(val)>, WebSearchCallBlock> ||
+                      std::is_same_v<std::decay_t<decltype(val)>, CompactionItemBlock>) return nullptr;
+        else if constexpr (std::is_same_v<std::decay_t<decltype(val)>, ServerToolUseBlock> ||
+                           std::is_same_v<std::decay_t<decltype(val)>, WebSearchToolResultBlock>) return &val.native;
         else return &val.native;
     }, b);
     if (nat != nullptr && !nat->empty()) {
@@ -486,6 +513,10 @@ StatusOr<Block> load_block_impl(const json::Value& v, Recurse&& recurse, std::ve
     if (kind == BLOCK_TYPE_TEXT) {
         OXA_ASSIGN_OR_RETURN(std::string txt, require_string(v, "text", "text block"));
         TextBlock block{std::move(txt), std::move(native)};
+        if (const auto* lp = v.find("logprobs")) {
+            if (!lp->is_string()) return invalid_argument("text block logprobs must be a string");
+            block.logprobs = lp->as_string();
+        }
         if (const auto* cites_val = v.find("citations")) {
             if (!cites_val->is_array()) {
                 return invalid_argument("text block citations must be an array");
@@ -703,6 +734,54 @@ StatusOr<Block> load_block_impl(const json::Value& v, Recurse&& recurse, std::ve
         }
         return Block(std::move(block));
     }
+    if (kind == BLOCK_TYPE_SERVER_TOOL_USE) {
+        OXA_ASSIGN_OR_RETURN(std::string id, require_string(v, "id", "server_tool_use block"));
+        if (id.empty()) return invalid_argument("ir: server_tool_use requires id");
+        OXA_ASSIGN_OR_RETURN(std::string name, require_string(v, "name", "server_tool_use block"));
+        if (name != "web_search") return invalid_argument("ir: server_tool_use name must be \"web_search\"");
+        OXA_ASSIGN_OR_RETURN(std::string input, require_string(v, "input", "server_tool_use block"));
+        if (input.empty()) return invalid_argument("ir: server_tool_use requires input");
+        ServerToolUseBlock block;
+        block.id = std::move(id);
+        block.name = std::move(name);
+        block.input = std::move(input);
+        block.native = std::move(native);
+        if (const auto* caller = v.find("caller")) {
+            if (!caller->is_string()) return invalid_argument("server_tool_use caller must be a string");
+            block.caller = caller->as_string();
+        }
+        return Block(std::move(block));
+    }
+    if (kind == BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT) {
+        OXA_ASSIGN_OR_RETURN(std::string tool_use_id, require_string(v, "tool_use_id", "web_search_tool_result block"));
+        if (tool_use_id.empty()) return invalid_argument("ir: web_search_tool_result requires tool_use_id");
+        OXA_ASSIGN_OR_RETURN(std::string content, require_string(v, "content", "web_search_tool_result block"));
+        if (content.empty()) return invalid_argument("ir: web_search_tool_result requires content");
+        WebSearchToolResultBlock block;
+        block.tool_use_id = std::move(tool_use_id);
+        block.content = std::move(content);
+        block.native = std::move(native);
+        if (const auto* caller = v.find("caller")) {
+            if (!caller->is_string()) return invalid_argument("web_search_tool_result caller must be a string");
+            block.caller = caller->as_string();
+        }
+        return Block(std::move(block));
+    }
+    if (kind == BLOCK_TYPE_COMPACTION_ITEM) {
+        if (!native.empty()) return invalid_argument("compaction_item does not support native annotations");
+        OXA_ASSIGN_OR_RETURN(std::string cipher, require_string(v, "encrypted_content", "compaction_item block"));
+        if (cipher.empty()) return invalid_argument("ir: compaction_item encrypted_content is required");
+        CompactionItemBlock block{std::move(cipher), {}, {}};
+        if (const auto* id = v.find("id")) {
+            if (!id->is_string()) return invalid_argument("compaction_item id must be a string");
+            block.id = id->as_string();
+        }
+        if (const auto* created = v.find("created_by")) {
+            if (!created->is_string()) return invalid_argument("compaction_item created_by must be a string");
+            block.created_by = created->as_string();
+        }
+        return Block(std::move(block));
+    }
     if (kind == "tool_reference") {
         OXA_ASSIGN_OR_RETURN(std::string tool_name, require_string(v, "tool_name", "tool_reference block"));
         if (tool_name.empty()) {
@@ -808,6 +887,19 @@ json::Value dump_request(const Request& r) {
         messages.push_back(std::move(mv));
     }
     out.set("messages", std::move(messages));
+
+    if (!r.compaction_items.empty()) {
+        json::Value items = json::Value::array();
+        for (const auto& item : r.compaction_items) {
+            json::Value value = json::Value::object();
+            value.set("encrypted_content", json::Value::string(item.encrypted_content));
+            if (!item.id.empty()) value.set("id", json::Value::string(item.id));
+            if (!item.created_by.empty()) value.set("created_by", json::Value::string(item.created_by));
+            value.set("after_message", json::Value::integer(item.after_message));
+            items.push_back(std::move(value));
+        }
+        out.set("compaction_items", std::move(items));
+    }
 
     if (!r.tool_change_groups.empty()) {
         json::Value groups = json::Value::array();
@@ -921,6 +1013,12 @@ json::Value dump_request(const Request& r) {
         }
         if (r.params->verbosity.has_value()) {
             p.set("verbosity", json::Value::string(*r.params->verbosity));
+        }
+        if (r.params->logprobs.has_value()) {
+            p.set("logprobs", json::Value::boolean(*r.params->logprobs));
+        }
+        if (r.params->top_logprobs.has_value()) {
+            p.set("top_logprobs", json::Value::integer(*r.params->top_logprobs));
         }
         if (r.params->response_format.has_value()) {
             const auto& rf = *r.params->response_format;
@@ -1045,6 +1143,36 @@ StatusOr<Request> load_request(const json::Value& v) {
             if (std::holds_alternative<CompactionBlock>(r.messages[i].content[j]) && (i != 0 || j != 0)) return invalid_argument("compaction must be first block of first message");
         }
     }
+    if (const auto* items = v.find("compaction_items")) {
+        if (!items->is_array()) return invalid_argument("compaction_items must be an array");
+        std::size_t item_index = 0;
+        for (const auto& item : items->as_array()) {
+            if (!item.is_object()) return invalid_argument("compaction_items entries must be objects");
+            CompactionItem parsed;
+            OXA_ASSIGN_OR_RETURN(parsed.encrypted_content, require_string(item, "encrypted_content", "compaction_item"));
+            if (parsed.encrypted_content.empty()) return invalid_argument("ir: compaction_items encrypted_content is required");
+            if (const auto* after = item.find("after_message")) {
+                if (!after->is_int()) return invalid_argument("compaction_items after_message must be an integer");
+                parsed.after_message = after->as_int();
+            } else {
+                return invalid_argument("compaction_items after_message is required");
+            }
+            if (parsed.after_message < -1 || parsed.after_message >= static_cast<std::int64_t>(r.messages.size())) {
+                return invalid_argument("ir: compaction_items[" + std::to_string(item_index) + "].after_message is out of range");
+            }
+            if (const auto* id = item.find("id")) {
+                if (!id->is_string()) return invalid_argument("compaction_items id must be a string");
+                parsed.id = id->as_string();
+            }
+            if (const auto* created = item.find("created_by")) {
+                if (!created->is_string()) return invalid_argument("compaction_items created_by must be a string");
+                parsed.created_by = created->as_string();
+            }
+            r.compaction_items.push_back(std::move(parsed));
+            ++item_index;
+        }
+    }
+
     if (const auto* groups = v.find("tool_change_groups")) {
         if (!groups->is_array()) return invalid_argument("tool_change_groups must be an array");
         for (const auto& value : groups->as_array()) {
@@ -1257,6 +1385,15 @@ StatusOr<Request> load_request(const json::Value& v) {
                 return invalid_argument("invalid params verbosity: " + verb);
             }
             p.verbosity = verb;
+        }
+        if ((f = params->find("logprobs")) != nullptr) {
+            if (!f->is_bool()) return invalid_argument("params logprobs must be a boolean");
+            p.logprobs = f->as_bool();
+        }
+        if ((f = params->find("top_logprobs")) != nullptr) {
+            if (!f->is_int()) return invalid_argument("params top_logprobs must be an integer");
+            if (f->as_int() < 0) return invalid_argument("params top_logprobs must be non-negative");
+            p.top_logprobs = f->as_int();
         }
         if ((f = params->find("response_format")) != nullptr) {
             if (!f->is_object()) return invalid_argument("params response_format must be an object");
@@ -1669,7 +1806,7 @@ Status validate_with(const std::vector<Event>& events, bool allow_synthesized) {
                 open_is_thinking = true;
                 open_is_atomic = false;
                 signature_seen = false;
-            } else if (std::holds_alternative<RedactedThinkingBlock>(cbs->block) || std::holds_alternative<EncryptedContentBlock>(cbs->block) || std::holds_alternative<WebSearchCallBlock>(cbs->block) || std::holds_alternative<ToolReferenceBlock>(cbs->block)) {
+            } else if (std::holds_alternative<RedactedThinkingBlock>(cbs->block) || std::holds_alternative<EncryptedContentBlock>(cbs->block) || std::holds_alternative<WebSearchCallBlock>(cbs->block) || std::holds_alternative<ToolReferenceBlock>(cbs->block) || std::holds_alternative<CompactionItemBlock>(cbs->block)) {
                 open_is_tool = false;
                 open_is_custom_tool = false;
                 open_is_thinking = false;

@@ -168,6 +168,8 @@ func (d *StreamDecoder) Feed(ev *StreamEvent) ([]ir.Event, error) {
 			return nil, nil
 		case ev.Item.Type == ItemTypeWebSearchCall:
 			return nil, nil
+		case ev.Item.Type == ItemTypeCompaction:
+			return nil, nil
 		case ev.Item.Type == ItemTypeFunctionCall:
 			if ev.Item.ID == "" || ev.Item.CallID == "" || ev.Item.Name == "" {
 				return nil, fmt.Errorf("responses: function_call item requires id, call_id, and name")
@@ -455,6 +457,17 @@ func (d *StreamDecoder) Feed(ev *StreamEvent) ([]ir.Event, error) {
 			d.nextBlockIndex++
 			events = append(events,
 				ir.ContentBlockStart{Index: index, Block: ir.EncryptedContentBlock{Data: ev.Item.EncryptedContent}},
+				ir.ContentBlockStop{Index: index},
+			)
+		}
+		if d.itemType == ItemTypeCompaction {
+			if ev.Item.EncryptedContent == "" {
+				return nil, fmt.Errorf("responses: compaction item encrypted_content is required")
+			}
+			index := d.nextBlockIndex
+			d.nextBlockIndex++
+			events = append(events,
+				ir.ContentBlockStart{Index: index, Block: ir.CompactionItemBlock{EncryptedContent: ev.Item.EncryptedContent, ID: ev.Item.ID, CreatedBy: ev.Item.CreatedBy}},
 				ir.ContentBlockStop{Index: index},
 			)
 		}

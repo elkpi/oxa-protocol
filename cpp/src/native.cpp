@@ -296,6 +296,23 @@ struct BlockValidator {
         if (!st.ok()) return st;
         return check_no_prompt_cache_breakpoint(b.native, path);
     }
+    Status operator()(const CompactionItemBlock& b) const {
+        if (b.encrypted_content.empty()) {
+            return invalid_argument("ir: " + std::string(path) + ": compaction_item encrypted_content is required");
+        }
+        return ok_status();
+    }
+    Status operator()(const ServerToolUseBlock& b) const {
+        if (b.id.empty()) return invalid_argument("ir: " + std::string(path) + ": server_tool_use requires id");
+        if (b.name != "web_search") return invalid_argument("ir: " + std::string(path) + ": server_tool_use name must be \"web_search\"");
+        if (b.input.empty()) return invalid_argument("ir: " + std::string(path) + ": server_tool_use requires input");
+        return validate_annotations(b.native, host, path);
+    }
+    Status operator()(const WebSearchToolResultBlock& b) const {
+        if (b.tool_use_id.empty()) return invalid_argument("ir: " + std::string(path) + ": web_search_tool_result requires tool_use_id");
+        if (b.content.empty()) return invalid_argument("ir: " + std::string(path) + ": web_search_tool_result requires content");
+        return validate_annotations(b.native, host, path);
+    }
     Status operator()(const ToolResultBlock& b) const {
         auto st = validate_annotations(b.native, host, path);
         if (!st.ok()) return st;
@@ -333,7 +350,8 @@ void append_omission_loss(std::vector<Loss>& losses,
                           std::string_view path,
                           bool has_active_budget_proj,
                           const std::optional<std::string>& current_effort,
-                          std::string_view target) {
+                          std::string_view target,
+                          bool breakpoint_host = false) {
     if (ann.source == NATIVE_SOURCE_OPENAI) {
         if (ann.kind == NATIVE_KIND_MAX_COMPLETION_TOKENS || ann.kind == NATIVE_KIND_STREAM) {
             return;
@@ -421,6 +439,13 @@ void append_omission_loss(std::vector<Loss>& losses,
         }
         if (ann.kind == NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
             if (target == "chatcompletions" || target == "responses") {
+                return;
+            }
+            if (target == "anthropic" && breakpoint_host) {
+                if (auto parsed = json::parse(ann.value); parsed.ok() && parsed->is_object()) {
+                    if (parsed->find("mode")) losses.push_back(Loss{std::string(path), "mode", std::string(LOSS_UNMAPPED_FIELD), "prompt_cache_breakpoint.mode is not represented by cache_control"});
+                    if (parsed->find("ttl")) losses.push_back(Loss{std::string(path), "ttl", std::string(LOSS_UNMAPPED_FIELD), "prompt_cache_breakpoint.ttl has no equivalent cache_control ttl"});
+                }
                 return;
             }
             std::string field = "prompt_cache_breakpoint";
@@ -512,6 +537,13 @@ void append_omission_loss(std::vector<Loss>& losses,
     }
 
     if (ann.kind == NATIVE_KIND_CACHE_CONTROL) {
+        if (breakpoint_host && (target == "chatcompletions" || target == "responses")) {
+            losses.push_back(Loss{std::string(path), "type", std::string(LOSS_UNMAPPED_FIELD), "cache_control.type is not represented by prompt_cache_breakpoint"});
+            if (auto parsed = json::parse(ann.value); parsed.ok() && parsed->is_object() && parsed->find("ttl")) {
+                losses.push_back(Loss{std::string(path), "ttl", std::string(LOSS_UNMAPPED_FIELD), "cache_control.ttl has no equivalent prompt cache ttl"});
+            }
+            return;
+        }
         std::string field = "cache_control";
         std::string reason = std::string(LOSS_UNMAPPED_FIELD);
         std::string detail = std::string(CACHE_CONTROL_LOSS_DETAIL);
@@ -623,17 +655,19 @@ void append_omission_loss(std::vector<Loss>& losses,
 void collect_block_omissions(std::vector<Loss>& losses,
                              const Block& blk,
                              std::string_view path,
-                             std::string_view target);
+                             std::string_view target,
+                             bool breakpoint_host);
 
 struct BlockOmissionCollector {
     std::vector<Loss>& losses;
     std::string_view path;
     std::string_view target;
+    bool breakpoint_host;
 
     void operator()(const WebSearchCallBlock&) const {}
     void operator()(const TextBlock& b) const {
         for (std::size_t i = 0; i < b.native.size(); ++i) {
-            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target);
+            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target, breakpoint_host);
         }
     }
     void operator()(const ThinkingBlock& b) const {
@@ -643,7 +677,7 @@ struct BlockOmissionCollector {
     }
     void operator()(const ImageBlock& b) const {
         for (std::size_t i = 0; i < b.native.size(); ++i) {
-            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target);
+            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target, breakpoint_host);
         }
     }
     void operator()(const DocumentBlock& b) const {
@@ -651,7 +685,7 @@ struct BlockOmissionCollector {
             return;
         }
         for (std::size_t i = 0; i < b.native.size(); ++i) {
-            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target);
+            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target, breakpoint_host);
         }
     }
     void operator()(const RedactedThinkingBlock& /*b*/) const {
@@ -700,6 +734,20 @@ struct BlockOmissionCollector {
             append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target);
         }
     }
+    void operator()(const CompactionItemBlock&) const {
+        // Whole-block drop on non-Responses faces; annotations are absent and
+        // the cross-face loss is reported by the encoder.
+    }
+    void operator()(const ServerToolUseBlock& b) const {
+        for (std::size_t i = 0; i < b.native.size(); ++i) {
+            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target);
+        }
+    }
+    void operator()(const WebSearchToolResultBlock& b) const {
+        for (std::size_t i = 0; i < b.native.size(); ++i) {
+            append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target);
+        }
+    }
     void operator()(const ToolResultBlock& b) const {
         for (std::size_t i = 0; i < b.native.size(); ++i) {
             append_omission_loss(losses, b.native[i], std::string(path) + ".native[" + std::to_string(i) + "]", false, std::nullopt, target);
@@ -708,7 +756,7 @@ struct BlockOmissionCollector {
             if (std::holds_alternative<DocumentBlock>(b.content[k].block)) {
                 continue;
             }
-            collect_block_omissions(losses, b.content[k].block, std::string(path) + ".content[" + std::to_string(k) + "]", target);
+            collect_block_omissions(losses, b.content[k].block, std::string(path) + ".content[" + std::to_string(k) + "]", target, false);
         }
     }
     void operator()(const CustomToolResultBlock& b) const {
@@ -720,7 +768,7 @@ struct BlockOmissionCollector {
                 if (std::holds_alternative<DocumentBlock>((*vec)[k].block)) {
                     continue;
                 }
-                collect_block_omissions(losses, (*vec)[k].block, std::string(path) + ".output.content[" + std::to_string(k) + "]", target);
+                collect_block_omissions(losses, (*vec)[k].block, std::string(path) + ".output.content[" + std::to_string(k) + "]", target, false);
             }
         }
     }
@@ -729,8 +777,9 @@ struct BlockOmissionCollector {
 void collect_block_omissions(std::vector<Loss>& losses,
                              const Block& blk,
                              std::string_view path,
-                             std::string_view target) {
-    std::visit(BlockOmissionCollector{losses, path, target}, blk);
+                             std::string_view target,
+                             bool breakpoint_host) {
+    std::visit(BlockOmissionCollector{losses, path, target, breakpoint_host}, blk);
 }
 
 }  // namespace
@@ -983,7 +1032,7 @@ StatusOr<std::vector<Loss>> omitted_native_request_losses(const Request& req, st
 
     for (std::size_t s_idx = 0; s_idx < req.system.size(); ++s_idx) {
         for (std::size_t i = 0; i < req.system[s_idx].native.size(); ++i) {
-            append_omission_loss(losses, req.system[s_idx].native[i], "system[" + std::to_string(s_idx) + "].native[" + std::to_string(i) + "]", false, std::nullopt, target);
+            append_omission_loss(losses, req.system[s_idx].native[i], "system[" + std::to_string(s_idx) + "].native[" + std::to_string(i) + "]", false, std::nullopt, target, true);
         }
     }
 
@@ -994,7 +1043,7 @@ StatusOr<std::vector<Loss>> omitted_native_request_losses(const Request& req, st
                 continue;
             }
             std::string content_path = "messages[" + std::to_string(m_idx) + "].content[" + std::to_string(c_idx) + "]";
-            collect_block_omissions(losses, msg.content[c_idx], content_path, target);
+            collect_block_omissions(losses, msg.content[c_idx], content_path, target, msg.role == ir::ROLE_USER);
         }
     }
 
@@ -1007,6 +1056,23 @@ StatusOr<std::vector<Loss>> omitted_native_request_losses(const Request& req, st
     }
 
     return losses;
+}
+
+std::optional<json::Value> openai_breakpoint_wire(const std::vector<NativeAnnotation>& native) {
+    for (const auto& ann : native) {
+        if (ann.source == NATIVE_SOURCE_OPENAI && ann.kind == NATIVE_KIND_PROMPT_CACHE_BREAKPOINT) {
+            auto parsed = json::parse(ann.value);
+            if (parsed.ok()) return std::move(*parsed);
+        }
+    }
+    for (const auto& ann : native) {
+        if (ann.source == NATIVE_SOURCE_ANTHROPIC && ann.kind == NATIVE_KIND_CACHE_CONTROL) {
+            json::Value obj = json::Value::object();
+            obj.set("mode", json::Value::string("explicit"));
+            return obj;
+        }
+    }
+    return std::nullopt;
 }
 
 }  // namespace oxa::ir

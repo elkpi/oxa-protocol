@@ -260,6 +260,9 @@ export class ResponsesStreamDecoder {
     if (event.item.type === "web_search_call") {
       return [];
     }
+    if (event.item.type === "compaction") {
+      return [];
+    }
     if (event.item.type === "reasoning") {
       this.#reasoningOpen = true;
       this.#reasoningSummaryCount = 0;
@@ -842,6 +845,34 @@ export class ResponsesStreamDecoder {
       ];
       this.#toolUseSeen = true;
     }
+    if (this.#itemType === "compaction") {
+      const cipher = event.item?.encrypted_content;
+      if (typeof cipher !== "string" || cipher === "")
+        this.#lifecycle(
+          "responses: compaction item encrypted_content is required",
+        );
+      const createdBy = event.item?.created_by;
+      if (createdBy !== undefined && typeof createdBy !== "string")
+        this.#lifecycle("responses: compaction created_by must be a string");
+      const blockIndex = this.#nextBlockIndex;
+      this.#nextBlockIndex += 1;
+      const id = event.item?.id;
+      events = [
+        {
+          type: "content_block_start",
+          index: blockIndex,
+          block: {
+            type: "compaction_item",
+            encrypted_content: cipher,
+            ...(id === undefined || id === "" ? {} : { id }),
+            ...(typeof createdBy === "string" && createdBy !== ""
+              ? { created_by: createdBy }
+              : {}),
+          },
+        },
+        { type: "content_block_stop", index: blockIndex },
+      ];
+    }
     if (this.#itemType === "web_search_call") {
       const block = decodeWebSearchCall(
         event.item as unknown as JsonObject,
@@ -1316,6 +1347,12 @@ type EncoderItem =
       readonly id: string;
       readonly outputIndex: number;
       readonly item: any;
+    }
+  | {
+      readonly kind: "compaction";
+      readonly id: string;
+      readonly outputIndex: number;
+      readonly item: ResponsesOutputItem;
     };
 
 type EncoderBlock =
@@ -1336,6 +1373,10 @@ type EncoderBlock =
     }
   | {
       readonly kind: "web_search_call";
+      readonly index: number;
+    }
+  | {
+      readonly kind: "compaction";
       readonly index: number;
     }
   | {
@@ -1480,6 +1521,9 @@ export class ResponsesStreamEncoder {
       );
     if (event.block.type === "web_search_call") {
       return this.#startWebSearchCall(event.index, event.block);
+    }
+    if (event.block.type === "compaction_item") {
+      return this.#startCompaction(event.index, event.block);
     }
     if (event.block.type === "encrypted_content") {
       return this.#startEncryptedContent(event.index, event.block);
@@ -1800,7 +1844,8 @@ export class ResponsesStreamEncoder {
     if (
       this.#activeBlock.kind === "redacted_thinking" ||
       this.#activeBlock.kind === "encrypted_content" ||
-      this.#activeBlock.kind === "web_search_call"
+      this.#activeBlock.kind === "web_search_call" ||
+      this.#activeBlock.kind === "compaction"
     ) {
       this.#lifecycle(
         `${this.#activeBlock.kind} block received unexpected delta`,
@@ -1932,6 +1977,9 @@ export class ResponsesStreamEncoder {
     }
     if (this.#activeBlock.kind === "web_search_call") {
       return this.#stopWebSearchCall();
+    }
+    if (this.#activeBlock.kind === "compaction") {
+      return this.#stopCompaction();
     }
     if (this.#activeItem === undefined)
       this.#lifecycle("content block has no active item");
@@ -2466,6 +2514,63 @@ export class ResponsesStreamEncoder {
       item,
     });
     return this.#result(events);
+  }
+
+  #startCompaction(
+    index: number,
+    block: Extract<Block, { type: "compaction_item" }>,
+  ): ConversionResult<readonly ResponsesStreamEvent[]> {
+    if (block.encrypted_content === "")
+      this.#lifecycle(
+        "responses: compaction item encrypted_content is required",
+      );
+    const events: ResponsesStreamEvent[] = [];
+    if (this.#activeItem !== undefined) {
+      if (this.#activeItem.kind === "message") {
+        events.push(this.#closeMessageItem());
+      } else {
+        this.#lifecycle(
+          "responses: compaction cannot open before the active item completes",
+        );
+      }
+    }
+    const id =
+      block.id === undefined || block.id === "" ? "cmp_abc123" : block.id;
+    const item: ResponsesOutputItem = {
+      type: "compaction",
+      id,
+      encrypted_content: block.encrypted_content,
+      ...(block.created_by === undefined || block.created_by === ""
+        ? {}
+        : { created_by: block.created_by }),
+    };
+    const outputIndex = this.#nextOutputIndex++;
+    this.#activeItem = { kind: "compaction", id, outputIndex, item };
+    this.#activeBlock = { kind: "compaction", index };
+    events.push({
+      type: "response.output_item.added",
+      output_index: outputIndex,
+      item,
+    });
+    return this.#result(events);
+  }
+
+  #stopCompaction(): ConversionResult<readonly ResponsesStreamEvent[]> {
+    if (this.#activeItem?.kind !== "compaction") {
+      this.#lifecycle("responses: compaction stop without an active item");
+    }
+    const item = this.#activeItem;
+    this.#completed.push(item.item);
+    const outputIndex = item.outputIndex;
+    this.#activeItem = undefined;
+    this.#activeBlock = undefined;
+    return this.#result([
+      {
+        type: "response.output_item.done",
+        output_index: outputIndex,
+        item: item.item,
+      },
+    ]);
   }
 
   #stopWebSearchCall(): ConversionResult<readonly ResponsesStreamEvent[]> {

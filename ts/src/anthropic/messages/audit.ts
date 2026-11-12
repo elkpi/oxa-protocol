@@ -177,6 +177,27 @@ const BLOCK: WireAuditSpec = {
             cache_control: undefined,
           },
         };
+      case "server_tool_use":
+        return {
+          fields: {
+            type: undefined,
+            id: undefined,
+            name: undefined,
+            input: undefined,
+            caller: undefined,
+            cache_control: undefined,
+          },
+        };
+      case "web_search_tool_result":
+        return {
+          fields: {
+            type: undefined,
+            tool_use_id: undefined,
+            content: undefined,
+            caller: undefined,
+            cache_control: undefined,
+          },
+        };
       default:
         return undefined;
     }
@@ -301,6 +322,25 @@ const RESPONSE_BLOCK: WireAuditSpec = {
             type: undefined,
             tool_name: undefined,
             name: undefined,
+          },
+        };
+      case "server_tool_use":
+        return {
+          fields: {
+            type: undefined,
+            id: undefined,
+            name: undefined,
+            input: undefined,
+            caller: undefined,
+          },
+        };
+      case "web_search_tool_result":
+        return {
+          fields: {
+            type: undefined,
+            tool_use_id: undefined,
+            content: undefined,
+            caller: undefined,
           },
         };
       default:

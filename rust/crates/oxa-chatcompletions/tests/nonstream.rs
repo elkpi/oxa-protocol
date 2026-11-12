@@ -183,6 +183,7 @@ fn encodes_reasoning_content_and_reports_signature_losses() {
             oxa_ir::Message {
                 role: Role::User,
                 content: vec![Block::Text {
+                    logprobs: None,
                     text: "question".to_string(),
                     citations: None,
                     native: Vec::new(),
@@ -197,6 +198,7 @@ fn encodes_reasoning_content_and_reports_signature_losses() {
                         native: Vec::new(),
                     },
                     Block::Text {
+                        logprobs: None,
                         text: "answer".to_string(),
                         citations: None,
                         native: Vec::new(),
@@ -214,10 +216,13 @@ fn encodes_reasoning_content_and_reports_signature_losses() {
             reasoning_effort: Some(ReasoningEffort::High),
             verbosity: None,
             response_format: None,
+            logprobs: None,
+            top_logprobs: None,
         }),
         metadata: None,
         native: Vec::new(),
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
     let (wire, request_losses) =
         encode_request(&request, &Config::default()).expect("encode request");
@@ -668,6 +673,7 @@ fn test_custom_tool_result_array_preserved() {
             oxa_ir::Message {
                 role: oxa_ir::Role::User,
                 content: vec![Block::Text {
+                    logprobs: None,
                     text: "hi".to_string(),
                     citations: None,
                     native: Vec::new(),
@@ -688,11 +694,13 @@ fn test_custom_tool_result_array_preserved() {
                     tool_use_id: "c".to_string(),
                     output: oxa_ir::CustomToolOutput::Content(vec![
                         Block::Text {
+                            logprobs: None,
                             text: "line 1".to_string(),
                             citations: None,
                             native: Vec::new(),
                         },
                         Block::Text {
+                            logprobs: None,
                             text: "line 2".to_string(),
                             citations: None,
                             native: Vec::new(),
@@ -708,6 +716,7 @@ fn test_custom_tool_result_array_preserved() {
         metadata: None,
         native: Vec::new(),
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
     let (wire, losses) = encode_request(&req, &Config::default()).expect("encode request");
     assert!(losses.is_empty());

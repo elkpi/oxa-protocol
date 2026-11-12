@@ -18,6 +18,9 @@ BLOCK_TYPE_ENCRYPTED_CONTENT: Final = "encrypted_content"
 ENCRYPTED_CONTENT_LOSS_DETAIL: Final = (
     "responses encrypted reasoning replay state; the target face cannot preserve this block"
 )
+COMPACTION_ITEM_LOSS_DETAIL: Final = (
+    "Responses compaction item cannot be represented on the target face"
+)
 BLOCK_TYPE_IMAGE: Final = "image"
 BLOCK_TYPE_DOCUMENT: Final = "document"
 BLOCK_TYPE_TOOL_USE: Final = "tool_use"
@@ -27,6 +30,9 @@ BLOCK_TYPE_CUSTOM_TOOL_RESULT: Final = "custom_tool_result"
 BLOCK_TYPE_APPLY_PATCH_TOOL_USE: Final = "apply_patch_tool_use"
 BLOCK_TYPE_APPLY_PATCH_TOOL_RESULT: Final = "apply_patch_tool_result"
 BLOCK_TYPE_WEB_SEARCH_CALL: Final = "web_search_call"
+BLOCK_TYPE_COMPACTION_ITEM: Final = "compaction_item"
+BLOCK_TYPE_SERVER_TOOL_USE: Final = "server_tool_use"
+BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT: Final = "web_search_tool_result"
 BLOCK_TYPE_REFUSAL: Final = "refusal"
 BLOCK_TYPE_TOOL_REFERENCE: Final = "tool_reference"
 TOOL_TYPE_APPLY_PATCH: Final = "apply_patch"
@@ -45,6 +51,9 @@ BlockType = Literal[
     "apply_patch_tool_use",
     "apply_patch_tool_result",
     "web_search_call",
+    "compaction_item",
+    "server_tool_use",
+    "web_search_tool_result",
     "refusal",
     "tool_reference",
 ]

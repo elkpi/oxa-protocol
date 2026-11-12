@@ -105,7 +105,7 @@ fn assert_cross_stream(
 fn cross_stream_vectors() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
 
-    // Pair counts across the ten vectors: one multi-delta-text vector per
+    // Pair counts across the twelve vectors: one multi-delta-text vector per
     // ordered pair, plus two focused Chat Completions -> Anthropic vectors
     // (interleaved tool-argument fragments, usage-only terminal).
     {
@@ -136,11 +136,11 @@ fn cross_stream_vectors() {
 
     let mut source = Responses::new();
     let mut target = ChatCompletions::new();
-    assert_cross_stream(manifest_dir, &mut source, &mut target, 1);
+    assert_cross_stream(manifest_dir, &mut source, &mut target, 2);
 
     let mut source = Responses::new();
     let mut target = Anthropic::new();
-    assert_cross_stream(manifest_dir, &mut source, &mut target, 1);
+    assert_cross_stream(manifest_dir, &mut source, &mut target, 2);
 
     let mut source = Responses::new();
     let mut target = Responses::new();

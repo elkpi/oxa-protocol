@@ -23,6 +23,18 @@ type Request struct {
 	Metadata         map[string]string
 	Native           []NativeAnnotation
 	ToolChangeGroups []ToolChangeGroup
+	// CompactionItems are Responses compaction checkpoints (since 3.3.0).
+	// AfterMessage -1 emits the item before every message.
+	CompactionItems []CompactionItem
+}
+
+// CompactionItem is one Responses compaction checkpoint in request history.
+// EncryptedContent is opaque and MUST NOT appear in a loss detail.
+type CompactionItem struct {
+	EncryptedContent string `json:"encrypted_content"`
+	ID               string `json:"id,omitempty"`
+	CreatedBy        string `json:"created_by,omitempty"`
+	AfterMessage     int    `json:"after_message"`
 }
 
 // Message is one conversational turn.
@@ -79,6 +91,8 @@ type Params struct {
 	ReasoningEffort string // minimal | low | medium | high (since 2.0)
 	Verbosity       string
 	ResponseFormat  *ResponseFormat // structured output formatting preference (since 2.1)
+	Logprobs        *bool           // Chat Completions request switch (since 3.3.0)
+	TopLogprobs     *int            // OpenAI top_logprobs (since 3.3.0)
 }
 
 const (
@@ -108,7 +122,7 @@ const (
 // set reports whether any parameter carries a value; the canonical codec
 // omits the whole params object when it does not.
 func (p Params) set() bool {
-	return p.Temperature != nil || p.TopP != nil || p.MaxTokens != nil || len(p.StopSequences) > 0 || p.ReasoningEffort != "" || p.Verbosity != "" || p.ResponseFormat != nil
+	return p.Temperature != nil || p.TopP != nil || p.MaxTokens != nil || len(p.StopSequences) > 0 || p.ReasoningEffort != "" || p.Verbosity != "" || p.ResponseFormat != nil || p.Logprobs != nil || p.TopLogprobs != nil
 }
 
 // ToolChangeGroup represents positional tool availability changes and system content

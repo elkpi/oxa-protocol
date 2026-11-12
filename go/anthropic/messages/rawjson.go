@@ -495,6 +495,10 @@ func schemaForRawTypeSeen(t reflect.Type, seen map[reflect.Type]*rawJSONSchema) 
 					seen)
 			case BlockTypeToolReference:
 				return rawObjectSchema(t, []string{"type", "tool_name", "name", "cache_control"}, nil, seen)
+			case BlockTypeServerToolUse:
+				return rawObjectSchema(t, []string{"type", "id", "name", "input", "caller", "cache_control"}, nil, seen)
+			case BlockTypeWebSearchToolResult:
+				return rawObjectSchema(t, []string{"type", "tool_use_id", "content", "caller", "cache_control"}, nil, seen)
 			default:
 				return nil
 			}
@@ -716,6 +720,10 @@ func schemaForResponseBlock(seen map[reflect.Type]*rawJSONSchema) *rawJSONSchema
 				seen)
 		case BlockTypeToolReference:
 			return rawObjectSchema(t, []string{"type", "tool_name", "name"}, nil, seen)
+		case BlockTypeServerToolUse:
+			return rawObjectSchema(t, []string{"type", "id", "name", "input", "caller"}, nil, seen)
+		case BlockTypeWebSearchToolResult:
+			return rawObjectSchema(t, []string{"type", "tool_use_id", "content", "caller"}, nil, seen)
 		default:
 			return nil
 		}

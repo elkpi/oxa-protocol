@@ -38,16 +38,6 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
             wire.function_call.is_some(),
             "legacy Chat Completions function_call has no IR equivalent in v1.",
         ),
-        (
-            "logprobs",
-            wire.logprobs.is_some(),
-            "Chat Completions log-probability sampling has no IR equivalent in v1.",
-        ),
-        (
-            "top_logprobs",
-            wire.top_logprobs.is_some(),
-            "Chat Completions log-probability sampling has no IR equivalent in v1.",
-        ),
     ] {
         if present {
             losses.push(loss(name, name, LossReason::UnmappedField, detail));
@@ -64,6 +54,7 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         metadata: None,
         native: Vec::new(),
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
     if let Some(value) = &wire.metadata {
         req.metadata = string_metadata(value, "chatcompletions")?;
@@ -229,6 +220,7 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         if message.role != ROLE_SYSTEM && message.role != "developer" && content.is_empty() {
             // IR conversation messages cannot have empty content (spec/01 §3.3).
             content.push(Block::Text {
+                logprobs: None,
                 text: String::new(),
                 citations: None,
                 native: Vec::new(),
@@ -546,6 +538,11 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         reasoning_effort: decode_reasoning_effort(wire.reasoning_effort.as_deref(), &mut losses),
         verbosity,
         response_format,
+        logprobs: wire.logprobs.as_ref().and_then(|v| v.as_bool()),
+        top_logprobs: wire
+            .top_logprobs
+            .as_ref()
+            .and_then(|v| v.as_i64().filter(|n| *n >= 0)),
     };
     let params_set = params.temperature.is_some()
         || params.top_p.is_some()
@@ -553,7 +550,9 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         || params.stop_sequences.is_some()
         || params.reasoning_effort.is_some()
         || params.verbosity.is_some()
-        || params.response_format.is_some();
+        || params.response_format.is_some()
+        || params.logprobs.is_some()
+        || params.top_logprobs.is_some();
     if params_set {
         req.params = Some(params);
     }

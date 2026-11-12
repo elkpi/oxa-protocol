@@ -309,7 +309,10 @@ impl StreamEncoder {
                     Block::WebSearchCall { .. }
                     | Block::EncryptedContent { .. }
                     | Block::ApplyPatchToolUse { .. }
-                    | Block::ApplyPatchToolResult { .. } => {
+                    | Block::ApplyPatchToolResult { .. }
+                    | Block::CompactionItem { .. }
+                    | Block::ServerToolUse { .. }
+                    | Block::WebSearchToolResult { .. } => {
                         self.next_index += 1;
                         self.block_open = true;
                         self.open_tool = false;
@@ -318,13 +321,23 @@ impl StreamEncoder {
                         self.open_atomic = true;
                         self.custom_seen |= !matches!(
                             block,
-                            Block::WebSearchCall { .. } | Block::EncryptedContent { .. }
+                            Block::WebSearchCall { .. }
+                                | Block::EncryptedContent { .. }
+                                | Block::CompactionItem { .. }
+                                | Block::ServerToolUse { .. }
+                                | Block::WebSearchToolResult { .. }
                         );
                         self.open_ir_index = *index;
                         let detail = if matches!(block, Block::WebSearchCall { .. }) {
                             "Responses web_search_call has no Anthropic equivalent"
                         } else if matches!(block, Block::EncryptedContent { .. }) {
                             oxa_ir::ENCRYPTED_CONTENT_LOSS_DETAIL
+                        } else if matches!(block, Block::CompactionItem { .. }) {
+                            oxa_ir::COMPACTION_ITEM_LOSS_DETAIL
+                        } else if matches!(block, Block::ServerToolUse { .. })
+                            || matches!(block, Block::WebSearchToolResult { .. })
+                        {
+                            oxa_ir::WEB_SEARCH_HISTORY_LOSS_DETAIL
                         } else if matches!(block, Block::ApplyPatchToolUse { .. }) {
                             "Anthropic Messages streaming does not support apply_patch tools"
                         } else {

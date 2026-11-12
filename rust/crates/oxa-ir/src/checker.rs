@@ -100,7 +100,10 @@ fn validate_with(stream: &EventStream, allow_synthesized: bool) -> Result<(), Vi
                     Block::RedactedThinking { .. }
                     | Block::EncryptedContent { .. }
                     | Block::ToolReference { .. }
-                    | Block::WebSearchCall { .. } => (*index, OpenBlock::Atomic),
+                    | Block::WebSearchCall { .. }
+                    | Block::CompactionItem { .. }
+                    | Block::ServerToolUse { .. }
+                    | Block::WebSearchToolResult { .. } => (*index, OpenBlock::Atomic),
                     Block::ToolUse { input, .. } => (
                         *index,
                         OpenBlock::Tool(OpenTool {
@@ -316,6 +319,9 @@ fn block_kind(block: &Block) -> &'static str {
         Block::ApplyPatchToolResult { .. } => "apply_patch_tool_result",
         Block::ToolResult { .. } => "tool_result",
         Block::WebSearchCall { .. } => "web_search_call",
+        Block::CompactionItem { .. } => "compaction_item",
+        Block::ServerToolUse { .. } => "server_tool_use",
+        Block::WebSearchToolResult { .. } => "web_search_tool_result",
         Block::Refusal { .. } => "refusal",
         Block::Compaction { .. } => "compaction",
     }

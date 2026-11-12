@@ -1,0 +1,29 @@
+{
+  "name": "responses.stream.compaction-item-from-ir",
+  "description": "Encoding a CompactionItemBlock emits added and done for the same item, and an empty id becomes cmp_abc123 (N-R-22).",
+  "spec_version": "0.2.0",
+  "mode": "stream",
+  "conversion": "from-ir",
+  "source": {"protocol": "responses"},
+  "target": {"protocol": "responses"},
+  "input": {
+    "specVersion": "0.3.0",
+    "events": [
+      {"type": "message_start", "id": "resp_cmp_s", "model": "gpt-5.4"},
+      {"type": "content_block_start", "index": 0, "block": {"type": "compaction_item", "encrypted_content": "cipher", "created_by": "system"}},
+      {"type": "content_block_stop", "index": 0},
+      {"type": "message_delta", "stop_reason": "end_turn", "usage": {"input_tokens": 2, "output_tokens": 3}},
+      {"type": "message_done"}
+    ]
+  },
+  "expected_output": {
+    "events": [
+      {"type": "response.created", "response": {"id": "resp_cmp_s", "object": "response", "status": "in_progress", "model": "gpt-5.4", "output": []}},
+      {"type": "response.output_item.added", "output_index": 0, "item": {"type": "compaction", "id": "cmp_abc123", "encrypted_content": "cipher", "created_by": "system"}},
+      {"type": "response.output_item.done", "output_index": 0, "item": {"type": "compaction", "id": "cmp_abc123", "encrypted_content": "cipher", "created_by": "system"}},
+      {"type": "response.completed", "response": {"id": "resp_cmp_s", "object": "response", "status": "completed", "model": "gpt-5.4", "output": [{"type": "compaction", "id": "cmp_abc123", "encrypted_content": "cipher", "created_by": "system"}], "usage": {"input_tokens": 2, "output_tokens": 3, "total_tokens": 5}}}
+    ]
+  },
+  "expected_losses": [],
+  "tags": ["stream", "compaction", "n-r-22"]
+}

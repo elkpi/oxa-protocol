@@ -34,6 +34,30 @@ pub struct Request {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub tool_change_groups: Vec<ToolChangeGroup>,
+    #[serde(
+        rename = "compaction_items",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub compaction_items: Vec<CompactionItem>,
+}
+
+/// One Responses compaction checkpoint placed relative to request messages
+/// (spec/11 N-R-22). `after_message` -1 emits before every message.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CompactionItem {
+    #[serde(rename = "encrypted_content")]
+    pub encrypted_content: String,
+    #[serde(rename = "id", default, skip_serializing_if = "String::is_empty")]
+    pub id: String,
+    #[serde(
+        rename = "created_by",
+        default,
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub created_by: String,
+    #[serde(rename = "after_message")]
+    pub after_message: isize,
 }
 
 /// System prompt content (spec/01 §3.2). Sealed; exactly one variant in v1.
@@ -84,6 +108,16 @@ pub struct TextCitation {
 pub const ENCRYPTED_CONTENT_LOSS_DETAIL: &str =
     "responses encrypted reasoning replay state; the target face cannot preserve this block";
 
+/// Cross-face omission text for a Responses compaction checkpoint (spec/11
+/// N-R-22). It MUST NOT contain the ciphertext.
+pub const COMPACTION_ITEM_LOSS_DETAIL: &str =
+    "Responses compaction item cannot be represented on the target face";
+
+/// Cross-face omission text for Anthropic provider-hosted web_search history
+/// (spec/12 N-AN-23). It MUST NOT contain result ciphertext.
+pub const WEB_SEARCH_HISTORY_LOSS_DETAIL: &str =
+    "Anthropic web_search history cannot be represented on the target face";
+
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Block {
@@ -93,6 +127,8 @@ pub enum Block {
         text: String,
         #[serde(rename = "citations", default, skip_serializing_if = "Option::is_none")]
         citations: Option<Vec<TextCitation>>,
+        #[serde(rename = "logprobs", default, skip_serializing_if = "Option::is_none")]
+        logprobs: Option<String>,
         #[serde(rename = "native", default, skip_serializing_if = "Vec::is_empty")]
         native: Vec<NativeAnnotation>,
     },
@@ -208,6 +244,43 @@ pub enum Block {
         status: ApplyPatchResultStatus,
         #[serde(rename = "output", default, skip_serializing_if = "Option::is_none")]
         output: Option<String>,
+        #[serde(rename = "native", default, skip_serializing_if = "Vec::is_empty")]
+        native: Vec<NativeAnnotation>,
+    },
+    #[serde(rename = "compaction_item")]
+    CompactionItem {
+        #[serde(rename = "encrypted_content")]
+        encrypted_content: String,
+        #[serde(rename = "id", default, skip_serializing_if = "String::is_empty")]
+        id: String,
+        #[serde(
+            rename = "created_by",
+            default,
+            skip_serializing_if = "String::is_empty"
+        )]
+        created_by: String,
+    },
+    #[serde(rename = "server_tool_use")]
+    ServerToolUse {
+        #[serde(rename = "id")]
+        id: String,
+        #[serde(rename = "name")]
+        name: String,
+        #[serde(rename = "input")]
+        input: String,
+        #[serde(rename = "caller", default, skip_serializing_if = "Option::is_none")]
+        caller: Option<String>,
+        #[serde(rename = "native", default, skip_serializing_if = "Vec::is_empty")]
+        native: Vec<NativeAnnotation>,
+    },
+    #[serde(rename = "web_search_tool_result")]
+    WebSearchToolResult {
+        #[serde(rename = "tool_use_id")]
+        tool_use_id: String,
+        #[serde(rename = "content")]
+        content: String,
+        #[serde(rename = "caller", default, skip_serializing_if = "Option::is_none")]
+        caller: Option<String>,
         #[serde(rename = "native", default, skip_serializing_if = "Vec::is_empty")]
         native: Vec<NativeAnnotation>,
     },
@@ -375,8 +448,10 @@ impl Block {
             | Block::ApplyPatchToolResult { native, .. }
             | Block::Refusal { native, .. }
             | Block::ToolResult { native, .. }
-            | Block::Compaction { native, .. } => native,
-            Block::WebSearchCall { .. } => &[],
+            | Block::Compaction { native, .. }
+            | Block::ServerToolUse { native, .. }
+            | Block::WebSearchToolResult { native, .. } => native,
+            Block::WebSearchCall { .. } | Block::CompactionItem { .. } => &[],
         }
     }
 }
@@ -387,11 +462,13 @@ impl std::fmt::Debug for Block {
             Block::Text {
                 text,
                 citations,
+                logprobs,
                 native,
             } => f
                 .debug_struct("Text")
                 .field("text", text)
                 .field("citations", citations)
+                .field("logprobs", logprobs)
                 .field("native", native)
                 .finish(),
             Block::Thinking {
@@ -552,6 +629,45 @@ impl std::fmt::Debug for Block {
                 .field("tool_changes", tool_changes)
                 .field("native", native)
                 .field("extra", extra)
+                .finish(),
+            Block::ServerToolUse {
+                id,
+                name,
+                input,
+                caller,
+                native,
+            } => f
+                .debug_struct("ServerToolUse")
+                .field("id", id)
+                .field("name", name)
+                .field("input", input)
+                .field("caller", caller)
+                .field("native", native)
+                .finish(),
+            Block::WebSearchToolResult {
+                tool_use_id,
+                content,
+                caller,
+                native,
+            } => f
+                .debug_struct("WebSearchToolResult")
+                .field("tool_use_id", tool_use_id)
+                .field("content", &format!("[REDACTED len={}]", content.len()))
+                .field("caller", caller)
+                .field("native", native)
+                .finish(),
+            Block::CompactionItem {
+                encrypted_content,
+                id,
+                created_by,
+            } => f
+                .debug_struct("CompactionItem")
+                .field(
+                    "encrypted_content",
+                    &format!("[REDACTED len={}]", encrypted_content.len()),
+                )
+                .field("id", id)
+                .field("created_by", created_by)
                 .finish(),
         }
     }
@@ -937,6 +1053,14 @@ pub struct Params {
         skip_serializing_if = "Option::is_none"
     )]
     pub response_format: Option<ResponseFormat>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logprobs: Option<bool>,
+    #[serde(
+        rename = "top_logprobs",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub top_logprobs: Option<i64>,
 }
 
 /// Output formatting preference (spec/01 §3.7.1, since 2.1).

@@ -11,6 +11,9 @@ from oxa.ir.constants import (
     BLOCK_TYPE_CUSTOM_TOOL_USE,
     BLOCK_TYPE_APPLY_PATCH_TOOL_USE,
     BLOCK_TYPE_APPLY_PATCH_TOOL_RESULT,
+    BLOCK_TYPE_COMPACTION_ITEM,
+    BLOCK_TYPE_SERVER_TOOL_USE,
+    BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT,
     BLOCK_TYPE_WEB_SEARCH_CALL,
     BLOCK_TYPE_REFUSAL,
     BLOCK_TYPE_DOCUMENT,
@@ -52,6 +55,10 @@ from oxa.ir.types import (
     ApplyPatchOperation,
     ApplyPatchToolResultBlock,
     ApplyPatchToolUseBlock,
+    CompactionItem,
+    CompactionItemBlock,
+    ServerToolUseBlock,
+    WebSearchToolResultBlock,
     WebSearchCallBlock,
     ApplyPatchUpdateFileOperation,
     Block,
@@ -361,6 +368,8 @@ def dump_block(block: Block) -> dict[str, Any]:
                     raise CodecError(f"ir: unknown citation source {c.source!r}")
                 validate_citation(c.source, c.value)
             out["citations"] = [{"source": c.source, "value": c.value} for c in block.citations]
+        if block.logprobs is not None:
+            out["logprobs"] = block.logprobs
         return out
     if isinstance(block, RedactedThinkingBlock):
         return {"type": BLOCK_TYPE_REDACTED_THINKING, "data": block.data}
@@ -453,6 +462,12 @@ def dump_block(block: Block) -> dict[str, Any]:
         if block.output is not None:
             res["output"] = block.output
         return res
+    if isinstance(block, CompactionItemBlock):
+        return _dump_compaction_item(block)
+    if isinstance(block, ServerToolUseBlock):
+        return _dump_server_tool_use(block)
+    if isinstance(block, WebSearchToolResultBlock):
+        return _dump_web_search_tool_result(block)
     if isinstance(block, WebSearchCallBlock):
         _validate_web_search(block.id, block.status, block.action)
         from oxa.ir.web_search import validate_web_search_extra
@@ -502,6 +517,8 @@ def dump_request_block(block: Block) -> dict[str, Any]:
                     raise CodecError(f"ir: unknown citation source {c.source!r}")
                 validate_citation(c.source, c.value)
             out["citations"] = [{"source": c.source, "value": c.value} for c in block.citations]
+        if block.logprobs is not None:
+            out["logprobs"] = block.logprobs
         if block.role:
             raise CodecError("role is only permitted on system blocks")
     elif isinstance(block, RedactedThinkingBlock):
@@ -614,6 +631,12 @@ def dump_request_block(block: Block) -> dict[str, Any]:
         }
         if block.output is not None:
             out["output"] = block.output
+    elif isinstance(block, CompactionItemBlock):
+        out = _dump_compaction_item(block)
+    elif isinstance(block, ServerToolUseBlock):
+        out = _dump_server_tool_use(block)
+    elif isinstance(block, WebSearchToolResultBlock):
+        out = _dump_web_search_tool_result(block)
     elif isinstance(block, WebSearchCallBlock):
         _validate_web_search(block.id, block.status, block.action)
         from oxa.ir.web_search import validate_web_search_extra
@@ -702,7 +725,10 @@ def load_block(data: dict[str, Any]) -> Block:
                     raise CodecError("citation value must be a string")
                 validate_citation(item["source"], val)
                 cites.append(TextCitation(source=item["source"], value=val))
-        return TextBlock(text=data["text"], citations=tuple(cites) if cites else None)
+        logprobs = data.get("logprobs")
+        if logprobs is not None and not isinstance(logprobs, str):
+            raise CodecError("logprobs must be a string")
+        return TextBlock(text=data["text"], citations=tuple(cites) if cites else None, logprobs=logprobs)
     if kind == BLOCK_TYPE_REDACTED_THINKING:
         d = data.get("data")
         if not isinstance(d, str):
@@ -777,6 +803,12 @@ def load_block(data: dict[str, Any]) -> Block:
             status=load_apply_patch_result_status(data.get("status")),
             output=output,
         )
+    if kind == BLOCK_TYPE_COMPACTION_ITEM:
+        return _load_compaction_item(data)
+    if kind == BLOCK_TYPE_SERVER_TOOL_USE:
+        return _load_server_tool_use(data, ())
+    if kind == BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT:
+        return _load_web_search_tool_result(data, ())
     if kind == BLOCK_TYPE_WEB_SEARCH_CALL:
         return load_web_search_block(data)
     if kind == BLOCK_TYPE_REFUSAL:
@@ -818,7 +850,10 @@ def load_request_block(data: dict[str, Any]) -> Block:
                     raise CodecError("citation value must be a string")
                 validate_citation(item["source"], val)
                 cites.append(TextCitation(source=item["source"], value=val))
-        return TextBlock(text=data["text"], citations=tuple(cites) if cites else None, native=native)
+        logprobs = data.get("logprobs")
+        if logprobs is not None and not isinstance(logprobs, str):
+            raise CodecError("logprobs must be a string")
+        return TextBlock(text=data["text"], citations=tuple(cites) if cites else None, native=native, logprobs=logprobs)
     if kind == BLOCK_TYPE_REDACTED_THINKING:
         d = data.get("data")
         if not isinstance(d, str):
@@ -906,6 +941,14 @@ def load_request_block(data: dict[str, Any]) -> Block:
             output=output,
             native=native,
         )
+    if kind == BLOCK_TYPE_COMPACTION_ITEM:
+        if native:
+            raise CodecError("compaction_item does not support native annotations")
+        return _load_compaction_item(data)
+    if kind == BLOCK_TYPE_SERVER_TOOL_USE:
+        return _load_server_tool_use(data, native)
+    if kind == BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT:
+        return _load_web_search_tool_result(data, native)
     if kind == BLOCK_TYPE_WEB_SEARCH_CALL:
         return load_web_search_block(data)
     if kind == BLOCK_TYPE_REFUSAL:
@@ -917,6 +960,129 @@ def load_request_block(data: dict[str, Any]) -> Block:
             raise CodecError("refusal block category must be a string")
         return RefusalBlock(refusal=refusal_val, category=cat_val, native=native)
     raise CodecError(f"unknown block discriminant: {kind}")
+
+
+def _dump_compaction_item(block: CompactionItemBlock) -> dict[str, Any]:
+    if not block.encrypted_content:
+        raise CodecError("ir: compaction_item encrypted_content is required")
+    out: dict[str, Any] = {
+        "type": BLOCK_TYPE_COMPACTION_ITEM,
+        "encrypted_content": block.encrypted_content,
+    }
+    if block.id:
+        out["id"] = block.id
+    if block.created_by:
+        out["created_by"] = block.created_by
+    return out
+
+
+def _load_compaction_item(data: dict[str, Any]) -> CompactionItemBlock:
+    cipher = data.get("encrypted_content")
+    if not isinstance(cipher, str) or not cipher:
+        raise CodecError("ir: compaction_item encrypted_content is required")
+    ident = data.get("id", "")
+    created = data.get("created_by", "")
+    if not isinstance(ident, str) or not isinstance(created, str):
+        raise CodecError("ir: compaction_item id and created_by must be strings")
+    return CompactionItemBlock(encrypted_content=cipher, id=ident, created_by=created)
+
+
+def _dump_server_tool_use(block: ServerToolUseBlock) -> dict[str, Any]:
+    if not block.id:
+        raise CodecError("ir: server_tool_use requires id")
+    if block.name != "web_search":
+        raise CodecError('ir: server_tool_use name must be "web_search"')
+    if not isinstance(block.input, str) or not block.input:
+        raise CodecError("ir: server_tool_use requires input")
+    out: dict[str, Any] = {
+        "type": BLOCK_TYPE_SERVER_TOOL_USE,
+        "id": block.id,
+        "name": "web_search",
+        "input": block.input,
+    }
+    if block.caller is not None:
+        out["caller"] = block.caller
+    return out
+
+
+def _dump_web_search_tool_result(block: WebSearchToolResultBlock) -> dict[str, Any]:
+    if not block.tool_use_id:
+        raise CodecError("ir: web_search_tool_result requires tool_use_id")
+    if not isinstance(block.content, str) or not block.content:
+        raise CodecError("ir: web_search_tool_result requires content")
+    out: dict[str, Any] = {
+        "type": BLOCK_TYPE_WEB_SEARCH_TOOL_RESULT,
+        "tool_use_id": block.tool_use_id,
+        "content": block.content,
+    }
+    if block.caller is not None:
+        out["caller"] = block.caller
+    return out
+
+
+def _load_server_tool_use(data: dict[str, Any], native: tuple[NativeAnnotation, ...]) -> ServerToolUseBlock:
+    ident = data.get("id")
+    if not isinstance(ident, str) or not ident:
+        raise CodecError("ir: server_tool_use requires id")
+    if data.get("name") != "web_search":
+        raise CodecError('ir: server_tool_use name must be "web_search"')
+    value = data.get("input")
+    if not isinstance(value, str) or not value:
+        raise CodecError("ir: server_tool_use requires input")
+    caller = data.get("caller")
+    if caller is not None and not isinstance(caller, str):
+        raise CodecError("ir: server_tool_use caller must be a string")
+    return ServerToolUseBlock(id=ident, input=value, caller=caller, native=native)
+
+
+def _load_web_search_tool_result(data: dict[str, Any], native: tuple[NativeAnnotation, ...]) -> WebSearchToolResultBlock:
+    tool_use_id = data.get("tool_use_id")
+    if not isinstance(tool_use_id, str) or not tool_use_id:
+        raise CodecError("ir: web_search_tool_result requires tool_use_id")
+    content = data.get("content")
+    if not isinstance(content, str) or not content:
+        raise CodecError("ir: web_search_tool_result requires content")
+    caller = data.get("caller")
+    if caller is not None and not isinstance(caller, str):
+        raise CodecError("ir: web_search_tool_result caller must be a string")
+    return WebSearchToolResultBlock(tool_use_id=tool_use_id, content=content, caller=caller, native=native)
+
+
+def _dump_compaction_checkpoint(item: CompactionItem) -> dict[str, Any]:
+    if not item.encrypted_content:
+        raise CodecError("ir: compaction_items encrypted_content is required")
+    out: dict[str, Any] = {
+        "encrypted_content": item.encrypted_content,
+        "after_message": item.after_message,
+    }
+    if item.id:
+        out["id"] = item.id
+    if item.created_by:
+        out["created_by"] = item.created_by
+    return out
+
+
+def _load_compaction_checkpoints(raw: Any, message_count: int) -> list[CompactionItem]:
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise CodecError("compaction_items must be an array")
+    items: list[CompactionItem] = []
+    for index, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise CodecError(f"compaction_items[{index}] must be an object")
+        cipher = entry.get("encrypted_content")
+        if not isinstance(cipher, str) or not cipher:
+            raise CodecError(f"ir: compaction_items[{index}].encrypted_content is required")
+        after = entry.get("after_message")
+        if not isinstance(after, int) or isinstance(after, bool) or after < -1 or after >= message_count:
+            raise CodecError(f"ir: compaction_items[{index}].after_message is out of range")
+        ident = entry.get("id", "")
+        created = entry.get("created_by", "")
+        if not isinstance(ident, str) or not isinstance(created, str):
+            raise CodecError(f"ir: compaction_items[{index}] id and created_by must be strings")
+        items.append(CompactionItem(encrypted_content=cipher, after_message=after, id=ident, created_by=created))
+    return items
 
 
 # ---- Deltas & Events -------------------------------------------------------
@@ -1120,6 +1286,8 @@ def dump_request(req: Request) -> dict[str, Any]:
     }
     if req.native:
         out["native"] = [dump_native_annotation(a) for a in req.native]
+    if req.compaction_items:
+        out["compaction_items"] = [_dump_compaction_checkpoint(item) for item in req.compaction_items]
     if req.tool_change_groups:
         out["tool_change_groups"] = []
         for group in req.tool_change_groups:
@@ -1201,6 +1369,10 @@ def dump_request(req: Request) -> dict[str, Any]:
             if req.params.verbosity not in ("low", "medium", "high"):
                 raise CodecError("invalid params.verbosity")
             p_dict["verbosity"] = req.params.verbosity
+        if req.params.logprobs is not None:
+            p_dict["logprobs"] = req.params.logprobs
+        if req.params.top_logprobs is not None:
+            p_dict["top_logprobs"] = req.params.top_logprobs
         if req.params.response_format is not None:
             p_dict["response_format"] = dump_response_format(req.params.response_format)
         if p_dict:
@@ -1434,6 +1606,8 @@ def load_request(data: dict[str, Any] | str) -> Request:
             reasoning_effort=effort,
             verbosity=p.get("verbosity"),
             response_format=response_format,
+            logprobs=p.get("logprobs"),
+            top_logprobs=p.get("top_logprobs"),
         )
 
     metadata = raw.get("metadata")
@@ -1473,6 +1647,7 @@ def load_request(data: dict[str, Any] | str) -> Request:
         metadata=metadata,
         native=req_native,
         tool_change_groups=groups,
+        compaction_items=_load_compaction_checkpoints(raw.get("compaction_items", []), len(messages)),
     )
     validate_tool_availability(request)
     return request

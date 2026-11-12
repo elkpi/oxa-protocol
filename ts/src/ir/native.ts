@@ -37,6 +37,9 @@ export const NATIVE_SOURCE_OPENAI = "openai";
 export const CACHE_CONTROL_LOSS_DETAIL =
   "anthropic-native cache breakpoint; the target face has no cache_control representation";
 
+export const RESPONSES_CONTEXT_MANAGEMENT_LOSS_DETAIL =
+  "Responses context_management has no equivalent on the target face";
+
 export const PROMPT_CACHE_KEY_LOSS_DETAIL =
   "Anthropic Messages has no prompt_cache_key parameter; prompt cache key is dropped";
 
@@ -821,6 +824,7 @@ export function omittedNativeRequestLosses(
         false,
         undefined,
         target,
+        true,
       );
     });
   });
@@ -835,6 +839,7 @@ export function omittedNativeRequestLosses(
         blk,
         `messages[${mIdx}].content[${cIdx}]`,
         target,
+        msg.role === "user",
       );
     });
   });
@@ -860,11 +865,13 @@ function collectBlockOmissions(
   blk: Block,
   path: string,
   target: string,
+  breakpointHost: boolean,
 ): void {
   if (
     blk.type === "redacted_thinking" ||
     blk.type === "encrypted_content" ||
     blk.type === "web_search_call" ||
+    blk.type === "compaction_item" ||
     (blk.type === "tool_reference" && target !== "anthropic") ||
     (blk.type === "document" &&
       target === "chatcompletions" &&
@@ -874,6 +881,9 @@ function collectBlockOmissions(
     // whole-block drop; annotations not reported a second time
     return;
   }
+  const host =
+    breakpointHost &&
+    (blk.type === "text" || blk.type === "image" || blk.type === "document");
   blk.native?.forEach((ann, i) => {
     appendOmissionLoss(
       losses,
@@ -882,12 +892,19 @@ function collectBlockOmissions(
       false,
       undefined,
       target,
+      host,
     );
   });
   if (blk.type === "tool_result") {
     (blk as ToolResultBlock).content.forEach((child, k) => {
       if (child.type === "document") return;
-      collectBlockOmissions(losses, child, `${path}.content[${k}]`, target);
+      collectBlockOmissions(
+        losses,
+        child,
+        `${path}.content[${k}]`,
+        target,
+        false,
+      );
     });
   } else if (blk.type === "custom_tool_result") {
     const out = (blk as CustomToolResultBlock).output;
@@ -898,6 +915,7 @@ function collectBlockOmissions(
           child,
           `${path}.output.content[${k}]`,
           target,
+          false,
         );
       });
     }
@@ -911,6 +929,7 @@ function appendOmissionLoss(
   hasActiveBudgetProj: boolean,
   currentEffort: string | undefined,
   target: string,
+  breakpointHost = false,
 ): void {
   if (ann.source === NATIVE_SOURCE_OPENAI) {
     switch (ann.kind) {
@@ -1001,6 +1020,11 @@ function appendOmissionLoss(
         if (target === "chatcompletions" || target === "responses") {
           return;
         }
+        if (target === "anthropic" && breakpointHost) {
+          for (const loss of breakpointTranslationLosses(ann.value, path))
+            losses.push(loss);
+          return;
+        }
         const field = ann.omission?.field || "prompt_cache_breakpoint";
         const reason = ann.omission?.reason || "unmapped-field";
         const detail =
@@ -1087,6 +1111,14 @@ function appendOmissionLoss(
       }
       return;
     case NATIVE_KIND_CACHE_CONTROL: {
+      if (
+        breakpointHost &&
+        (target === "chatcompletions" || target === "responses")
+      ) {
+        for (const loss of cacheControlTranslationLosses(ann.value, path))
+          losses.push(loss);
+        return;
+      }
       const field = ann.omission?.field || "cache_control";
       const reason = ann.omission?.reason || "unmapped-field";
       const detail = ann.omission?.detail || CACHE_CONTROL_LOSS_DETAIL;
@@ -1179,4 +1211,69 @@ function appendOmissionLoss(
         detail: `unsupported native option kind "${ann.kind}"`,
       });
   }
+}
+
+export const CACHE_CONTROL_TYPE_LOSS_DETAIL =
+  "cache_control.type is not represented by prompt_cache_breakpoint";
+export const BREAKPOINT_MODE_LOSS_DETAIL =
+  "prompt_cache_breakpoint.mode is not represented by cache_control";
+
+export function cacheControlTranslationLosses(
+  value: string,
+  path: string,
+): Loss[] {
+  const losses: Loss[] = [
+    {
+      path,
+      field: "type",
+      reason: "unmapped-field",
+      detail: CACHE_CONTROL_TYPE_LOSS_DETAIL,
+    },
+  ];
+  try {
+    const parsed = JSON.parse(value) as { ttl?: unknown };
+    if (parsed && typeof parsed === "object" && "ttl" in parsed) {
+      losses.push({
+        path,
+        field: "ttl",
+        reason: "unmapped-field",
+        detail: "cache_control.ttl has no equivalent prompt cache ttl",
+      });
+    }
+  } catch {
+    /* ignore */
+  }
+  return losses;
+}
+
+export function breakpointTranslationLosses(
+  value: string,
+  path: string,
+): Loss[] {
+  const losses: Loss[] = [];
+  try {
+    const parsed = JSON.parse(value) as { mode?: unknown; ttl?: unknown };
+    if (parsed && typeof parsed === "object") {
+      if ("mode" in parsed) {
+        losses.push({
+          path,
+          field: "mode",
+          reason: "unmapped-field",
+          detail: BREAKPOINT_MODE_LOSS_DETAIL,
+        });
+      }
+      if ("ttl" in parsed) {
+        losses.push({
+          path,
+          field: "ttl",
+          reason: "unmapped-field",
+          detail:
+            "prompt_cache_breakpoint.ttl has no equivalent cache_control ttl",
+        });
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return losses;
 }

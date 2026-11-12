@@ -401,21 +401,22 @@ void test_cache_control_omission_loss_detail() {
     CHECK(dec.ok());
     CHECK(dec->losses.empty());
 
+    auto count_fields = [](const std::vector<oxa::ir::Loss>& losses, std::string_view field) {
+        std::size_t n = 0;
+        for (const auto& l : losses) if (l.field == field) ++n;
+        return n;
+    };
     auto cc = oxa::openai::chatcompletions::encode_request(dec->value);
     CHECK(cc.ok());
     CHECK(cc->losses.size() == 3);
-    for (const auto& l : cc->losses) {
-        CHECK(l.field == "cache_control");
-        CHECK(l.reason == oxa::ir::LOSS_UNMAPPED_FIELD);
-        CHECK(l.detail == oxa::ir::CACHE_CONTROL_LOSS_DETAIL);
-    }
+    CHECK(count_fields(cc->losses, "type") == 2);
+    CHECK(count_fields(cc->losses, "cache_control") == 1);
 
     auto resp = oxa::openai::responses::encode_request(dec->value);
     CHECK(resp.ok());
     CHECK(resp->losses.size() == 3);
-    for (const auto& l : resp->losses) {
-        CHECK(l.detail == oxa::ir::CACHE_CONTROL_LOSS_DETAIL);
-    }
+    CHECK(count_fields(resp->losses, "type") == 2);
+    CHECK(count_fields(resp->losses, "cache_control") == 1);
 
     // Directly constructed IR without omission
     oxa::ir::Request req_no_om;

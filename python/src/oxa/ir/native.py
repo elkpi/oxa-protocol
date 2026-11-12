@@ -47,6 +47,14 @@ DEFER_LOADING_LOSS_DETAIL = (
 )
 EAGER_INPUT_STREAMING_LOSS_DETAIL = "target does not preserve eager tool input streaming semantics"
 STREAM_OPTIONS_LOSS_DETAIL = "target does not emit the requested final usage chunk"
+WEB_SEARCH_HISTORY_LOSS_DETAIL = (
+    "Anthropic web_search history cannot be represented on the target face"
+)
+
+RESPONSES_CONTEXT_MANAGEMENT_LOSS_DETAIL = (
+    "Responses context_management has no equivalent on the target face"
+)
+
 PROMPT_CACHE_KEY_LOSS_DETAIL = (
     "Anthropic Messages has no prompt_cache_key parameter; prompt cache key is dropped"
 )
@@ -448,6 +456,7 @@ def omitted_native_request_losses(req: Any, target: str) -> list[Loss]:
                 False,
                 None,
                 target,
+                True,
             )
 
     for m_idx, msg in enumerate(getattr(req, "messages", ()) or ()):
@@ -460,6 +469,7 @@ def omitted_native_request_losses(req: Any, target: str) -> list[Loss]:
                 blk,
                 f"messages[{m_idx}].content[{c_idx}]",
                 target,
+                role == ROLE_USER,
             )
 
     for t_idx, tool in enumerate(getattr(req, "tools", ()) or ()):
@@ -476,7 +486,13 @@ def omitted_native_request_losses(req: Any, target: str) -> list[Loss]:
     return losses
 
 
-def _collect_block_omissions(losses: list[Loss], blk: Any, path: str, target: str) -> None:
+def _collect_block_omissions(
+    losses: list[Loss],
+    blk: Any,
+    path: str,
+    target: str,
+    breakpoint_host: bool,
+) -> None:
     blk_type = getattr(blk, "type", "")
     if blk_type == BLOCK_TYPE_REDACTED_THINKING or (
         blk_type == BLOCK_TYPE_DOCUMENT
@@ -493,21 +509,26 @@ def _collect_block_omissions(losses: list[Loss], blk: Any, path: str, target: st
         # reported a second time.
         return
     for i, ann in enumerate(getattr(blk, "native", ())):
-        _append_omission_loss(losses, ann, f"{path}.native[{i}]", False, None, target)
+        host = breakpoint_host and blk_type in ("text", "image", "document")
+        _append_omission_loss(losses, ann, f"{path}.native[{i}]", False, None, target, host)
 
     content = getattr(blk, "content", None)
     if isinstance(content, list):
         for k, child in enumerate(content):
             if getattr(child, "type", "") == BLOCK_TYPE_DOCUMENT:
                 continue
-            _collect_block_omissions(losses, child, f"{path}.content[{k}]", target)
+            _collect_block_omissions(
+                losses, child, f"{path}.content[{k}]", target, False
+            )
 
     output = getattr(blk, "output", None)
     if isinstance(output, list):
         for k, child in enumerate(output):
             if getattr(child, "type", "") == BLOCK_TYPE_DOCUMENT:
                 continue
-            _collect_block_omissions(losses, child, f"{path}.output.content[{k}]", target)
+            _collect_block_omissions(
+                losses, child, f"{path}.output.content[{k}]", target, False
+            )
 
 
 def _append_omission_loss(
@@ -517,6 +538,7 @@ def _append_omission_loss(
     has_active_budget_proj: bool,
     current_effort: ReasoningEffort | None,
     target: str,
+    breakpoint_host: bool = False,
 ) -> None:
     if ann.source == NATIVE_SOURCE_OPENAI:
         if ann.kind in (NATIVE_KIND_MAX_COMPLETION_TOKENS, NATIVE_KIND_STREAM):
@@ -569,6 +591,9 @@ def _append_omission_loss(
             return
         if ann.kind == NATIVE_KIND_PROMPT_CACHE_BREAKPOINT:
             if target in ("chatcompletions", "responses"):
+                return
+            if target == "anthropic" and breakpoint_host:
+                losses.extend(_breakpoint_translation_losses(ann.value, path))
                 return
             field = ann.omission.field if ann.omission and ann.omission.field else "prompt_cache_breakpoint"
             reason = ann.omission.reason if ann.omission and ann.omission.reason else "unmapped-field"
@@ -649,6 +674,9 @@ def _append_omission_loss(
         return
 
     if ann.kind == NATIVE_KIND_CACHE_CONTROL:
+        if breakpoint_host and target in ("chatcompletions", "responses"):
+            losses.extend(_cache_control_translation_losses(ann.value, path))
+            return
         field = "cache_control"
         reason = LOSS_UNMAPPED_FIELD
         detail = CACHE_CONTROL_LOSS_DETAIL
@@ -775,3 +803,41 @@ def _append_omission_loss(
             detail=f'unsupported native option kind "{ann.kind}"',
         )
     )
+
+
+def _cache_control_translation_losses(value: str, path: str) -> list[Loss]:
+    import json
+    losses = [Loss(path=path, field="type", reason="unmapped-field", detail="cache_control.type is not represented by prompt_cache_breakpoint")]
+    try:
+        parsed = json.loads(value)
+    except Exception:
+        parsed = None
+    if isinstance(parsed, dict) and "ttl" in parsed:
+        losses.append(Loss(path=path, field="ttl", reason="unmapped-field", detail="cache_control.ttl has no equivalent prompt cache ttl"))
+    return losses
+
+
+def _breakpoint_translation_losses(value: str, path: str) -> list[Loss]:
+    import json
+    losses: list[Loss] = []
+    try:
+        parsed = json.loads(value)
+    except Exception:
+        return losses
+    if isinstance(parsed, dict) and "mode" in parsed:
+        losses.append(Loss(path=path, field="mode", reason="unmapped-field", detail="prompt_cache_breakpoint.mode is not represented by cache_control"))
+    if isinstance(parsed, dict) and "ttl" in parsed:
+        losses.append(Loss(path=path, field="ttl", reason="unmapped-field", detail="prompt_cache_breakpoint.ttl has no equivalent cache_control ttl"))
+    return losses
+
+
+def openai_breakpoint(native) -> dict | None:
+    import json
+    items = list(native or ())
+    for ann in items:
+        if getattr(ann, "source", None) == "openai" and getattr(ann, "kind", None) == "prompt_cache_breakpoint":
+            return json.loads(ann.value)
+    for ann in items:
+        if getattr(ann, "source", None) == "anthropic" and getattr(ann, "kind", None) == "cache_control":
+            return {"mode": "explicit"}
+    return None

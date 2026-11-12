@@ -1,0 +1,29 @@
+{
+  "name": "responses.nonstream.context-management-unknown-type-request-to-ir",
+  "description": "An unrecognized Responses context_management type is dropped with an unmapped-value loss (N-R-23).",
+  "spec_version": "0.2.0",
+  "mode": "nonstream",
+  "conversion": "to-ir",
+  "source": {"protocol": "responses"},
+  "input": {
+    "model": "gpt-5.4",
+    "input": [{"type": "message", "role": "user", "content": "hi"}],
+    "context_management": [
+      {"type": "future_strategy_2027", "compact_threshold": 20000}
+    ]
+  },
+  "expected_ir": {
+    "specVersion": "0.2.0",
+    "model": "gpt-5.4",
+    "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]
+  },
+  "expected_losses": [
+    {
+      "path": "context_management[0].type",
+      "field": "type",
+      "reason": "unmapped-value",
+      "detail": "unknown context_management type \"future_strategy_2027\""
+    }
+  ],
+  "tags": ["request", "context-management", "loss"]
+}

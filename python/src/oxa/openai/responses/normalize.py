@@ -47,6 +47,8 @@ from oxa.ir import (
     ToolResultBlock,
     ToolUseBlock,
     WebSearchCallBlock,
+    ServerToolUseBlock,
+    WebSearchToolResultBlock,
 )
 from oxa.ir import (
     ROLE_ASSISTANT as IR_ROLE_ASSISTANT,
@@ -819,7 +821,10 @@ def encode_user_content(blocks: list[Block], path: str) -> tuple[Any, list[Loss]
             p_dict: dict[str, Any] = {"type": PART_TYPE_INPUT_TEXT, "text": block.text}
             for ann in getattr(block, "native", ()):
                 if ann.source == "openai" and ann.kind == NATIVE_KIND_PROMPT_CACHE_BREAKPOINT:
-                    p_dict["prompt_cache_breakpoint"] = json.loads(ann.value)
+                    from oxa.ir.native import openai_breakpoint
+                    parsed = openai_breakpoint(getattr(block, "native", ()))
+                    if parsed is not None:
+                        p_dict["prompt_cache_breakpoint"] = parsed
                     other_blocks += 1
                     break
             parts.append(p_dict)
@@ -887,7 +892,10 @@ def encode_user_content(blocks: list[Block], path: str) -> tuple[Any, list[Loss]
                 other_blocks += 1
                 for ann in getattr(block, "native", ()):
                     if ann.source == "openai" and ann.kind == NATIVE_KIND_PROMPT_CACHE_BREAKPOINT:
-                        part["prompt_cache_breakpoint"] = json.loads(ann.value)
+                        from oxa.ir.native import openai_breakpoint
+                        parsed = openai_breakpoint(getattr(block, "native", ()))
+                        if parsed is not None:
+                            part["prompt_cache_breakpoint"] = parsed
                         break
                 parts.append(part)
         elif isinstance(block, DocumentBlock):
@@ -913,7 +921,8 @@ def encode_user_content(blocks: list[Block], path: str) -> tuple[Any, list[Loss]
                     )
                 )
                 continue
-            pcb = next((json.loads(ann.value) for ann in getattr(block, "native", ()) if ann.source == "openai" and ann.kind == NATIVE_KIND_PROMPT_CACHE_BREAKPOINT), None)
+            from oxa.ir.native import openai_breakpoint
+            pcb = openai_breakpoint(getattr(block, "native", ()))
             f_dict: dict[str, Any]
             if block.file_id:
                 f_dict = {"type": "input_file", "file_id": block.file_id}
@@ -924,6 +933,10 @@ def encode_user_content(blocks: list[Block], path: str) -> tuple[Any, list[Loss]
             if pcb is not None:
                 f_dict["prompt_cache_breakpoint"] = pcb
             parts.append(f_dict)
+        elif isinstance(block, (ServerToolUseBlock, WebSearchToolResultBlock)):
+            other_blocks += 1
+            from oxa.ir import WEB_SEARCH_HISTORY_LOSS_DETAIL
+            losses.append(loss(f"{path}[{index}]", "type", LOSS_UNSUPPORTED_SEMANTIC, WEB_SEARCH_HISTORY_LOSS_DETAIL))
         else:
             other_blocks += 1
             losses.append(
@@ -1159,6 +1172,9 @@ def encode_assistant_message(
                 "status": block.status,
                 "action": block.action,
             })
+        elif isinstance(block, (ServerToolUseBlock, WebSearchToolResultBlock)):
+            from oxa.ir import WEB_SEARCH_HISTORY_LOSS_DETAIL
+            losses.append(loss(f"{path}[{index}]", "type", LOSS_UNSUPPORTED_SEMANTIC, WEB_SEARCH_HISTORY_LOSS_DETAIL))
         elif isinstance(block, ToolUseBlock):
             dot_idx = block.name.find(".")
             call_dict = {"type": ITEM_TYPE_FUNCTION_CALL, "call_id": block.id, "arguments": block.input}

@@ -1,6 +1,6 @@
 {
   "name": "cross.nonstream.anthropic-to-chatcompletions-cache-breakpoints-request",
-  "description": "Cross-protocol: Anthropic request with cache breakpoints on system, message content, and a tool declaration converts to Chat Completions with three self-describing capability-gap omission losses.",
+  "description": "Cross-protocol: Anthropic cache breakpoints on system and message content become explicit prompt_cache_breakpoint markers; a tool breakpoint has no host and is omitted.",
   "spec_version": "0.2.0",
   "mode": "nonstream",
   "conversion": "protocol-to-protocol",
@@ -55,11 +55,27 @@
     "messages": [
       {
         "role": "system",
-        "content": "S"
+        "content": [
+          {
+            "type": "text",
+            "text": "S",
+            "prompt_cache_breakpoint": {
+              "mode": "explicit"
+            }
+          }
+        ]
       },
       {
         "role": "user",
-        "content": "go"
+        "content": [
+          {
+            "type": "text",
+            "text": "go",
+            "prompt_cache_breakpoint": {
+              "mode": "explicit"
+            }
+          }
+        ]
       }
     ],
     "tools": [
@@ -78,15 +94,15 @@
   "expected_losses": [
     {
       "path": "system[0].native[0]",
-      "field": "cache_control",
+      "field": "type",
       "reason": "unmapped-field",
-      "detail": "anthropic-native cache breakpoint; the target face has no cache_control representation"
+      "detail": "cache_control.type is not represented by prompt_cache_breakpoint"
     },
     {
       "path": "messages[0].content[0].native[0]",
-      "field": "cache_control",
+      "field": "type",
       "reason": "unmapped-field",
-      "detail": "anthropic-native cache breakpoint; the target face has no cache_control representation"
+      "detail": "cache_control.type is not represented by prompt_cache_breakpoint"
     },
     {
       "path": "tools[0].native[0]",

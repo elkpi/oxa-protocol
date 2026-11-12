@@ -29,6 +29,8 @@ import {
   PROMPT_CACHE_KEY_LOSS_DETAIL,
   PROMPT_CACHE_OPTIONS_LOSS_DETAIL,
   PROMPT_CACHE_BREAKPOINT_LOSS_DETAIL,
+  RESPONSES_CONTEXT_MANAGEMENT_LOSS_DETAIL,
+  WEB_SEARCH_HISTORY_LOSS_DETAIL,
   NATIVE_KIND_PROMPT_CACHE_OPTIONS,
   NATIVE_KIND_PROMPT_CACHE_BREAKPOINT,
   type NativeAnnotation,
@@ -51,6 +53,20 @@ import type {
   TextCitation,
   WebSearchCallBlock,
 } from "../../ir/index.js";
+
+function canonicalizeJsonValue(value: JsonValue): JsonValue {
+  if (Array.isArray(value)) return value.map(canonicalizeJsonValue);
+  if (value !== null && typeof value === "object") {
+    const sorted: Record<string, JsonValue> = Object.create(null);
+    for (const key of Object.keys(value).sort()) {
+      sorted[key] = canonicalizeJsonValue(
+        (value as Record<string, JsonValue>)[key]!,
+      );
+    }
+    return sorted;
+  }
+  return value;
+}
 
 function isAdditionalTools(value: unknown): boolean {
   if (
@@ -189,6 +205,12 @@ function decodeRequestObject(
     }
   }
   const messages: Message[] = [];
+  const compactionItems: {
+    encrypted_content: string;
+    id?: string;
+    created_by?: string;
+    after_message: number;
+  }[] = [];
   const addToolGroup = (
     item: JsonObject,
     index: number,
@@ -252,6 +274,14 @@ function decodeRequestObject(
         item.type === undefined
           ? "message"
           : string(item.type, `input[${index}].type`);
+      if (type === "compaction") {
+        compactionItems.push({
+          ...compactionFields(item, `input[${index}]`),
+          after_message: messages.length - 1,
+        });
+        index += 1;
+        continue;
+      }
       if (
         type === "function_call" ||
         type === "custom_tool_call" ||
@@ -541,6 +571,11 @@ function decodeRequestObject(
       : {
           max_tokens: whole(wire.max_output_tokens, "max_output_tokens"),
         }),
+    ...(wire.top_logprobs === undefined
+      ? {}
+      : {
+          top_logprobs: whole(wire.top_logprobs, "top_logprobs"),
+        }),
     ...(effortValue === undefined ? {} : { reasoning_effort: effortValue }),
     ...(verbosityValue === undefined ? {} : { verbosity: verbosityValue }),
     ...(formatValue === undefined ? {} : { response_format: formatValue }),
@@ -588,6 +623,55 @@ function decodeRequestObject(
       },
     });
   }
+  if (wire.context_management !== undefined) {
+    if (!Array.isArray(wire.context_management)) {
+      throw new TypeError("responses: context_management must be an array");
+    }
+    const kept: JsonObject[] = [];
+    wire.context_management.forEach((entry, i) => {
+      const path = `context_management[${i}]`;
+      const obj = object(entry, path);
+      const entryType = object(entry, path).type;
+      if (typeof entryType !== "string" || entryType === "")
+        throw new TypeError(`responses: ${path}.type is required`);
+      if (entryType !== "compaction") {
+        losses.push({
+          path: `${path}.type`,
+          field: "type",
+          reason: "unmapped-value",
+          detail: `unknown context_management type "${entryType}"`,
+        });
+        return;
+      }
+      const threshold = obj.compact_threshold;
+      if (threshold !== undefined) {
+        if (!isJsonNumber(threshold) || !threshold.isInteger)
+          throw new TypeError(
+            `responses: ${path}.compact_threshold must be an integer`,
+          );
+        if (Number(threshold.token) < 1000)
+          throw new TypeError(
+            `responses: ${path}.compact_threshold must be at least 1000`,
+          );
+      }
+      kept.push({
+        type: "compaction",
+        ...(threshold === undefined ? {} : { compact_threshold: threshold }),
+      });
+    });
+    if (kept.length > 0) {
+      native.push({
+        source: "openai",
+        kind: "context_management",
+        value: stringifyJson(canonicalizeJsonValue(kept)),
+        omission: {
+          field: "context_management",
+          reason: "unmapped-field",
+          detail: RESPONSES_CONTEXT_MANAGEMENT_LOSS_DETAIL,
+        },
+      });
+    }
+  }
   const request: Request = {
     model: mapModel(options.modelMapper, string(wire.model, "model")),
     ...(system.length === 0 ? {} : { system }),
@@ -600,6 +684,9 @@ function decodeRequestObject(
     ...(Object.keys(params).length === 0 ? {} : { params }),
     ...stringMetadata(wire.metadata, "responses"),
     ...(native.length === 0 ? {} : { native }),
+    ...(compactionItems.length === 0
+      ? {}
+      : { compaction_items: compactionItems }),
   };
   validateRequest(request);
   return { value: request, losses };
@@ -930,6 +1017,7 @@ function decodeResponseObject(
   const losses: Loss[] = [];
   const texts: Block[] = [];
   const calls: Block[] = [];
+  const compactions: Block[] = [];
   for (let index = 0; index < array(wire.output, "output").length; index += 1) {
     const item = object(
       array(wire.output, "output")[index],
@@ -999,6 +1087,11 @@ function decodeResponseObject(
           type: "text",
           text: string(part.text, `output[${index}].content[${child}].text`),
           ...(citations && citations.length > 0 ? { citations } : {}),
+          ...(part.logprobs === undefined || part.logprobs === null
+            ? {}
+            : {
+                logprobs: stringifyJson(canonicalizeJsonValue(part.logprobs)),
+              }),
         });
       }
     } else if (item.type === "reasoning") {
@@ -1089,6 +1182,9 @@ function decodeResponseObject(
       });
     } else if (item.type === "web_search_call") {
       calls.push(decodeWebSearchCall(item, `output[${index}]`, losses));
+    } else if (item.type === "compaction") {
+      const fields = compactionFields(item, `output[${index}]`);
+      compactions.push({ type: "compaction_item", ...fields });
     } else if (item.type === "function_call") {
       const rawName = nonEmptyString(item.name, `output[${index}].name`);
       const ns =
@@ -1223,7 +1319,7 @@ function decodeResponseObject(
     value: {
       id: string(wire.id, "id"),
       model: mapModel(options.modelMapper, string(wire.model, "model")),
-      content: [...texts, ...calls],
+      content: [...compactions, ...texts, ...calls],
       stop_reason: stopReason,
       usage,
     },
@@ -1238,12 +1334,17 @@ function getPromptCacheBreakpoint(item: {
     (n) =>
       n.source === "openai" && n.kind === NATIVE_KIND_PROMPT_CACHE_BREAKPOINT,
   );
-  if (!ann) return undefined;
-  try {
-    return JSON.parse(ann.value);
-  } catch {
-    return undefined;
+  if (ann) {
+    try {
+      return JSON.parse(ann.value);
+    } catch {
+      return undefined;
+    }
   }
+  const cache = item.native?.find(
+    (n) => n.source === "anthropic" && n.kind === "cache_control",
+  );
+  return cache ? { mode: "explicit" } : undefined;
 }
 
 export function encodeRequest(
@@ -1356,6 +1457,7 @@ export function encodeRequest(
     });
   };
   let requestOrdinal = 0;
+  appendCompactionItems(items, request, -1);
   for (let index = 0; index < request.messages.length; index += 1) {
     emitGroups(index, -1, items);
     const message = request.messages[index]!;
@@ -1390,6 +1492,9 @@ export function encodeRequest(
             parts.push({
               type: "output_text",
               text: block.text,
+              ...(block.logprobs === undefined || block.logprobs === ""
+                ? {}
+                : { logprobs: parseJson(block.logprobs) }),
             });
             if (block.citations && block.citations.length > 0) {
               let hasAnthropic = false;
@@ -1429,6 +1534,16 @@ export function encodeRequest(
           } else if (block.type === "encrypted_content") {
             if (block.data === "") fail("encrypted_content data is required");
             reasoning.addCipher(block.data);
+          } else if (
+            block.type === "server_tool_use" ||
+            block.type === "web_search_tool_result"
+          ) {
+            losses.push({
+              path: `messages[${index}].content[${child}]`,
+              field: "type",
+              reason: "unsupported-semantic",
+              detail: WEB_SEARCH_HISTORY_LOSS_DETAIL,
+            });
           } else if (block.type === "tool_reference") {
             losses.push(
               loss(
@@ -1533,6 +1648,7 @@ export function encodeRequest(
       }
       if (start < message.content.length || message.content.length === 0)
         emitAssistantSegment(start, message.content.length);
+      appendCompactionItems(items, request, index);
       continue;
     }
     const boundaries = [
@@ -1569,6 +1685,7 @@ export function encodeRequest(
           start,
         );
     }
+    appendCompactionItems(items, request, index);
   }
   emitGroups(request.messages.length, -1, items);
   const systemPlan = encodeSystemPlan(request.system);
@@ -1675,6 +1792,16 @@ export function encodeRequest(
       promptCacheOptionsVal = JSON.parse(promptCacheOptionsAnn.value);
     } catch {}
   }
+  const contextManagementAnn = request.native?.find(
+    (n) => n.source === "openai" && n.kind === "context_management",
+  );
+  let contextManagementVal: JsonValue | undefined = undefined;
+  if (contextManagementAnn) {
+    try {
+      const parsed = JSON.parse(contextManagementAnn.value);
+      if (Array.isArray(parsed)) contextManagementVal = fromValue(parsed);
+    } catch {}
+  }
   let promptCacheKeyVal: string | undefined = undefined;
   if (promptCacheKeyAnn) {
     try {
@@ -1683,6 +1810,27 @@ export function encodeRequest(
         promptCacheKeyVal = parsed;
       }
     } catch {}
+  }
+  let sendTop = request.params?.top_logprobs;
+  if (request.params?.logprobs !== undefined) {
+    if (request.params.logprobs) {
+      if (sendTop === undefined)
+        losses.push({
+          path: "params.logprobs",
+          field: "logprobs",
+          reason: "unmapped-field",
+          detail:
+            "Responses has no logprobs boolean; top_logprobs is the sampling switch",
+        });
+    } else {
+      sendTop = undefined;
+      losses.push({
+        path: "params.logprobs",
+        field: "logprobs",
+        reason: "unmapped-field",
+        detail: "Responses has no logprobs boolean; explicit false is dropped",
+      });
+    }
   }
   return {
     value: {
@@ -1698,6 +1846,9 @@ export function encodeRequest(
       ...(promptCacheOptionsVal !== undefined
         ? { prompt_cache_options: promptCacheOptionsVal }
         : {}),
+      ...(contextManagementVal !== undefined
+        ? { context_management: contextManagementVal }
+        : {}),
       ...(parallelToolCalls !== undefined
         ? { parallel_tool_calls: parallelToolCalls }
         : {}),
@@ -1710,6 +1861,7 @@ export function encodeRequest(
       ...(params?.max_tokens === undefined
         ? {}
         : { max_output_tokens: integer(params.max_tokens) }),
+      ...(sendTop === undefined ? {} : { top_logprobs: integer(sendTop) }),
       ...(params?.reasoning_effort === undefined
         ? {}
         : { reasoning: { effort: params.reasoning_effort } }),
@@ -1745,6 +1897,7 @@ export function encodeResponse(
   let apcIndex = 0;
   let apcoIndex = 0;
   let refusalMsg: string | undefined;
+  const compactionOutput: JsonValue[] = [];
   for (let index = 0; index < response.content.length; index += 1) {
     const block = response.content[index]!;
     if (block.type === "refusal") {
@@ -1799,6 +1952,16 @@ export function encodeResponse(
     } else if (block.type === "encrypted_content") {
       if (block.data === "") fail("encrypted_content data is required");
       reasoning.addCipher(block.data);
+    } else if (
+      block.type === "server_tool_use" ||
+      block.type === "web_search_tool_result"
+    ) {
+      losses.push({
+        path: `content[${index}]`,
+        field: "type",
+        reason: "unsupported-semantic",
+        detail: WEB_SEARCH_HISTORY_LOSS_DETAIL,
+      });
     } else if (block.type === "tool_reference") {
       losses.push(loss(`content[${index}]`, "type", "unsupported-semantic"));
     } else if (block.type === "thinking") {
@@ -1828,6 +1991,17 @@ export function encodeResponse(
         ...(block.output !== undefined ? { output: block.output } : {}),
       });
       apcoIndex += 1;
+    } else if (block.type === "compaction_item") {
+      if (block.encrypted_content === "")
+        fail("responses: content encrypted_content is required");
+      compactionOutput.push({
+        type: "compaction",
+        ...(block.id === undefined || block.id === "" ? {} : { id: block.id }),
+        encrypted_content: block.encrypted_content,
+        ...(block.created_by === undefined || block.created_by === ""
+          ? {}
+          : { created_by: block.created_by }),
+      });
     } else if (block.type === "web_search_call") {
       inspectWebSearchCall(block.id, block.status, block.action);
       validateWebSearchExtra(block.extra);
@@ -1902,6 +2076,7 @@ export function encodeResponse(
           : [{ type: "output_text", text: "", annotations: [] }],
     });
   output.push(...calls);
+  output.unshift(...compactionOutput);
   let status = "completed";
   let incompleteDetails: JsonObject | undefined;
   let error: JsonObject | undefined;
@@ -2403,6 +2578,17 @@ function encodeUserContent(
         field: "type",
         reason: "unsupported-semantic",
         detail: ENCRYPTED_CONTENT_LOSS_DETAIL,
+      });
+    } else if (
+      block.type === "server_tool_use" ||
+      block.type === "web_search_tool_result"
+    ) {
+      otherBlocks += 1;
+      losses.push({
+        path: `${path}[${index}]`,
+        field: "type",
+        reason: "unsupported-semantic",
+        detail: WEB_SEARCH_HISTORY_LOSS_DETAIL,
       });
     } else if (block.type === "tool_reference") {
       otherBlocks += 1;
@@ -3167,6 +3353,47 @@ function object(value: JsonValue | undefined, name: string): JsonObject {
 function objectOrThrow(value: JsonValue, name: string): JsonObject {
   return object(value, name);
 }
+function compactionFields(
+  item: JsonObject,
+  path: string,
+): { encrypted_content: string; id?: string; created_by?: string } {
+  const encrypted = nonEmptyString(
+    item.encrypted_content,
+    `${path}.encrypted_content`,
+  );
+  const id =
+    item.id === undefined ? undefined : nonEmptyString(item.id, `${path}.id`);
+  const createdBy =
+    item.created_by === undefined
+      ? undefined
+      : nonEmptyString(item.created_by, `${path}.created_by`);
+  return {
+    encrypted_content: encrypted,
+    ...(id === undefined ? {} : { id }),
+    ...(createdBy === undefined ? {} : { created_by: createdBy }),
+  };
+}
+
+function appendCompactionItems(
+  items: JsonValue[],
+  request: Request,
+  after: number,
+): void {
+  for (const item of request.compaction_items ?? []) {
+    if (item.after_message !== after) continue;
+    if (item.encrypted_content === "")
+      fail("responses: compaction item encrypted_content is required");
+    items.push({
+      type: "compaction",
+      ...(item.id === undefined || item.id === "" ? {} : { id: item.id }),
+      encrypted_content: item.encrypted_content,
+      ...(item.created_by === undefined || item.created_by === ""
+        ? {}
+        : { created_by: item.created_by }),
+    });
+  }
+}
+
 function string(value: JsonValue | undefined, name: string): string {
   if (typeof value !== "string") fail(`${name} must be a string`);
   return value;

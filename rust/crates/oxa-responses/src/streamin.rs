@@ -274,7 +274,8 @@ impl StreamDecoder {
                     });
                     return Ok(Vec::new());
                 }
-                if item.kind == "web_search_call" {
+                if item.kind == "web_search_call" || item.kind == crate::types::ITEM_TYPE_COMPACTION
+                {
                     return Ok(Vec::new());
                 }
 
@@ -340,6 +341,7 @@ impl StreamDecoder {
                 Ok(vec![Event::ContentBlockStart {
                     index: self.block_index,
                     block: Block::Text {
+                        logprobs: None,
                         text: part.text.clone(),
                         citations: None,
                         native: Vec::new(),
@@ -718,6 +720,24 @@ impl StreamDecoder {
                         block: Block::EncryptedContent {
                             data: item.encrypted_content.clone(),
                             native: Vec::new(),
+                        },
+                    });
+                    events.push(Event::ContentBlockStop { index });
+                }
+                if self.item_type == crate::types::ITEM_TYPE_COMPACTION {
+                    if item.encrypted_content.is_empty() {
+                        return Err(Error::new(
+                            "responses: compaction item encrypted_content is required",
+                        ));
+                    }
+                    let index = self.next_block_index;
+                    self.next_block_index += 1;
+                    events.push(Event::ContentBlockStart {
+                        index,
+                        block: Block::CompactionItem {
+                            encrypted_content: item.encrypted_content.clone(),
+                            id: item.id.clone(),
+                            created_by: item.created_by.clone(),
                         },
                     });
                     events.push(Event::ContentBlockStop { index });

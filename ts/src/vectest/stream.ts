@@ -28,6 +28,12 @@ interface NormalizedEncryptedContentBlock {
   readonly type: "encrypted_content";
   readonly data: string;
 }
+interface NormalizedCompactionItemBlock {
+  readonly type: "compaction_item";
+  readonly encrypted_content: string;
+  readonly id?: string;
+  readonly created_by?: string;
+}
 interface NormalizedWebSearchCallBlock {
   readonly type: "web_search_call";
   readonly id: string;
@@ -64,6 +70,7 @@ type NormalizedBlock =
   | NormalizedThinkingBlock
   | NormalizedRedactedThinkingBlock
   | NormalizedEncryptedContentBlock
+  | NormalizedCompactionItemBlock
   | NormalizedWebSearchCallBlock
   | NormalizedToolUseBlock
   | NormalizedCustomToolUseBlock
@@ -177,6 +184,15 @@ function normalize(stream: EventStream): NormalizedStream {
           type: "encrypted_content",
           data: open!.block.data,
         });
+      } else if (open!.block.type === "compaction_item") {
+        blocks.push({
+          type: "compaction_item",
+          encrypted_content: open!.block.encrypted_content,
+          ...(open!.block.id === undefined ? {} : { id: open!.block.id }),
+          ...(open!.block.created_by === undefined
+            ? {}
+            : { created_by: open!.block.created_by }),
+        });
       } else if (open!.block.type === "web_search_call") {
         blocks.push({
           type: "web_search_call",
@@ -284,6 +300,17 @@ function compareBlock(
     return expected.data === actual.data
       ? undefined
       : "encrypted_content data differs";
+  }
+  if (
+    expected.type === "compaction_item" &&
+    actual.type === "compaction_item"
+  ) {
+    if (expected.encrypted_content !== actual.encrypted_content)
+      return "compaction_item encrypted_content differs";
+    if (expected.id !== actual.id) return "compaction_item id differs";
+    return expected.created_by === actual.created_by
+      ? undefined
+      : "compaction_item created_by differs";
   }
   if (
     expected.type === "web_search_call" &&

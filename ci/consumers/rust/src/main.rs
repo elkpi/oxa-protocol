@@ -95,6 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             content: vec![oxa::ir::Block::Text {
                 text: "hi".to_string(),
                 citations: None,
+                logprobs: None,
                 native: Vec::new(),
             }],
         }],
@@ -111,6 +112,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             projection: None,
         }],
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
     oxa::ir::validate_native_request(&ir_req)?;
 
