@@ -7,6 +7,8 @@ precedence between spec, vectors, and schemas is defined in
 
 ## Unreleased
 
+- Same-face compaction triggers: Anthropic `context_management.edits[].type = "compact_20260112"` (with `trigger` and `pause_after_compaction`) joins the recognized edit whitelist, and Responses `context_management[]` (`type: "compaction"`, optional `compact_threshold` ≥ 1000) is preserved as an OpenAI native annotation (N-R-23). Both shapes are source-tagged and never cross-mapped. Chat Completions and Anthropic omit the Responses annotation with one `unmapped-field` loss.
+
 - Responses compaction checkpoints (N-R-22): same-face `type: "compaction"` items round-trip as `Request.CompactionItems` on input and as `CompactionItemBlock` on output, including the atomic streaming item. The ciphertext stays opaque. Anthropic `CompactionBlock` placement rules do not apply. Other faces omit the checkpoint and record one `unsupported-semantic` loss whose detail does not contain the ciphertext.
 
 ## 3.2.0 - 2026-11-08
