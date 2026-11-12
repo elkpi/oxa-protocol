@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 
 	"github.com/elkpi/oxa-protocol/go/v3/ir"
 )
@@ -17,6 +18,9 @@ func canonicalizeOpaqueJSON(raw json.RawMessage) (string, error) {
 	var value any
 	if err := decoder.Decode(&value); err != nil {
 		return "", err
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		return "", fmt.Errorf("trailing JSON data")
 	}
 	canonical, err := json.Marshal(value)
 	if err != nil {

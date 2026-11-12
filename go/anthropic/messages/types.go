@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/elkpi/oxa-protocol/go/v3/ir"
@@ -658,6 +659,9 @@ func decodeCanonicalJSON(raw json.RawMessage) (any, error) {
 	var value any
 	if err := decoder.Decode(&value); err != nil {
 		return nil, err
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		return nil, fmt.Errorf("trailing JSON data")
 	}
 	return value, nil
 }
