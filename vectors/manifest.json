@@ -426,6 +426,37 @@
       "sha256": "0840e97a15dd2e6469edbcadf447d36ce45c141f9eda17bfed330d9bb3ef0119"
     },
     {
+      "name": "anthropic.nonstream.native-context-compaction-trigger-request-from-ir",
+      "file": "anthropic/nonstream/native-context-compaction-trigger-request-from-ir.json",
+      "tags": [
+        "request",
+        "context-management",
+        "compaction-trigger"
+      ],
+      "sha256": "799c59270f9a79d3fdd2b7cdf6934e192724876d51ef8a1a412a10a7cf851eff"
+    },
+    {
+      "name": "anthropic.nonstream.native-context-compaction-trigger-request-to-ir",
+      "file": "anthropic/nonstream/native-context-compaction-trigger-request-to-ir.json",
+      "tags": [
+        "request",
+        "context-management",
+        "compaction-trigger"
+      ],
+      "sha256": "29aad0dea2415324c641ef262211a1e16f8b17f82ae18ce5b98c6848d19fd63a"
+    },
+    {
+      "name": "anthropic.nonstream.native-context-compaction-trigger-unknown-to-ir",
+      "file": "anthropic/nonstream/native-context-compaction-trigger-unknown-to-ir.json",
+      "tags": [
+        "request",
+        "context-management",
+        "compaction-trigger",
+        "loss"
+      ],
+      "sha256": "4ce73c9ea8b703eb1841358308a950e49953d7c153e2f1c8ae39c6db95a4720a"
+    },
+    {
       "name": "anthropic.nonstream.native-context-edits-request-from-ir",
       "file": "anthropic/nonstream/native-context-edits-request-from-ir.json",
       "tags": [
@@ -3574,6 +3605,18 @@
       "sha256": "2e786d28e2d30d15cbbac7c7ab7307a2d8705ae5c6e5a1753b92fcd752fbf951"
     },
     {
+      "name": "cross.nonstream.responses-to-anthropic-context-management-request",
+      "file": "cross/nonstream/responses-to-anthropic-context-management-request.json",
+      "tags": [
+        "cross",
+        "request",
+        "context-management",
+        "loss",
+        "n-r-23"
+      ],
+      "sha256": "3e1135faacac8de594e218047b79ee59fe4312b4c2664de1f6d821f491dcefb8"
+    },
+    {
       "name": "cross.nonstream.responses-to-anthropic-custom-tool",
       "file": "cross/nonstream/responses-to-anthropic-custom-tool.json",
       "tags": [
@@ -3881,6 +3924,18 @@
         "n-r-22"
       ],
       "sha256": "7a5e60f56ba02b8ca066e6f54c6a8b86567b88596145361504f49207c8d9d5eb"
+    },
+    {
+      "name": "cross.nonstream.responses-to-chatcompletions-context-management-request",
+      "file": "cross/nonstream/responses-to-chatcompletions-context-management-request.json",
+      "tags": [
+        "cross",
+        "request",
+        "context-management",
+        "loss",
+        "n-r-23"
+      ],
+      "sha256": "fd4de298df5dd0d482aa545d11c053b42d50f0c23602b6a4e99a67f89a3fab0e"
     },
     {
       "name": "cross.nonstream.responses-to-chatcompletions-custom-tool",
@@ -5050,6 +5105,36 @@
         "n-r-22"
       ],
       "sha256": "28806e5b163ffe3b855fa7a07592f03c401d18a0764b378f9003d8cf6eb74969"
+    },
+    {
+      "name": "responses.nonstream.context-management-request-from-ir",
+      "file": "responses/nonstream/context-management-request-from-ir.json",
+      "tags": [
+        "request",
+        "context-management",
+        "compaction-trigger"
+      ],
+      "sha256": "9dda8964ee6dec5f226a6639d399bf9529cf2e5011f70995c8ca7a5fb82d6729"
+    },
+    {
+      "name": "responses.nonstream.context-management-request-to-ir",
+      "file": "responses/nonstream/context-management-request-to-ir.json",
+      "tags": [
+        "request",
+        "context-management",
+        "compaction-trigger"
+      ],
+      "sha256": "e6ad2311a3ad353519ce69156d75a534b11acb253c3f2cf16e568c3874797214"
+    },
+    {
+      "name": "responses.nonstream.context-management-unknown-type-request-to-ir",
+      "file": "responses/nonstream/context-management-unknown-type-request-to-ir.json",
+      "tags": [
+        "request",
+        "context-management",
+        "loss"
+      ],
+      "sha256": "75220454c39663ade80a46e0d60cbf29cd009de3a5535d468ae14cdd951e7a69"
     },
     {
       "name": "responses.nonstream.custom-empty-output-list-from-ir",

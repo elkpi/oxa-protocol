@@ -29,7 +29,7 @@ test("preserves Responses instructions and composed losses across faces", () => 
       chatcompletions,
       responses,
     }),
-    38,
+    40,
   );
 });
 
