@@ -513,10 +513,15 @@ impl<'de> Deserialize<'de> for ContentValue {
                         .get("type")
                         .and_then(Value::as_str)
                         .is_some_and(|kind| KNOWN_BLOCK_TYPES.contains(&kind));
+                    // Result-shaped objects (any `*_search_result` type,
+                    // including result kinds a newer server revision may add)
+                    // are opaque content, never content blocks. The element
+                    // shape decides because web_search_tool_result.content is
+                    // the only array field that carries them (N-AN-23).
                     let opaque_result = parsed
                         .get("type")
                         .and_then(Value::as_str)
-                        .is_some_and(|kind| kind.starts_with("web_search_result"));
+                        .is_some_and(|kind| kind.ends_with("_search_result"));
                     if !known && !opaque_result {
                         continue;
                     }

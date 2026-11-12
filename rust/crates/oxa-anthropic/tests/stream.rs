@@ -104,6 +104,7 @@ fn stream_decoder_happy_path() {
         Event::ContentBlockStart {
             index: 0,
             block: Block::Text {
+                logprobs: None,
                 text: String::new(),
                 citations: None,
                 native: Vec::new(),
@@ -438,6 +439,7 @@ fn stream_encoder_happy_path() {
         .apply(&Event::ContentBlockStart {
             index: 0,
             block: Block::Text {
+                logprobs: None,
                 text: String::new(),
                 citations: None,
                 native: Vec::new(),

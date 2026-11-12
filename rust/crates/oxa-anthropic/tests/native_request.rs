@@ -324,6 +324,7 @@ fn test_defer_loading_tool_native_option() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![oxa_ir::Block::Text {
+                logprobs: None,
                 text: "hi".into(),
                 citations: None,
                 native: vec![],
@@ -371,6 +372,7 @@ fn test_defer_loading_tool_native_option() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![oxa_ir::Block::Text {
+                logprobs: None,
                 text: "hi".into(),
                 citations: None,
                 native: vec![],
@@ -505,6 +507,7 @@ fn test_eager_input_streaming_32_tools_and_validation() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![oxa_ir::Block::Text {
+                logprobs: None,
                 text: "hi".into(),
                 citations: None,
                 native: vec![],

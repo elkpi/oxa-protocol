@@ -246,6 +246,7 @@ fn test_disable_parallel_tool_use_null_rejected_and_conflict() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: "Hi".into(),
                 citations: None,
                 native: Vec::new(),
@@ -282,6 +283,7 @@ fn test_between_tools_encode_conflict() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: "Hi".into(),
                 citations: None,
                 native: Vec::new(),
@@ -321,6 +323,7 @@ fn test_omitted_native_losses_default_fallback() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: "Hi".into(),
                 citations: None,
                 native: Vec::new(),

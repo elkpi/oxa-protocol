@@ -220,6 +220,7 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         if message.role != ROLE_SYSTEM && message.role != "developer" && content.is_empty() {
             // IR conversation messages cannot have empty content (spec/01 §3.3).
             content.push(Block::Text {
+                logprobs: None,
                 text: String::new(),
                 citations: None,
                 native: Vec::new(),

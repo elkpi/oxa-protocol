@@ -41,6 +41,7 @@ pub(crate) fn decode_content(
     let Some(content) = content else {
         return Ok((
             vec![Block::Text {
+                logprobs: None,
                 text: String::new(),
                 citations: None,
                 native: Vec::new(),
@@ -51,6 +52,7 @@ pub(crate) fn decode_content(
     match content {
         ContentValue::Text(text) => Ok((
             vec![Block::Text {
+                logprobs: None,
                 text: text.clone(),
                 citations: None,
                 native: Vec::new(),
@@ -149,6 +151,7 @@ fn decode_content_part(
         }
         PART_TYPE_INPUT_TEXT | PART_TYPE_OUTPUT_TEXT => (
             vec![Block::Text {
+                logprobs: None,
                 text: part.text.clone(),
                 citations: None,
                 native: Vec::new(),
@@ -954,6 +957,7 @@ pub(crate) fn decode_output_run(
             content.push(Block::ToolResult {
                 tool_use_id: item.call_id.clone(),
                 content: vec![Block::Text {
+                    logprobs: None,
                     text: text.clone(),
                     citations: None,
                     native: Vec::new(),
@@ -984,6 +988,7 @@ pub(crate) fn decode_output_run(
                                     ));
                                 }
                                 blocks.push(Block::Text {
+                                    logprobs: None,
                                     text: p.text.clone(),
                                     citations: None,
                                     native: Vec::new(),
@@ -1297,7 +1302,7 @@ pub(crate) fn encode_user_content(blocks: &[Block], path: &str) -> (ContentValue
     let mut losses = Vec::new();
     for (index, block) in blocks.iter().enumerate() {
         match block {
-            Block::Text { text, citations, native } => {
+            Block::Text { text, citations, native, .. } => {
                 let pcb = oxa_ir::openai_breakpoint_wire(native);
                 parts.push(ContentPart {
                     kind: PART_TYPE_INPUT_TEXT.to_string(),

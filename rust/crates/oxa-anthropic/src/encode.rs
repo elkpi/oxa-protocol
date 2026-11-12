@@ -695,6 +695,22 @@ pub fn encode_request(req: &IrRequest, config: &Config) -> Result<(Request, Vec<
                 "",
             ));
         }
+        if params.logprobs.is_some() {
+            losses.push(loss(
+                "params.logprobs",
+                "logprobs",
+                LossReason::UnmappedField,
+                "Anthropic Messages has no log-probability sampling parameter",
+            ));
+        }
+        if params.top_logprobs.is_some() {
+            losses.push(loss(
+                "params.top_logprobs",
+                "top_logprobs",
+                LossReason::UnmappedField,
+                "Anthropic Messages has no log-probability sampling parameter",
+            ));
+        }
         out.stop_sequences = params
             .stop_sequences
             .clone()
@@ -1434,6 +1450,7 @@ fn encode_tool_result_block(
                 text,
                 native,
                 citations,
+                ..
             } => {
                 if citations.as_ref().is_some_and(|c| !c.is_empty()) {
                     return Err(Error::new(format!(

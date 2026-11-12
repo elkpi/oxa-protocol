@@ -127,6 +127,8 @@ pub enum Block {
         text: String,
         #[serde(rename = "citations", default, skip_serializing_if = "Option::is_none")]
         citations: Option<Vec<TextCitation>>,
+        #[serde(rename = "logprobs", default, skip_serializing_if = "Option::is_none")]
+        logprobs: Option<String>,
         #[serde(rename = "native", default, skip_serializing_if = "Vec::is_empty")]
         native: Vec<NativeAnnotation>,
     },
@@ -460,11 +462,13 @@ impl std::fmt::Debug for Block {
             Block::Text {
                 text,
                 citations,
+                logprobs,
                 native,
             } => f
                 .debug_struct("Text")
                 .field("text", text)
                 .field("citations", citations)
+                .field("logprobs", logprobs)
                 .field("native", native)
                 .finish(),
             Block::Thinking {

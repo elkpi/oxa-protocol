@@ -282,6 +282,36 @@ impl StreamEncoder {
                             )],
                         ))
                     }
+                    Block::CompactionItem { .. }
+                    | Block::ServerToolUse { .. }
+                    | Block::WebSearchToolResult { .. } => {
+                        self.active = Some(StreamEncodeBlock {
+                            kind: StreamBlockKind::Atomic,
+                            index: *index,
+                            tool_id: String::new(),
+                            tool_name: String::new(),
+                            tool_input: String::new(),
+                            fragments: Vec::new(),
+                            native_index: 0,
+                            tool_started: false,
+                            signature_seen: false,
+                            citation_loss_seen: false,
+                        });
+                        let detail = if matches!(block, Block::CompactionItem { .. }) {
+                            oxa_ir::COMPACTION_ITEM_LOSS_DETAIL
+                        } else {
+                            oxa_ir::WEB_SEARCH_HISTORY_LOSS_DETAIL
+                        };
+                        Ok((
+                            Vec::new(),
+                            vec![loss(
+                                format!("events[{ordinal}].block"),
+                                "type",
+                                LossReason::UnsupportedSemantic,
+                                detail,
+                            )],
+                        ))
+                    }
                     _ => Err(Error::new(
                         "chatcompletions: ContentBlockStart carries unsupported block",
                     )),

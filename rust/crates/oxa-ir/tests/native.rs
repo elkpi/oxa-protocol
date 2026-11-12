@@ -26,6 +26,7 @@ fn test_native_portable_round_trip() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: "Hello".into(),
                 citations: None,
                 native: vec![NativeAnnotation {
@@ -96,6 +97,7 @@ fn test_validate_native_request() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: "hi".into(),
                 citations: None,
                 native: vec![],
@@ -138,6 +140,7 @@ fn test_cache_control_omission_loss_detail() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: "hi".into(),
                 citations: None,
                 native: vec![NativeAnnotation {
@@ -177,6 +180,7 @@ fn test_cache_control_omission_loss_detail() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: "hi".into(),
                 citations: None,
                 native: vec![NativeAnnotation {
@@ -212,6 +216,7 @@ fn test_cache_control_omission_loss_detail() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: "hi".into(),
                 citations: None,
                 native: vec![NativeAnnotation {
@@ -295,6 +300,7 @@ fn test_validate_native_request_new_kinds() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: "hi".into(),
                 citations: None,
                 native: vec![],
@@ -402,6 +408,7 @@ fn test_prompt_cache_breakpoint_host_and_null_value() {
 
     // Null values are rejected (a JSON null is not an object).
     let null_req = breakpoint_req(Block::Text {
+        logprobs: None,
         text: "hi".into(),
         citations: None,
         native: vec![breakpoint_ann("null")],
@@ -446,6 +453,7 @@ fn test_validate_native_request_positional_and_compaction() {
             messages: vec![oxa_ir::Message {
                 role: oxa_ir::Role::User,
                 content: vec![Block::Text {
+                    logprobs: None,
                     text: "go".into(),
                     citations: None,
                     native: vec![],

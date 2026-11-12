@@ -44,6 +44,7 @@ fn response_with(text: &str) -> oxa_ir::Response {
         id: "r".to_owned(),
         model: "m".to_owned(),
         content: vec![Block::Text {
+            logprobs: None,
             text: text.to_owned(),
             citations: None,
             native: Vec::new(),
@@ -246,6 +247,7 @@ fn non_derived_user_content_reports_a_loss_on_encode() {
             oxa_ir::Message {
                 role: oxa_ir::Role::User,
                 content: vec![Block::Text {
+                    logprobs: None,
                     text: "question q (noul): q?".to_owned(),
                     citations: None,
                     native: Vec::new(),
@@ -254,6 +256,7 @@ fn non_derived_user_content_reports_a_loss_on_encode() {
             oxa_ir::Message {
                 role: oxa_ir::Role::User,
                 content: vec![Block::Text {
+                    logprobs: None,
                     text: "CUSTOMER INPUT".to_owned(),
                     citations: None,
                     native: Vec::new(),

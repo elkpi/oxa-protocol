@@ -341,6 +341,7 @@ impl StreamDecoder {
                 Ok(vec![Event::ContentBlockStart {
                     index: self.block_index,
                     block: Block::Text {
+                        logprobs: None,
                         text: part.text.clone(),
                         citations: None,
                         native: Vec::new(),

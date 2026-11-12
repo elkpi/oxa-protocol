@@ -105,6 +105,12 @@ pub struct Request {
         skip_serializing_if = "Option::is_none"
     )]
     pub max_output_tokens: Option<i64>,
+    #[serde(
+        rename = "top_logprobs",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub top_logprobs: Option<i64>,
     #[serde(rename = "store", default, skip_serializing_if = "Option::is_none")]
     pub store: Option<bool>,
     #[serde(rename = "tools", default, skip_serializing_if = "Vec::is_empty")]
@@ -475,6 +481,8 @@ pub struct OutputPart {
     pub refusal: Option<String>,
     #[serde(rename = "annotations", default)]
     pub annotations: Vec<Value>,
+    #[serde(rename = "logprobs", default)]
+    pub logprobs: Option<Value>,
 }
 
 impl Serialize for OutputPart {
@@ -487,6 +495,13 @@ impl Serialize for OutputPart {
             let mut state = serializer.serialize_struct("OutputPart", 2)?;
             state.serialize_field("type", &self.kind)?;
             state.serialize_field("refusal", self.refusal.as_deref().unwrap_or(""))?;
+            state.end()
+        } else if self.logprobs.is_some() {
+            let mut state = serializer.serialize_struct("OutputPart", 4)?;
+            state.serialize_field("type", &self.kind)?;
+            state.serialize_field("text", &self.text)?;
+            state.serialize_field("annotations", &self.annotations)?;
+            state.serialize_field("logprobs", &self.logprobs)?;
             state.end()
         } else {
             let mut state = serializer.serialize_struct("OutputPart", 3)?;

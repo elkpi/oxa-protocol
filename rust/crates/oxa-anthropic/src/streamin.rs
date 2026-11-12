@@ -248,6 +248,7 @@ impl StreamDecoder {
                 Ok(vec![Event::ContentBlockStart {
                     index: self.open_ir_index,
                     block: Block::Text {
+                        logprobs: None,
                         text: block.text.clone(),
                         citations: cites,
                         native: Vec::new(),

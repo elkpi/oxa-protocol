@@ -215,6 +215,28 @@ pub fn encode_request(req: &IrRequest, config: &Config) -> Result<(Request, Vec<
         out.temperature = params.temperature;
         out.top_p = params.top_p;
         out.max_output_tokens = params.max_tokens;
+        let mut send_top = params.top_logprobs;
+        if let Some(enabled) = params.logprobs {
+            if enabled {
+                if send_top.is_none() {
+                    losses.push(loss(
+                        "params.logprobs",
+                        "logprobs",
+                        LossReason::UnmappedField,
+                        "Responses has no logprobs boolean; top_logprobs is the sampling switch",
+                    ));
+                }
+            } else {
+                send_top = None;
+                losses.push(loss(
+                    "params.logprobs",
+                    "logprobs",
+                    LossReason::UnmappedField,
+                    "Responses has no logprobs boolean; explicit false is dropped",
+                ));
+            }
+        }
+        out.top_logprobs = send_top;
         out.reasoning = params.reasoning_effort.map(|effort| {
             let effort = match effort {
                 ReasoningEffort::Minimal => "minimal",
@@ -347,6 +369,7 @@ pub fn encode_response(resp: &IrResponse, config: &Config) -> Result<(Response, 
             Block::Text {
                 text: value,
                 citations,
+                logprobs,
                 ..
             } => {
                 let mut part_annotations: Vec<Value> = Vec::new();
@@ -396,6 +419,9 @@ pub fn encode_response(resp: &IrResponse, config: &Config) -> Result<(Response, 
                     kind: PART_TYPE_OUTPUT_TEXT.to_string(),
                     text: value.clone(),
                     annotations: part_annotations,
+                    logprobs: logprobs
+                        .as_ref()
+                        .and_then(|text| serde_json::from_str(text).ok()),
                     ..Default::default()
                 });
             }

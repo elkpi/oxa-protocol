@@ -12,6 +12,7 @@ fn text_block_start(index: i64, text: &str) -> Event {
     Event::ContentBlockStart {
         index,
         block: Block::Text {
+            logprobs: None,
             text: text.to_string(),
             citations: None,
             native: Vec::new(),

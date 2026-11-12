@@ -164,6 +164,7 @@ pub fn decode_request_json(raw: &str, config: &Config) -> Result<(IrRequest, Vec
             messages: vec![oxa_ir::Message {
                 role: oxa_ir::Role::User,
                 content: vec![oxa_ir::Block::Text {
+                    logprobs: None,
                     text: user_text,
                     citations: None,
                     native: Vec::new(),
@@ -316,6 +317,7 @@ pub fn decode_response_json(raw: &str, config: &Config) -> Result<(IrResponse, V
             id: SYNTHESIZED_ID.to_owned(),
             model: config.map_model(&model.unwrap_or_default()),
             content: vec![oxa_ir::Block::Text {
+                logprobs: None,
                 text: canon_text,
                 citations: None,
                 native: Vec::new(),

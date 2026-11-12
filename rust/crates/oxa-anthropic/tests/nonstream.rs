@@ -125,6 +125,7 @@ fn tool_choice_named_requires_a_name() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![oxa_ir::Block::Text {
+                logprobs: None,
                 text: "hi".to_string(),
                 citations: None,
                 native: Vec::new(),
@@ -195,6 +196,7 @@ fn missing_max_tokens_defaults_to_4096_with_a_degraded_loss() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![oxa_ir::Block::Text {
+                logprobs: None,
                 text: "hi".to_string(),
                 citations: None,
                 native: Vec::new(),
@@ -223,6 +225,7 @@ fn single_text_message_renders_the_string_shorthand() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![oxa_ir::Block::Text {
+                logprobs: None,
                 text: "hi".to_string(),
                 citations: None,
                 native: Vec::new(),
@@ -640,6 +643,7 @@ fn test_grammar_format_loss_on_anthropic_encode() {
         messages: vec![oxa_ir::Message {
             role: oxa_ir::Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: "hi".to_string(),
                 citations: None,
                 native: Vec::new(),

@@ -640,6 +640,7 @@ pub(crate) fn decode_content(
         ContentValue::Null => Err(Error::new(format!("anthropic: {path} must not be null"))),
         ContentValue::Text(text) => Ok((
             vec![Block::Text {
+                logprobs: None,
                 text: text.clone(),
                 citations: None,
                 native: Vec::new(),
@@ -704,6 +705,7 @@ pub(crate) fn decode_block(
             )?;
             losses.extend(cite_losses);
             block = Some(Block::Text {
+                logprobs: None,
                 text: wire.text.clone(),
                 citations,
                 native: Vec::new(),

@@ -751,6 +751,7 @@ pub fn omitted_native_request_losses(request: &Request, target: &str) -> Result<
                 blk,
                 &format!("messages[{m_idx}].content[{c_idx}]"),
                 target,
+                msg.role == Role::User,
             );
         }
     }
@@ -774,7 +775,13 @@ pub fn omitted_native_request_losses(request: &Request, target: &str) -> Result<
     Ok(losses)
 }
 
-fn collect_block_omissions(losses: &mut Vec<Loss>, blk: &Block, path: &str, target: &str) {
+fn collect_block_omissions(
+    losses: &mut Vec<Loss>,
+    blk: &Block,
+    path: &str,
+    target: &str,
+    breakpoint_host: bool,
+) {
     let (native, children) = match blk {
         Block::Text { native, .. }
         | Block::Thinking { native, .. }
@@ -827,10 +834,11 @@ fn collect_block_omissions(losses: &mut Vec<Loss>, blk: &Block, path: &str, targ
         }
     };
 
-    let breakpoint_host = matches!(
-        blk,
-        Block::Text { .. } | Block::Image { .. } | Block::Document { .. }
-    );
+    let breakpoint_host = breakpoint_host
+        && matches!(
+            blk,
+            Block::Text { .. } | Block::Image { .. } | Block::Document { .. }
+        );
     for (i, ann) in native.iter().enumerate() {
         append_omission_loss(
             losses,
@@ -848,7 +856,13 @@ fn collect_block_omissions(losses: &mut Vec<Loss>, blk: &Block, path: &str, targ
             if matches!(child, Block::Document { .. }) {
                 continue;
             }
-            collect_block_omissions(losses, child, &format!("{path}.content[{k}]"), target);
+            collect_block_omissions(
+                losses,
+                child,
+                &format!("{path}.content[{k}]"),
+                target,
+                false,
+            );
         }
     }
 }

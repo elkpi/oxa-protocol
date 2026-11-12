@@ -11,6 +11,7 @@ fn test_cross_face_redacted_losses() {
             oxa_ir::Message {
                 role: oxa_ir::Role::User,
                 content: vec![Block::Text {
+                    logprobs: None,
                     text: "Question.".to_string(),
                     citations: None,
                     native: Vec::new(),
@@ -24,6 +25,7 @@ fn test_cross_face_redacted_losses() {
                         native: Vec::new(),
                     },
                     Block::Text {
+                        logprobs: None,
                         text: "Answer.".to_string(),
                         citations: None,
                         native: Vec::new(),
@@ -33,6 +35,7 @@ fn test_cross_face_redacted_losses() {
             oxa_ir::Message {
                 role: oxa_ir::Role::User,
                 content: vec![Block::Text {
+                    logprobs: None,
                     text: "Followup.".to_string(),
                     citations: None,
                     native: Vec::new(),

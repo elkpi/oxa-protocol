@@ -157,6 +157,7 @@ impl StreamDecoder {
                 events.push(Event::ContentBlockStart {
                     index: self.text_index,
                     block: Block::Text {
+                        logprobs: None,
                         text: String::new(),
                         citations: None,
                         native: Vec::new(),

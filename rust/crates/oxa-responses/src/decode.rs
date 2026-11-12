@@ -236,6 +236,7 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         Input::Text(text) => request.messages.push(oxa_ir::Message {
             role: Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: text.clone(),
                 citations: None,
                 native: Vec::new(),
@@ -275,6 +276,7 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
                             )?;
                             if content.is_empty() {
                                 content.push(Block::Text {
+                                    logprobs: None,
                                     text: String::new(),
                                     citations: None,
                                     native: Vec::new(),
@@ -412,6 +414,7 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         request.messages.push(oxa_ir::Message {
             role: Role::User,
             content: vec![Block::Text {
+                logprobs: None,
                 text: String::new(),
                 citations: None,
                 native: Vec::new(),
@@ -447,6 +450,13 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
             None
         }
     };
+    if let Some(top) = wire.top_logprobs
+        && top < 0
+    {
+        return Err(Error::new(
+            "responses: top_logprobs must be a non-negative integer",
+        ));
+    }
     let params = Params {
         temperature: wire.temperature,
         top_p: wire.top_p,
@@ -456,11 +466,12 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         verbosity,
         response_format,
         logprobs: None,
-        top_logprobs: None,
+        top_logprobs: wire.top_logprobs,
     };
     if params.temperature.is_some()
         || params.top_p.is_some()
         || params.max_tokens.is_some()
+        || params.top_logprobs.is_some()
         || params.reasoning_effort.is_some()
         || params.verbosity.is_some()
         || params.response_format.is_some()
@@ -468,6 +479,26 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         request.params = Some(params);
     }
     Ok((request, losses))
+}
+
+/// Renders opaque JSON values with object keys in lexicographic order so the
+/// IR text is canonical across implementations (INV-1).
+fn sorted_json(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.iter().map(sorted_json).collect())
+        }
+        serde_json::Value::Object(map) if !map.contains_key("$serde_json::private::Number") => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            let mut sorted = serde_json::Map::new();
+            for key in keys {
+                sorted.insert(key.clone(), sorted_json(&map[key]));
+            }
+            serde_json::Value::Object(sorted)
+        }
+        other => other.clone(),
+    }
 }
 
 fn decode_custom_output(
@@ -492,6 +523,7 @@ fn decode_custom_output(
                             ));
                         }
                         blocks.push(Block::Text {
+                            logprobs: None,
                             text: p.text.clone(),
                             citations: None,
                             native: Vec::new(),
@@ -894,6 +926,10 @@ pub fn decode_response(wire: &Response, config: &Config) -> Result<(IrResponse, 
                         }
                     }
                     text.push(Block::Text {
+                        logprobs: part
+                            .logprobs
+                            .as_ref()
+                            .and_then(|v| serde_json::to_string(&sorted_json(v)).ok()),
                         text: part.text.clone(),
                         citations: if cites.is_empty() { None } else { Some(cites) },
                         native: Vec::new(),

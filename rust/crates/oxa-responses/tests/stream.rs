@@ -387,6 +387,7 @@ fn stream_decoder_opens_text_parts_under_reasoning_items() {
     assert_eq!(
         block,
         Some(Block::Text {
+            logprobs: None,
             text: String::new(),
             citations: None,
             native: Vec::new(),
@@ -500,6 +501,7 @@ fn stream_decoder_happy_path() {
         Event::ContentBlockStart {
             index: 0,
             block: Block::Text {
+                logprobs: None,
                 text: String::new(),
                 citations: None,
                 native: Vec::new(),
@@ -777,6 +779,7 @@ fn stream_encoder_merges_consecutive_thinking_blocks_into_one_reasoning_item() {
         .apply(&Event::ContentBlockStart {
             index: 2,
             block: Block::Text {
+                logprobs: None,
                 text: String::new(),
                 citations: None,
                 native: Vec::new(),
@@ -849,6 +852,7 @@ fn stream_encoder_maps_reasoning_summary_and_signature_loss() {
         .apply(&Event::ContentBlockStart {
             index: 1,
             block: Block::Text {
+                logprobs: None,
                 text: String::new(),
                 citations: None,
                 native: Vec::new(),
@@ -919,6 +923,7 @@ fn stream_encoder_happy_path() {
         .apply(&Event::ContentBlockStart {
             index: 0,
             block: Block::Text {
+                logprobs: None,
                 text: String::new(),
                 citations: None,
                 native: Vec::new(),

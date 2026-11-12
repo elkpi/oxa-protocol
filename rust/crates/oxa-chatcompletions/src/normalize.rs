@@ -41,6 +41,7 @@ pub(crate) fn decode_content(
     let Some(content) = content else {
         return Ok((
             vec![Block::Text {
+                logprobs: None,
                 text: String::new(),
                 citations: None,
                 native: Vec::new(),
@@ -51,6 +52,7 @@ pub(crate) fn decode_content(
     match content {
         ContentValue::Text(text) => Ok((
             vec![Block::Text {
+                logprobs: None,
                 text: text.clone(),
                 citations: None,
                 native: Vec::new(),
@@ -69,6 +71,7 @@ pub(crate) fn decode_content(
         }
         ContentValue::Null(_) => Ok((
             vec![Block::Text {
+                logprobs: None,
                 text: String::new(),
                 citations: None,
                 native: Vec::new(),
@@ -133,6 +136,7 @@ fn decode_content_part(
     let (mut blocks, losses) = match part.kind.as_str() {
         CONTENT_PART_TYPE_TEXT => (
             vec![Block::Text {
+                logprobs: None,
                 text: part.text.clone(),
                 citations: None,
                 native: Vec::new(),
@@ -666,7 +670,7 @@ pub(crate) fn encode_user_content(blocks: &[Block], path: &str) -> (ContentValue
     let mut losses = Vec::new();
     for (index, block) in blocks.iter().enumerate() {
         match block {
-            Block::Text { text: value, citations, native } => {
+            Block::Text { text: value, citations, native, .. } => {
                 let pcb = oxa_ir::openai_breakpoint_wire(native);
                 if pcb.is_some() {
                     has_image = true;
