@@ -371,6 +371,7 @@ fn contradicting_bounds_alongside_an_enum_are_not_silently_dropped() {
         metadata: None,
         native: Vec::new(),
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
     let (wire, losses) =
         oxa_jev::encode_request(&request, &Config::default()).expect("encode_request");

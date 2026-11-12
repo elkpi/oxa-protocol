@@ -60,6 +60,7 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         metadata,
         native: Vec::new(),
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
     let mut declared_tools: BTreeSet<String> = BTreeSet::new();
     let mut custom_tools: BTreeSet<String> = BTreeSet::new();

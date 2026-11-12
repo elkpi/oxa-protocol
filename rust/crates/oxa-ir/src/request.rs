@@ -34,6 +34,30 @@ pub struct Request {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub tool_change_groups: Vec<ToolChangeGroup>,
+    #[serde(
+        rename = "compaction_items",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub compaction_items: Vec<CompactionItem>,
+}
+
+/// One Responses compaction checkpoint placed relative to request messages
+/// (spec/11 N-R-22). `after_message` -1 emits before every message.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CompactionItem {
+    #[serde(rename = "encrypted_content")]
+    pub encrypted_content: String,
+    #[serde(rename = "id", default, skip_serializing_if = "String::is_empty")]
+    pub id: String,
+    #[serde(
+        rename = "created_by",
+        default,
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub created_by: String,
+    #[serde(rename = "after_message")]
+    pub after_message: isize,
 }
 
 /// System prompt content (spec/01 §3.2). Sealed; exactly one variant in v1.
@@ -83,6 +107,11 @@ pub struct TextCitation {
 /// string and is never parsed or re-serialized by any conversion path.
 pub const ENCRYPTED_CONTENT_LOSS_DETAIL: &str =
     "responses encrypted reasoning replay state; the target face cannot preserve this block";
+
+/// Cross-face omission text for a Responses compaction checkpoint (spec/11
+/// N-R-22). It MUST NOT contain the ciphertext.
+pub const COMPACTION_ITEM_LOSS_DETAIL: &str =
+    "Responses compaction item cannot be represented on the target face";
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -210,6 +239,19 @@ pub enum Block {
         output: Option<String>,
         #[serde(rename = "native", default, skip_serializing_if = "Vec::is_empty")]
         native: Vec<NativeAnnotation>,
+    },
+    #[serde(rename = "compaction_item")]
+    CompactionItem {
+        #[serde(rename = "encrypted_content")]
+        encrypted_content: String,
+        #[serde(rename = "id", default, skip_serializing_if = "String::is_empty")]
+        id: String,
+        #[serde(
+            rename = "created_by",
+            default,
+            skip_serializing_if = "String::is_empty"
+        )]
+        created_by: String,
     },
     #[serde(rename = "web_search_call")]
     WebSearchCall {
@@ -376,7 +418,7 @@ impl Block {
             | Block::Refusal { native, .. }
             | Block::ToolResult { native, .. }
             | Block::Compaction { native, .. } => native,
-            Block::WebSearchCall { .. } => &[],
+            Block::WebSearchCall { .. } | Block::CompactionItem { .. } => &[],
         }
     }
 }
@@ -552,6 +594,19 @@ impl std::fmt::Debug for Block {
                 .field("tool_changes", tool_changes)
                 .field("native", native)
                 .field("extra", extra)
+                .finish(),
+            Block::CompactionItem {
+                encrypted_content,
+                id,
+                created_by,
+            } => f
+                .debug_struct("CompactionItem")
+                .field(
+                    "encrypted_content",
+                    &format!("[REDACTED len={}]", encrypted_content.len()),
+                )
+                .field("id", id)
+                .field("created_by", created_by)
                 .finish(),
         }
     }

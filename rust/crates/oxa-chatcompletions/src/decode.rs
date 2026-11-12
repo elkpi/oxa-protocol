@@ -54,6 +54,7 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         metadata: None,
         native: Vec::new(),
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
     if let Some(value) = &wire.metadata {
         req.metadata = string_metadata(value, "chatcompletions")?;

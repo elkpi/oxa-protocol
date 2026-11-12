@@ -175,6 +175,7 @@ pub fn decode_request_json(raw: &str, config: &Config) -> Result<(IrRequest, Vec
             metadata: None,
             native: Vec::new(),
             tool_change_groups: Vec::new(),
+            compaction_items: Vec::new(),
         },
         losses,
     ))

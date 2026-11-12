@@ -43,10 +43,11 @@ pub use native::{
 };
 pub use raw_schema::{insert_schema_raw, raw_json_at, request_from_json, request_to_json};
 pub use request::{
-    ApplyPatchCallStatus, ApplyPatchOperation, ApplyPatchResultStatus, Block, CustomToolFormat,
-    CustomToolOutput, ENCRYPTED_CONTENT_LOSS_DETAIL, Message, NativeAnnotation, NativeOmission,
-    NativeProjection, Params, ReasoningEffort, Request, ResponseFormat, Role, SystemBlock,
-    TextCitation, Tool, ToolChange, ToolChangeGroup, ToolChangeOp, ToolChangePart, ToolChangeRef,
-    ToolChoice, ToolChoiceMode, ToolType,
+    ApplyPatchCallStatus, ApplyPatchOperation, ApplyPatchResultStatus, Block,
+    COMPACTION_ITEM_LOSS_DETAIL, CompactionItem, CustomToolFormat, CustomToolOutput,
+    ENCRYPTED_CONTENT_LOSS_DETAIL, Message, NativeAnnotation, NativeOmission, NativeProjection,
+    Params, ReasoningEffort, Request, ResponseFormat, Role, SystemBlock, TextCitation, Tool,
+    ToolChange, ToolChangeGroup, ToolChangeOp, ToolChangePart, ToolChangeRef, ToolChoice,
+    ToolChoiceMode, ToolType,
 };
 pub use response::{InputTokensDetails, OutputTokensDetails, Response, StopReason, Usage};

@@ -123,6 +123,7 @@ fn bare_request(model: &str) -> Request {
         metadata: None,
         native: Vec::new(),
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     }
 }
 

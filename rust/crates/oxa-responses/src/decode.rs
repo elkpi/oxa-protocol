@@ -53,6 +53,7 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
         metadata,
         native: Vec::new(),
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
     if let Some(instructions) = &wire.instructions {
         request.system.push(oxa_ir::SystemBlock::Text {
@@ -309,6 +310,20 @@ pub fn decode_request(wire: &Request, config: &Config) -> Result<(IrRequest, Vec
                         }
                         losses.extend(output_losses);
                         index = next;
+                    }
+                    crate::types::ITEM_TYPE_COMPACTION => {
+                        if item.encrypted_content.is_empty() {
+                            return Err(Error::new(format!(
+                                "responses: input[{index}].encrypted_content is required"
+                            )));
+                        }
+                        request.compaction_items.push(oxa_ir::CompactionItem {
+                            encrypted_content: item.encrypted_content.clone(),
+                            id: item.id.clone(),
+                            created_by: item.created_by.clone(),
+                            after_message: request.messages.len() as isize - 1,
+                        });
+                        index += 1;
                     }
                     "additional_tools" => {
                         let group = decode_additional_tools(
@@ -718,6 +733,7 @@ fn non_empty(value: String) -> Option<String> {
 /// derived and therefore ignored.
 pub fn decode_response(wire: &Response, config: &Config) -> Result<(IrResponse, Vec<Loss>), Error> {
     let mut losses = Vec::new();
+    let mut compactions = Vec::new();
     let mut thinkings = Vec::new();
     let mut text = Vec::new();
     let mut calls = Vec::new();
@@ -971,6 +987,18 @@ pub fn decode_response(wire: &Response, config: &Config) -> Result<(IrResponse, 
                     native: Vec::new(),
                 });
             }
+            crate::types::ITEM_TYPE_COMPACTION => {
+                if item.encrypted_content.is_empty() {
+                    return Err(Error::new(format!(
+                        "responses: output[{item_index}].encrypted_content is required"
+                    )));
+                }
+                compactions.push(Block::CompactionItem {
+                    encrypted_content: item.encrypted_content.clone(),
+                    id: item.id.clone(),
+                    created_by: item.created_by.clone(),
+                });
+            }
             other => losses.push(loss(
                 format!("output[{item_index}]"),
                 "type",
@@ -981,7 +1009,8 @@ pub fn decode_response(wire: &Response, config: &Config) -> Result<(IrResponse, 
     }
     let (mut stop_reason, status_losses) = decode_status(wire, has_tool_use)?;
     losses.extend(status_losses);
-    let mut content = thinkings;
+    let mut content = compactions;
+    content.extend(thinkings);
     content.extend(text);
     content.extend(calls);
     let has_refusal = content.iter().any(|b| matches!(b, Block::Refusal { .. }));

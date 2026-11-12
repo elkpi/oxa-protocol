@@ -633,6 +633,15 @@ fn validate_block_native(blk: &Block, host: HostType, path: &str) -> Result<(), 
             crate::validate_web_search_extra(extra)?;
             crate::inspect_web_search_call(id, status, action, path)?;
         }
+        Block::CompactionItem {
+            encrypted_content, ..
+        } => {
+            if encrypted_content.is_empty() {
+                return Err(Error::Custom(format!(
+                    "ir: {path}: compaction_item encrypted_content is required"
+                )));
+            }
+        }
         Block::Text { native, .. }
         | Block::Image { native, .. }
         | Block::Document { native, .. }
@@ -786,6 +795,7 @@ fn collect_block_omissions(losses: &mut Vec<Loss>, blk: &Block, path: &str, targ
         Block::RedactedThinking { .. }
         | Block::EncryptedContent { .. }
         | Block::WebSearchCall { .. }
+        | Block::CompactionItem { .. }
         | Block::Compaction { .. } => {
             // Whole-block drop; annotations are part of it and are not reported a second time.
             static EMPTY: Vec<NativeAnnotation> = Vec::new();

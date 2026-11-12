@@ -26,6 +26,14 @@ pub fn encode_request(req: &IrRequest, config: &Config) -> Result<(Request, Vec<
         tool.validate_strict().map_err(Error::new)?;
     }
     let mut losses = Vec::new();
+    for (i, _item) in req.compaction_items.iter().enumerate() {
+        losses.push(loss(
+            format!("compaction_items[{i}]"),
+            "type",
+            LossReason::UnsupportedSemantic,
+            oxa_ir::COMPACTION_ITEM_LOSS_DETAIL,
+        ));
+    }
     for (i, group) in req.tool_change_groups.iter().enumerate() {
         if group.parts.is_empty() {
             losses.push(loss(

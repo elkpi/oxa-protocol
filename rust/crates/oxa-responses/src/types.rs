@@ -27,6 +27,7 @@ pub const ITEM_TYPE_APPLY_PATCH_CALL: &str = "apply_patch_call";
 pub const ITEM_TYPE_APPLY_PATCH_CALL_OUTPUT: &str = "apply_patch_call_output";
 pub const ITEM_TYPE_REASONING: &str = "reasoning";
 pub const ITEM_TYPE_WEB_SEARCH_CALL: &str = "web_search_call";
+pub const ITEM_TYPE_COMPACTION: &str = "compaction";
 
 pub const PART_TYPE_INPUT_TEXT: &str = "input_text";
 pub const PART_TYPE_OUTPUT_TEXT: &str = "output_text";
@@ -193,6 +194,12 @@ pub struct InputItem {
         skip_serializing_if = "String::is_empty"
     )]
     pub encrypted_content: String,
+    #[serde(
+        rename = "created_by",
+        default,
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub created_by: String,
     #[serde(rename = "call_id", default, skip_serializing_if = "String::is_empty")]
     pub call_id: String,
     #[serde(rename = "name", default, skip_serializing_if = "String::is_empty")]
@@ -413,6 +420,12 @@ pub struct OutputItem {
         skip_serializing_if = "String::is_empty"
     )]
     pub encrypted_content: String,
+    #[serde(
+        rename = "created_by",
+        default,
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub created_by: String,
     #[serde(rename = "call_id", default, skip_serializing_if = "String::is_empty")]
     pub call_id: String,
     #[serde(rename = "name", default, skip_serializing_if = "String::is_empty")]

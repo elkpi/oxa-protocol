@@ -1338,6 +1338,12 @@ pub(crate) fn encode_user_content(blocks: &[Block], path: &str) -> (ContentValue
                 LossReason::UnsupportedSemantic,
                 "Anthropic compaction block cannot be represented on the target face",
             )),
+            Block::CompactionItem { .. } => losses.push(loss(
+                format!("{path}[{index}]"),
+                "type",
+                LossReason::UnsupportedSemantic,
+                oxa_ir::COMPACTION_ITEM_LOSS_DETAIL,
+            )),
             Block::RedactedThinking { .. } => losses.push(loss(
                 format!("{path}[{index}]"),
                 "type",
@@ -1545,6 +1551,12 @@ pub(crate) fn encode_user_message(message: &IrMessage, path: &str) -> (Vec<Input
                     ..InputItem::default()
                 });
             }
+            Block::CompactionItem { .. } => losses.push(loss(
+                format!("{path}[{i}]"),
+                "type",
+                LossReason::UnsupportedSemantic,
+                oxa_ir::COMPACTION_ITEM_LOSS_DETAIL,
+            )),
             _ => unreachable!(),
         }
     }
@@ -1609,6 +1621,12 @@ pub(crate) fn encode_assistant_message(
                 "type",
                 LossReason::UnsupportedSemantic,
                 "Anthropic compaction block cannot be represented on the target face",
+            )),
+            Block::CompactionItem { .. } => losses.push(loss(
+                format!("{path}[{index}]"),
+                "type",
+                LossReason::UnsupportedSemantic,
+                oxa_ir::COMPACTION_ITEM_LOSS_DETAIL,
             )),
             Block::RedactedThinking { .. } => losses.push(loss(
                 format!("{path}[{index}]"),

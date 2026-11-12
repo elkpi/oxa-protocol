@@ -34,6 +34,7 @@ enum StreamOutputItemKind {
     ApplyPatchResult,
     EncryptedContent,
     WebSearchCall,
+    Compaction,
 }
 
 struct StreamOutputItem {
@@ -47,6 +48,7 @@ struct StreamOutputItem {
     namespace: String,
     encrypted_content: String,
     web_search_item: Option<OutputItem>,
+    compaction_item: Option<OutputItem>,
 }
 
 struct StreamEncodeBlock {
@@ -168,6 +170,11 @@ impl StreamEncoder {
                         action,
                         extra,
                     } => self.start_web_search_block(*index, id, status, action, extra, ordinal),
+                    Block::CompactionItem {
+                        encrypted_content,
+                        id,
+                        created_by,
+                    } => self.start_compaction_block(*index, id, encrypted_content, created_by),
                     Block::EncryptedContent { data, .. } => {
                         self.start_encrypted_content_block(*index, data)
                     }
@@ -225,6 +232,7 @@ impl StreamEncoder {
                 if active_block.kind == StreamOutputItemKind::Redacted
                     || active_block.kind == StreamOutputItemKind::EncryptedContent
                     || active_block.kind == StreamOutputItemKind::WebSearchCall
+                    || active_block.kind == StreamOutputItemKind::Compaction
                 {
                     return Err(Error::new("responses: block received unexpected delta"));
                 }
@@ -232,7 +240,8 @@ impl StreamEncoder {
                 match active_block.kind {
                     StreamOutputItemKind::Redacted
                     | StreamOutputItemKind::EncryptedContent
-                    | StreamOutputItemKind::WebSearchCall => unreachable!(),
+                    | StreamOutputItemKind::WebSearchCall
+                    | StreamOutputItemKind::Compaction => unreachable!(),
                     StreamOutputItemKind::Message => match delta {
                         Delta::TextDelta { text } => {
                             active_block.text.push_str(text);
@@ -352,6 +361,7 @@ impl StreamEncoder {
                         Ok((Vec::new(), Vec::new()))
                     }
                     StreamOutputItemKind::WebSearchCall => self.stop_web_search_block(),
+                    StreamOutputItemKind::Compaction => self.stop_compaction_block(),
                     StreamOutputItemKind::Message => self.stop_text_block(),
                     StreamOutputItemKind::Reasoning => self.stop_thinking_block(),
                     StreamOutputItemKind::FunctionCall => self.stop_function_call_block(),
@@ -373,7 +383,8 @@ impl StreamEncoder {
                         | StreamOutputItemKind::CustomToolCall
                         | StreamOutputItemKind::ApplyPatchCall
                         | StreamOutputItemKind::ApplyPatchResult
-                        | StreamOutputItemKind::WebSearchCall => {
+                        | StreamOutputItemKind::WebSearchCall
+                        | StreamOutputItemKind::Compaction => {
                             return Err(Error::new(
                                 "responses: MessageDelta with an uncompleted tool-call item",
                             ));
@@ -429,7 +440,8 @@ impl StreamEncoder {
                 | StreamOutputItemKind::CustomToolCall
                 | StreamOutputItemKind::ApplyPatchCall
                 | StreamOutputItemKind::ApplyPatchResult
-                | StreamOutputItemKind::WebSearchCall => {
+                | StreamOutputItemKind::WebSearchCall
+                | StreamOutputItemKind::Compaction => {
                     return Err(Error::new(
                         "responses: TextBlock cannot open before the active tool item completes",
                     ));
@@ -490,7 +502,8 @@ impl StreamEncoder {
                 | StreamOutputItemKind::CustomToolCall
                 | StreamOutputItemKind::ApplyPatchCall
                 | StreamOutputItemKind::ApplyPatchResult
-                | StreamOutputItemKind::WebSearchCall => {
+                | StreamOutputItemKind::WebSearchCall
+                | StreamOutputItemKind::Compaction => {
                     return Err(Error::new(
                         "responses: ThinkingBlock cannot open before the active tool item completes",
                     ));
@@ -565,7 +578,8 @@ impl StreamEncoder {
                 | StreamOutputItemKind::CustomToolCall
                 | StreamOutputItemKind::ApplyPatchCall
                 | StreamOutputItemKind::ApplyPatchResult
-                | StreamOutputItemKind::WebSearchCall => {
+                | StreamOutputItemKind::WebSearchCall
+                | StreamOutputItemKind::Compaction => {
                     return Err(Error::new(
                         "responses: ToolUseBlock cannot open before the active tool item completes",
                     ));
@@ -712,6 +726,7 @@ impl StreamEncoder {
             namespace: namespace.to_string(),
             encrypted_content: String::new(),
             web_search_item: None,
+            compaction_item: None,
         });
         self.active_block = Some(StreamEncodeBlock {
             index,
@@ -906,6 +921,7 @@ impl StreamEncoder {
             namespace: String::new(),
             encrypted_content: String::new(),
             web_search_item: None,
+            compaction_item: None,
         });
         self.active_block = Some(StreamEncodeBlock {
             index,
@@ -1020,6 +1036,7 @@ impl StreamEncoder {
             namespace: String::new(),
             encrypted_content: String::new(),
             web_search_item: None,
+            compaction_item: None,
         });
         self.active_block = Some(StreamEncodeBlock {
             index,
@@ -1108,6 +1125,7 @@ impl StreamEncoder {
             namespace: String::new(),
             encrypted_content: String::new(),
             web_search_item: None,
+            compaction_item: None,
         };
         let event = StreamEvent {
             kind: EVENT_TYPE_RESPONSE_OUTPUT_ITEM_ADDED.to_string(),
@@ -1155,6 +1173,7 @@ impl StreamEncoder {
             namespace: namespace.to_string(),
             encrypted_content: String::new(),
             web_search_item: None,
+            compaction_item: None,
         };
         let event = StreamEvent {
             kind: EVENT_TYPE_RESPONSE_OUTPUT_ITEM_ADDED.to_string(),
@@ -1194,6 +1213,7 @@ impl StreamEncoder {
             namespace: String::new(),
             encrypted_content: String::new(),
             web_search_item: None,
+            compaction_item: None,
         };
         let event = StreamEvent {
             kind: EVENT_TYPE_RESPONSE_OUTPUT_ITEM_ADDED.to_string(),
@@ -1390,6 +1410,95 @@ impl StreamEncoder {
         Ok((out, Vec::new()))
     }
 
+    fn start_compaction_block(
+        &mut self,
+        index: i64,
+        id: &str,
+        encrypted_content: &str,
+        created_by: &str,
+    ) -> Result<(Vec<StreamEvent>, Vec<Loss>), Error> {
+        if encrypted_content.is_empty() {
+            return Err(Error::new(
+                "responses: compaction item encrypted_content is required",
+            ));
+        }
+        let mut out = Vec::new();
+        if let Some(active) = &self.active_item {
+            match active.kind {
+                StreamOutputItemKind::Message => out.push(self.close_message_item()),
+                StreamOutputItemKind::Reasoning => out.push(self.close_reasoning_item()),
+                _ => {
+                    return Err(Error::new(
+                        "responses: compaction cannot open before the active item completes",
+                    ));
+                }
+            }
+        }
+        let output_index = self.next_output_index;
+        self.next_output_index += 1;
+        let wire_item = OutputItem {
+            kind: crate::types::ITEM_TYPE_COMPACTION.to_string(),
+            id: if id.is_empty() {
+                "cmp_abc123".to_string()
+            } else {
+                id.to_string()
+            },
+            encrypted_content: encrypted_content.to_string(),
+            created_by: created_by.to_string(),
+            ..OutputItem::default()
+        };
+        self.active_item = Some(StreamOutputItem {
+            kind: StreamOutputItemKind::Compaction,
+            id: wire_item.id.clone(),
+            output_index,
+            content: Vec::new(),
+            next_content_index: 0,
+            call_id: String::new(),
+            name: String::new(),
+            namespace: String::new(),
+            encrypted_content: String::new(),
+            web_search_item: None,
+            compaction_item: Some(wire_item.clone()),
+        });
+        self.active_block = Some(StreamEncodeBlock {
+            index,
+            kind: StreamOutputItemKind::Compaction,
+            content_index: 0,
+            text: String::new(),
+            tool_input: String::new(),
+            fragments: Vec::new(),
+            citation_loss_seen: false,
+        });
+        out.push(StreamEvent {
+            kind: EVENT_TYPE_RESPONSE_OUTPUT_ITEM_ADDED.to_string(),
+            output_index: Some(output_index),
+            item: Some(wire_item),
+            ..StreamEvent::default()
+        });
+        Ok((out, Vec::new()))
+    }
+
+    fn stop_compaction_block(&mut self) -> Result<(Vec<StreamEvent>, Vec<Loss>), Error> {
+        let item = self
+            .active_item
+            .take()
+            .ok_or_else(|| Error::new("responses: compaction stop without active item"))?;
+        let wire_item = item
+            .compaction_item
+            .ok_or_else(|| Error::new("responses: compaction item missing"))?;
+        self.completed.push(wire_item.clone());
+        self.active_block = None;
+        Ok((
+            vec![StreamEvent {
+                kind: EVENT_TYPE_RESPONSE_OUTPUT_ITEM_DONE.to_string(),
+                output_index: Some(item.output_index),
+                item: Some(wire_item),
+                ..StreamEvent::default()
+            }],
+            Vec::new(),
+        ))
+    }
+
     fn start_web_search_block(
         &mut self,
         index: i64,
@@ -1440,6 +1549,7 @@ impl StreamEncoder {
             namespace: String::new(),
             encrypted_content: String::new(),
             web_search_item: Some(wire_item.clone()),
+            compaction_item: None,
         });
         self.active_block = Some(StreamEncodeBlock {
             index,

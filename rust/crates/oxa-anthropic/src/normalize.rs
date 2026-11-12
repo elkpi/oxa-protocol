@@ -1091,7 +1091,7 @@ pub(crate) fn decode_block(
                     projection: None,
                 };
                 match b {
-                    Block::WebSearchCall { .. } => {}
+                    Block::WebSearchCall { .. } | Block::CompactionItem { .. } => {}
                     Block::Text { native, .. }
                     | Block::Thinking { native, .. }
                     | Block::RedactedThinking { native, .. }

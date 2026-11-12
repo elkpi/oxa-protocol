@@ -951,6 +951,10 @@ pub(crate) fn encode_assistant_message(blocks: &[Block], path: &str) -> (Message
                 format!("{path}[{index}]"), "type", LossReason::UnsupportedSemantic,
                 "Responses web_search_call has no Chat Completions equivalent",
             )),
+            Block::CompactionItem { .. } => losses.push(loss(
+                format!("{path}[{index}]"), "type", LossReason::UnsupportedSemantic,
+                oxa_ir::COMPACTION_ITEM_LOSS_DETAIL,
+            )),
             Block::ApplyPatchToolUse { .. } => losses.push(loss(
                 format!("{path}[{index}]"),
                 "content",

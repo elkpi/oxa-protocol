@@ -359,6 +359,14 @@ pub fn encode_request(req: &IrRequest, config: &Config) -> Result<(Request, Vec<
         return Err(Error::new("anthropic: metadata key cannot be empty"));
     }
     let mut losses = Vec::new();
+    for (i, _item) in req.compaction_items.iter().enumerate() {
+        losses.push(loss(
+            format!("compaction_items[{i}]"),
+            "type",
+            LossReason::UnsupportedSemantic,
+            oxa_ir::COMPACTION_ITEM_LOSS_DETAIL,
+        ));
+    }
     let metadata = encode_anthropic_metadata(req.metadata.as_ref(), &mut losses);
     let mut out = Request {
         model: config.map_model(&req.model),
@@ -1045,6 +1053,16 @@ fn encode_request_block(block: &Block, path: &str) -> Result<(BlockWire, Vec<Los
                 }
             }
         }
+        Block::CompactionItem { .. } => Ok((
+            BlockWire::default(),
+            vec![loss(
+                path,
+                "type",
+                LossReason::UnsupportedSemantic,
+                oxa_ir::COMPACTION_ITEM_LOSS_DETAIL,
+            )],
+            false,
+        )),
         Block::WebSearchCall { .. }
         | Block::ApplyPatchToolUse { .. }
         | Block::ApplyPatchToolResult { .. } => Ok((

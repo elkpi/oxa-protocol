@@ -73,6 +73,7 @@ fn test_native_portable_round_trip() {
             },
         ],
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
 
     let json_str = to_json(&req).expect("to_json");
@@ -121,6 +122,7 @@ fn test_validate_native_request() {
             },
         ],
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
 
     assert!(validate_native_request(&duplicate).is_err());
@@ -157,6 +159,7 @@ fn test_cache_control_omission_loss_detail() {
         metadata: None,
         native: vec![],
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
 
     let losses = omitted_native_request_losses(&req, "chatcompletions").expect("losses");
@@ -191,6 +194,7 @@ fn test_cache_control_omission_loss_detail() {
         metadata: None,
         native: vec![],
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
     let losses_no_om =
         omitted_native_request_losses(&req_no_om, "chatcompletions").expect("losses");
@@ -229,6 +233,7 @@ fn test_cache_control_omission_loss_detail() {
         metadata: None,
         native: vec![],
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
     let losses_empty =
         omitted_native_request_losses(&req_empty_detail, "chatcompletions").expect("losses");
@@ -346,6 +351,7 @@ fn test_validate_native_request_new_kinds() {
             },
         ],
         tool_change_groups: Vec::new(),
+        compaction_items: Vec::new(),
     };
     assert!(validate_native_request(&req).is_ok());
 
@@ -380,6 +386,7 @@ fn test_prompt_cache_breakpoint_host_and_null_value() {
             metadata: None,
             native: vec![],
             tool_change_groups: Vec::new(),
+            compaction_items: Vec::new(),
         }
     }
 
@@ -450,6 +457,7 @@ fn test_validate_native_request_positional_and_compaction() {
             metadata: None,
             native: vec![],
             tool_change_groups: Vec::new(),
+            compaction_items: Vec::new(),
         }
     }
 

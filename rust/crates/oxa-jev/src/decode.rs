@@ -332,6 +332,7 @@ pub fn decode_request(
             metadata: None,
             native: Vec::new(),
             tool_change_groups: Vec::new(),
+            compaction_items: Vec::new(),
         },
         losses,
     ))
