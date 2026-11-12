@@ -7,6 +7,8 @@ precedence between spec, vectors, and schemas is defined in
 
 ## Unreleased
 
+- Same-face Anthropic web_search history (N-AN-23): `server_tool_use` (`name: "web_search"`) and `web_search_tool_result` map to `ServerToolUseBlock` and `WebSearchToolResultBlock` with canonical JSON text for `input`, `content`, and `caller`. They are never rewritten as Responses `web_search_call` or function calls, and the result ciphertext stays out of loss details. Chat Completions and Responses omit each block with one `unsupported-semantic` loss. Streaming still reports the blocks as unsupported.
+
 - Same-face compaction triggers: Anthropic `context_management.edits[].type = "compact_20260112"` (with `trigger` and `pause_after_compaction`) joins the recognized edit whitelist, and Responses `context_management[]` (`type: "compaction"`, optional `compact_threshold` ≥ 1000) is preserved as an OpenAI native annotation (N-R-23). Both shapes are source-tagged and never cross-mapped. Chat Completions and Anthropic omit the Responses annotation with one `unmapped-field` loss.
 
 - Responses compaction checkpoints (N-R-22): same-face `type: "compaction"` items round-trip as `Request.CompactionItems` on input and as `CompactionItemBlock` on output, including the atomic streaming item. The ciphertext stays opaque. Anthropic `CompactionBlock` placement rules do not apply. Other faces omit the checkpoint and record one `unsupported-semantic` loss whose detail does not contain the ciphertext.

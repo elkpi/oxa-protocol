@@ -46,7 +46,9 @@ The wire objects in scope are:
   (`source`, `title`, `context`, `citations`; N-AN-16), `thinking`
   (`thinking`, `signature`), `redacted_thinking` (`data`; N-AN-17), `tool_use`
   (`id`, `name`, `input`), `tool_result` (`tool_use_id`, `content`,
-  `is_error`); every block may carry a `cache_control` annotation.
+  `is_error`), `server_tool_use` (`id`, `name: "web_search"`, `input`,
+  `caller`; N-AN-23), `web_search_tool_result` (`tool_use_id`, `content`,
+  `caller`; N-AN-23); every block may carry a `cache_control` annotation.
 - **Source**: `base64` (`media_type`, `data`) or `url` (`url`);
   document sources additionally `file` (`file_id`, N-AN-16).
 - **Tool**: 普通工具的 `name`、`description`、`input_schema`（JSON Schema）；带非空且非 function/custom 的 `type` 的命名原生声明按 [spec/16](16-native-tool-declarations.md) 整体保留，不要求 `input_schema`。
@@ -458,6 +460,12 @@ Each rule has a stable ID usable as a vector tag.
     A present `clear_at` or message-level `output_config` on any `role: "system"` message records
     one `unmapped-field` loss each and is not stored. Tool changes in that message are still decoded.
 
+- **N-AN-23 (provider-hosted web_search history, since 3.3.0).** Anthropic `server_tool_use` and `web_search_tool_result` content blocks map to `ServerToolUseBlock` and `WebSearchToolResultBlock` on the same face. They are not an IR representation of Responses `web_search_call` and MUST NOT be converted to or from `WebSearchCallBlock`, `tool_use`, or `function_call`.
+  - **Decode.** `server_tool_use` requires non-empty string `id` and string `name`, and `input` MUST be a JSON object. Only `name: "web_search"` is mapped; any other name records one `unsupported-semantic` loss at the block with field `type` and is omitted. `web_search_tool_result` requires non-empty string `tool_use_id`, and `content` MUST be a JSON array of results or a JSON error object. An optional `caller` on either block MUST be a JSON object. Missing or wrong-typed required fields, an absent `input`, and a non-object `caller` are structural errors.
+  - **IR text.** `input`, `content`, and `caller` are stored as canonical compact JSON text (object keys in lexicographic order, no insignificant whitespace) in an IR string field (INV-1): the text is never parsed for meaning or copied into a loss detail. Source whitespace and key order are not preserved.
+  - **Encode.** Each block renders back with the same `id` / `tool_use_id`, `name`, and canonical JSON text decoded into the wire object. The result ciphertext inside `content` MUST NOT be logged or placed in a loss detail.
+  - **Cross-face.** Chat Completions and OpenAI Responses omit each block and record one `unsupported-semantic` loss at that block, field `type`, detail `Anthropic web_search history cannot be represented on the target face`.
+
 - **N-AN-21 (tool reference blocks, since 2.5.3).** Anthropic `tool_reference` content blocks in requests (typically inside `tool_result.content` or `messages[].content`) map 1:1 to `ToolReferenceBlock{ToolName}`.
   - **Decode (Messages → IR).** An object with `type: "tool_reference"` decodes to `ToolReferenceBlock{ToolName: tool_name}`. When the `tool_name` key is present it MUST be a non-empty string (an empty or null `tool_name` is a structural error, even when `name` is present); when `tool_name` is absent, `name` is tolerated as an alias under the same non-empty-string rule; a block carrying neither is a structural error. Unrecognized properties on the block are audited per [spec/02 §4](02-loss-policy.md): one `unmapped-field` loss per present property. If `cache_control` is present, it is attached as a `NativeAnnotation` (`kind: "cache_control"`; `ToolReferenceBlock` is a valid request-side `cache_control` host per [spec/15 §2](15-native-request-options.md)).
   - **Encode (IR → Messages).** `ToolReferenceBlock` encodes as `{"type": "tool_reference", "tool_name": b.ToolName}`; an empty `ToolName` is a structural error. If a `cache_control` native annotation is attached, it is emitted on the wire block.
@@ -482,6 +490,9 @@ ENVELOPE fields are exempt; everything else MUST record a loss.
 | `params.response_format` | unmapped-field | IR → request | unsupported format variant (N-AN-12) |
 | `params.response_format.name`, `description`, `strict` | unmapped-field | IR → request | OpenAI-only envelope fields omitted (N-AN-12) |
 | `messages[i].content[j]`, `content[i]` | unsupported-semantic | IR → request/response | `web_search_call` omitted; not rewritten as `server_tool_use` (N-R-16) |
+| `server_tool_use` block | unsupported-semantic | IR → Chat Completions / Responses | Anthropic web_search history cannot be represented on the target face (N-AN-23) |
+| `web_search_tool_result` block | unsupported-semantic | IR → Chat Completions / Responses | Anthropic web_search history cannot be represented on the target face (N-AN-23) |
+| `server_tool_use` with a name other than `web_search` | unsupported-semantic | request/response → IR | Anthropic server tool has no IR equivalent (N-AN-23) |
 | `output_config.format.type` | unmapped-value | request → IR | unknown format type (N-AN-12) |
 | `thinking.budget_tokens` / `params.reasoning_effort` | degraded | both | effort mapped to/from discrete budget values with approximation when no explicit effort is present (N-AN-11, N-AN-14) |
 | `content[i].signature` (unsigned thinking block) | degraded | IR → request/response | unsigned thinking block has no provider signature; request replay may be rejected (N-AN-11) |

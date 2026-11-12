@@ -123,8 +123,10 @@ A content block. Sealed; discriminated on the JSON `type` property:
 | `WebSearchCallBlock` | `web_search_call` | Responses 已完成或进行中的 web search 历史项（2.4.13，spec/11 N-R-16） |
 | `CompactionBlock` | `compaction` | Anthropic compaction summary block with tool changes and replay metadata (since 0.3.0, request-side only; mapping in spec/12 N-AN-22) |
 | `CompactionItemBlock` | `compaction_item` | Responses compaction checkpoint (since 3.3.0; spec/11 N-R-22). Opaque `encrypted_content`. Response content only as a block; request history uses `Request.CompactionItems` |
+| `ServerToolUseBlock` | `server_tool_use` | Anthropic provider-hosted web_search call in history (since 3.3.0; spec/12 N-AN-23). `input` is raw JSON text |
+| `WebSearchToolResultBlock` | `web_search_tool_result` | Anthropic web_search result paired with `ServerToolUseBlock` (since 3.3.0; spec/12 N-AN-23). `content` is raw JSON text and is opaque |
 
-Adding `DocumentBlock` (2.4.8), `RedactedThinkingBlock` (2.4.11), `WebSearchCallBlock` (2.4.13), `EncryptedContentBlock` (2.5.2), `ToolReferenceBlock` (2.5.3), `CompactionBlock` (3.0.0 / IR 0.3.0), and `CompactionItemBlock` (3.3.0) extends the sealed variant set. Consumers that exhaustively match on block variants MUST extend their matches to handle the new variants; per the versioning policy in [README](README.md) this additive change does not by itself require a major version bump, but the match extension is a REQUIRED migration for exhaustive consumers. The IR contract version is `0.3.0`.
+Adding `DocumentBlock` (2.4.8), `RedactedThinkingBlock` (2.4.11), `WebSearchCallBlock` (2.4.13), `EncryptedContentBlock` (2.5.2), `ToolReferenceBlock` (2.5.3), `CompactionBlock` (3.0.0 / IR 0.3.0), `CompactionItemBlock`, `ServerToolUseBlock`, and `WebSearchToolResultBlock` (3.3.0) extends the sealed variant set. Consumers that exhaustively match on block variants MUST extend their matches to handle the new variants; per the versioning policy in [README](README.md) this additive change does not by itself require a major version bump, but the match extension is a REQUIRED migration for exhaustive consumers. The IR contract version is `0.3.0`.
 
 #### TextBlock
 

@@ -6,7 +6,7 @@
 
 Anthropic 的 Advisor、web search 等服务端工具和 bash、text editor 等协议内置客户端工具，以及 OpenAI Responses 的 web_search、file_search、code_interpreter、computer、mcp、tool_search 等平台原生/内置工具使用带 `type` 的声明，不要求用户提供 function `input_schema`。版本化 discriminator 不表示执行位置。OXA MUST 将支持范围内的此类声明表示为来源限定的原生工具，而不是伪装成 function 或令整个合法请求失败。
 
-本扩展仅覆盖请求的命名 `tools[]` 声明。它不新增 `server_tool_use`、`advisor_tool_result`、响应、流式或历史消息的映射，不处理 HTTP `anthropic-beta`，不执行工具、不校验模型支持。无 `name` 的 toolset 声明不在本版支持范围。
+本扩展仅覆盖请求的命名 `tools[]` 声明。`server_tool_use` 与 `web_search_tool_result` 的**同脸历史**映射见 [spec/12 N-AN-23](12-mapping-anthropic-messages.md#7-normalization-rules)；本扩展不新增它们的跨面映射，不处理 `advisor_tool_result`、响应投影、流式或 HTTP `anthropic-beta`，不执行工具、不校验模型支持。无 `name` 的 toolset 声明不在本版支持范围。
 
 ## 2. IR 变体 — N-NT-1
 
